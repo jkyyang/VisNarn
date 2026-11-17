@@ -4,15 +4,15 @@
  */
 import type { PickingInfo } from "deck.gl";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import MapGL, { AttributionControl, useMap, type MapLayerMouseEvent, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { useThemeColors } from "../theme.ts";
 import { PHONE_QUERY, useMedia } from "../ui/media.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
-import { basemapFilter, type LightMode, type MapLook } from "./daylight.ts";
-import { DayNightLine, NightLights } from "./DayNight.tsx";
+import type { LightMode, MapLook } from "./daylight.ts";
+import { NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
 import { LAYER, networkLayer, sceneLayers, sceneTarget, sceneTooltip, type LabelView } from "./layers.ts";
@@ -28,7 +28,6 @@ export interface MapLayerChoice {
   tracks: boolean;
   /** Auto follows the clock at the map centre; Day and Night stay put. */
   light: LightMode;
-  dayNightLine: boolean;
 }
 
 export interface MapCanvasProps {
@@ -38,7 +37,7 @@ export interface MapCanvasProps {
   onLayers: (next: MapLayerChoice) => void;
   /** The day or night look for the clock and the map centre, worked out by the stage. */
   look: MapLook;
-  /** The clock the look was worked out for, as epoch ms. */
+  /** The clock the look was worked out for, as epoch ms; Auto's night tiles follow it too. */
   now: number;
   /** Where the map centre is after each move, for the sun's position. */
   onCentre: (centre: LngLat) => void;
@@ -66,6 +65,13 @@ const INITIAL_VIEW = {
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
 const noTooltip = () => null;
+
+/**
+ * In Auto, the dark street map only from this zoom in. Further out the screen spans the twilight
+ * band, so the light map stays and the night tiles cover the night side, like the Earth from space;
+ * from here in the screen (about 700 km) is nearly all day or all night.
+ */
+export const AUTO_DARK_ZOOM = 7;
 
 /** Flies to one junction when the screen asks for it. Renders nothing; must be a child of the map. */
 function FlyTo({ focus }: { focus: MapFocus | undefined }) {
@@ -162,10 +168,11 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const railroadsShown = scene?.kind === "route" ? [scene.selected, ...scene.alternatives] : scene?.kind === "fleet" && scene.selected ? [scene.selected] : [];
 
   return (
-    <div className="map-canvas" ref={root} style={{ "--basemap-filter": basemapFilter(look, layers.basemap === "satellite") } as CSSProperties}>
+    <div className="map-canvas" ref={root}>
       <MapGL
         initialViewState={INITIAL_VIEW}
-        mapStyle={basemapStyle(layers.basemap, look.base === "night")}
+        // `zoom` changes only when a move ends, so the style never swaps in the middle of a zoom.
+        mapStyle={basemapStyle(layers.basemap, look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM))}
         // Map ↔ Satellite ↔ dark share nothing, so load each style clean instead of diffing into it.
         styleDiffing={false}
         attributionControl={false}
@@ -179,8 +186,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
       >
         <DeckOverlay layers={deckLayers} getTooltip={picking ? noTooltip : sceneTooltip} pickingRadius={6} onClick={onDeckClick} />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-right" />
-        <NightLights strength={look.lights} />
-        {layers.dayNightLine && <DayNightLine now={props.now} night={look.base === "night"} />}
+        <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution fold={narrow} />
         {(layers.tracks || content?.forceTracks) && <RealTracks />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} leftInset={scene?.kind === "fleet" && !narrow ? CAR_CARD_INSET : 0} topInset={scene?.kind === "fleet" && narrow ? CAR_CARD_TOP_PHONE : 0} />}

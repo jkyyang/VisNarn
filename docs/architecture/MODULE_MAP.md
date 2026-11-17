@@ -123,6 +123,7 @@ the point), and `Reversal` now keeps the segments, headings and km that `describ
 | `data/query.ts` | the transport and the query cache: `useQuery`, `read`, `write`, `callApi`. **Internal**: only `web/data/` imports it; the only `fetch` to the API | `shared/api`, `shared/app` |
 | `data/hooks.ts` | the named reads and changes the screens use | `./query`, `shared/` |
 | `data/basemap.ts` | loading the static mainline GeoJSON | |
+| `data/blackMarble.ts` | downloading NASA GIBS Black Marble tiles for the night side, with an in-memory cache (GIBS sends `no-store`); its URL and attribution | |
 | `words.ts` | every sentence about a car, from domain values: labels, headline, reasons, step words, the at-risk text | `shared/` |
 | `format.ts` | numbers, distances, rough and exact times, compass points; local input ↔ `Instant` | `shared/` |
 | `theme.ts` | CSS theme tokens as deck.gl colours | `shared/railroads` |
@@ -131,8 +132,9 @@ the point), and `Reversal` now keeps the segments, headings and km that `describ
 | `map/scene.ts` | `MapScene` and its builders (`routeScene`, `fleetScene`, `shopsScene`): what the map draws, as data | `../words` (type), `shared/` |
 | `map/layers.ts` | a scene as deck.gl layers; tooltips; click targets. The only file that names deck.gl layer classes | `./scene`, `../theme`, `../data/basemap` (type) |
 | `map/MapControls.tsx` | layers card (with the Auto / Day / Night switch), zoom, undo / redo, fit | `./MapCanvas` (type), `./daylight` |
-| `map/daylight.ts` | day and night: sun position from the clock and a place (no package), the day-night line, `mapLook` (Auto / Day / Night → day or night colours, warm light, city lights), the basemap filter | `shared/geo` (type) |
-| `map/DayNight.tsx` | NASA GIBS Black Marble city lights under the place names, and the day-night line, inside MapLibre (under deck.gl) | `./daylight` |
+| `map/daylight.ts` | day and night: sun position and the subsolar point from the clock (no package), `mapLook` (Auto / Day / Night → day or night colours and the Day / Sunrise / Sunset / Night word, at the map centre) | `shared/geo` (type) |
+| `map/nightTiles.ts` | the night side of the Earth per tile: `nightFactor`, `nightShade` (Black Marble where the sun is down, a soft twilight band, clear by day; pure), the `earthnight://` tile URL and its MapLibre loader | `./daylight`, `../data/blackMarble`, `maplibre-gl` (type) |
+| `map/DayNight.tsx` | `NightLights`: the `earthnight://` raster layer under the place names, inside MapLibre (under deck.gl), its opacity per basemap and mode, redrawn every 10 minutes in Auto | `./nightTiles`, `../data/blackMarble` |
 | `map/DeckOverlay.tsx`, `FitBounds.tsx`, `RealTracks.tsx`, `Legend.tsx`, `basemaps.ts` | kept from today: overlay control, camera fit, OpenRailwayMap overlay, legend, basemap styles | |
 | `screens/route/RouteWorkspace.tsx` | container for Main, Phone and Fix route: session + check + scene | `./session`, `./RoutePanel`, `./FixPanel`, `../../data/hooks`, `../../map/*`, `../../app/routes` |
 | `screens/route/session.ts` | the car being worked on: draft, submitted, stops with history, pick mode; `reportOf`; `stopInsertIndex` | `../../data/hooks`, `../../app/routes` (type), `shared/` |

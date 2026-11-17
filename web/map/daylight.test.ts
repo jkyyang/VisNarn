@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../shared/geo.ts";
-import { basemapFilter, mapLook, subsolarPoint, sunPosition, terminator } from "./daylight.ts";
+import { mapLook, subsolarPoint, sunPosition } from "./daylight.ts";
 
 const CHICAGO: LngLat = [-87.63, 41.88];
 const at = (iso: string) => new Date(iso);
@@ -40,59 +40,39 @@ describe("where the sun is", () => {
   });
 });
 
-describe("the day-night line", () => {
-  it("runs right across the map, through places where the sun is on the horizon", () => {
-    const when = at("2026-11-17T23:00:00Z");
-    const line = terminator(when, 5);
-    expect(line[0][0]).toBe(-180);
-    expect(line[line.length - 1][0]).toBe(180);
-    for (const point of line) expect(Math.abs(sunPosition(when, point).altitudeDeg)).toBeLessThan(0.01);
-  });
-
-  it("still has a place for every longitude at an equinox, when it runs from pole to pole", () => {
-    const line = terminator(at("2024-03-20T03:06:00Z"), 10);
-    for (const [, lat] of line) expect(Number.isFinite(lat)).toBe(true);
-  });
-});
-
 describe("how the map looks", () => {
   const sun = (altitudeDeg: number, azimuthDeg = 250) => ({ altitudeDeg, azimuthDeg });
 
-  it("Auto: day colours with the sun up, the dark map with city lights after dusk", () => {
-    expect(mapLook("auto", sun(40))).toEqual({ base: "day", phase: "day", warm: 0, lights: 0 });
-    expect(mapLook("auto", sun(-20))).toEqual({ base: "night", phase: "night", warm: 0, lights: 1 });
+  it("Auto: day colours with the sun up, the dark colours after dusk", () => {
+    expect(mapLook("auto", sun(40))).toEqual({ base: "day", phase: "day" });
+    expect(mapLook("auto", sun(-20))).toEqual({ base: "night", phase: "night" });
   });
 
-  it("Auto: warm light around sunset, and sunrise when the sun is in the east", () => {
+  it("Auto: sunset around sunset, and sunrise when the sun is in the east", () => {
     const sunset = mapLook("auto", sun(-1, 250));
     expect(sunset.phase).toBe("sunset");
     expect(sunset.base).toBe("day");
-    expect(sunset.warm).toBeGreaterThan(0.9);
     expect(mapLook("auto", sun(2, 110)).phase).toBe("sunrise");
   });
 
-  it("Auto: the look changes gradually through dusk, never jumping straight from bright day to full night", () => {
-    let last = mapLook("auto", sun(12));
+  it("Auto: through dusk the look goes day, sunset, then night, and never back", () => {
+    const order = ["day", "sunset", "night"];
+    let step = 0;
     for (let alt = 12; alt >= -12; alt -= 0.5) {
-      const next = mapLook("auto", sun(alt));
-      expect(Math.abs(next.warm - last.warm)).toBeLessThan(0.1);
-      expect(Math.abs(next.lights - last.lights)).toBeLessThan(0.1);
-      last = next;
+      const look = mapLook("auto", sun(alt));
+      const at = order.indexOf(look.phase);
+      expect(at, `phase at ${alt}°`).toBeGreaterThanOrEqual(step);
+      step = at;
+      // The dark colours turn on where the night tiles are half lit.
+      expect(look.base).toBe(alt < -3 ? "night" : "day");
     }
-    expect(mapLook("auto", sun(-5.5)).lights).toBeGreaterThan(0);
+    expect(step).toBe(2);
   });
 
   it("Day and Night stay as chosen whatever the sun does", () => {
     for (const alt of [60, 0, -40]) {
-      expect(mapLook("day", sun(alt))).toEqual({ base: "day", phase: "day", warm: 0, lights: 0 });
-      expect(mapLook("night", sun(alt))).toEqual({ base: "night", phase: "night", warm: 0, lights: 1 });
+      expect(mapLook("day", sun(alt))).toEqual({ base: "day", phase: "day" });
+      expect(mapLook("night", sun(alt))).toEqual({ base: "night", phase: "night" });
     }
-  });
-
-  it("tints the basemap only around sunrise and sunset, and darkens a satellite picture at night", () => {
-    expect(basemapFilter(mapLook("day", sun(0)), false)).toBe("none");
-    expect(basemapFilter(mapLook("auto", sun(-1)), false)).toMatch(/sepia/);
-    expect(basemapFilter(mapLook("night", sun(0)), false)).toBe("none");
-    expect(basemapFilter(mapLook("night", sun(0)), true)).toMatch(/brightness\(0\.5\)/);
   });
 });

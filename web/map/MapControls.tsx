@@ -31,7 +31,7 @@ const Thumb = ({ kind }: { kind: BasemapKind | "tracks" }) => <span className={`
 
 /**
  * Top-right of the map: "Layers · Map · Day" (Map / Satellite / Real tracks, Class I network, Auto /
- * Day / Night, day-night line), zoom, undo / redo, fit whole route.
+ * Day / Night), zoom, undo / redo, fit whole route.
  */
 export function MapControls(props: MapControlsProps): ReactElement {
   const { layers, onLayers } = props;
@@ -89,10 +89,6 @@ export function MapControls(props: MapControlsProps): ReactElement {
             </div>
             {layers.light === "auto" && <p className="light-switch-hint">Follows the clock. Now: {lightWord}</p>}
           </div>
-          <label className="check small" title="Where the sun is rising or setting right now">
-            <input type="checkbox" checked={layers.dayNightLine} onChange={(e) => onLayers({ ...layers, dayNightLine: e.target.checked })} />
-            Day-night line
-          </label>
         </div>
       )}
       <div className="ctl-group">

@@ -9,8 +9,11 @@ import { RAILROADS } from "../shared/railroads.ts";
 
 const CSS = readFileSync(new URL("../web/styles.css", import.meta.url), "utf8");
 
-/** The dark street map's land (OpenFreeMap "dark") and the darkest blue of NASA's Black Marble. */
-const NIGHT_GROUNDS = { "dark map": "#0c0c0c", "night lights": "#14142d" };
+/**
+ * The dark street map's land (OpenFreeMap "dark"), and NASA's Black Marble as the night side shows
+ * it: its darkest blue, its night ocean, and moonlit land at its brightest.
+ */
+const NIGHT_GROUNDS = { "dark map": "#0c0c0c", "night lights": "#14142d", "night ocean": "#04050f", "moonlit land": "#2a2f4a" };
 
 function tokens(selector: string, from = 0): Record<string, string> {
   const start = CSS.indexOf(`${selector} {`, from);

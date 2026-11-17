@@ -146,10 +146,10 @@ export function MapStage(): ReactElement {
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
-  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto", dayNightLine: false });
+  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto" });
   const [drawable] = useState(canDrawMaps);
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
-  const now = useNow(layers.light === "auto" || layers.dayNightLine);
+  const now = useNow(layers.light === "auto");
   const look = mapLook(layers.light, sunPosition(now, centre));
 
   return (

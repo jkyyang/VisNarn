@@ -2437,11 +2437,6 @@ input[aria-invalid="true"] {
 .map-overlay--inline {
   position: static;
 }
-/* Only the basemap canvas: deck.gl draws the rail lines and the route on a canvas of its own above it. */
-.map-canvas .maplibregl-canvas {
-  filter: var(--basemap-filter, none);
-  transition: filter 1.2s ease;
-}
 .map[data-picking="true"] .maplibregl-canvas {
   cursor: crosshair;
 }
