@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Weekly rail network update. Installed copy: ~/Library/LaunchAgents/. See scripts/README.md. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.visnarn.network-update</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/npm</string>
+    <string>run</string>
+    <string>--silent</string>
+    <string>data:update</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/jiaqiyang/Documents/VisNARN</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/jiaqiyang/Documents/VisNARN/.venv/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <!-- Monday 07:00 local. If the Mac is asleep then, launchd runs it once on wake. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/jiaqiyang/Library/Logs/visnarn-network-update.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/jiaqiyang/Library/Logs/visnarn-network-update.log</string>
+</dict>
+</plist>
