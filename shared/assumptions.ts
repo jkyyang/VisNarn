@@ -14,7 +14,7 @@ export interface Assumptions {
     allowed: Railroad[];
     /** Extra km the router accepts to avoid changing railroad. Adds no time. */
     interchangePenaltyKm: number;
-    /** Track beyond the Class I railroads that routes may use. Missing: none of it. */
+    /** Track beyond the Class I railroads that routes may use. Missing: passenger-owned track only. */
     include?: TrackIncluded;
   };
   /** Decides when the car arrives on a given route. */

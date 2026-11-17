@@ -119,10 +119,17 @@ describe("createCarRouter().route", () => {
     const villePlatte: Waypoint = { label: "Ville Platte, LA", lon: -92.271, lat: 30.688, fraId: null, railroad: null };
     const trip: Trip = { a: city("Houston, TX"), b: city("Baton Rouge, LA"), stops: [], shop: villePlatte, rules: rules() };
     expect(router.route(trip, "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: "shop" } });
-    const { path } = routed({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: true, passenger: false } } });
+    const { path } = routed({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: true, passenger: true } } });
     const last = path.legs[path.legs.length - 1];
     expect(last).toMatchObject({ line: "short line", railroad: "UP" });
     expect(haversineKm(villePlatte.lon, villePlatte.lat, ...last.path[last.path.length - 1])).toBeLessThan(1);
+  });
+
+  it("reaches the Oakville, ON shop over GO Transit's track by default, and not at all with passenger-owned track turned off", () => {
+    const trip: Trip = { ...exampleTrip(), shop: { label: "Oakville, ON", lon: -79.7195, lat: 43.4169, fraId: null, railroad: null } };
+    expect(router.route(trip, "pick").ok).toBe(true);
+    const off = router.route({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: false, passenger: false } } }, "pick");
+    expect(off).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "shop" } });
   });
 
   it("honours a waypoint's railroad: a stop pinned to BNSF is not reached on UP", () => {
@@ -254,8 +261,7 @@ describe("combine / tripKey", () => {
     // Taylor → Temple → Oakville, ON: "pick" and "fewest interchanges" ran the same BNSF + CN line, 18 m
     // apart in length, but only 92 % of their points matched (a stretch of parallel yard track). One card.
     const oakville = { label: "Oakville, ON", lon: -79.7195, lat: 43.4169, fraId: null, railroad: null };
-    // CN reaches the shop over GO Transit's track, so passenger-owned track must be allowed.
-    const toOakville = lines({ ...exampleTrip(), shop: oakville, rules: { ...rules(), include: { regional: false, shortLine: false, passenger: true } } });
+    const toOakville = lines({ ...exampleTrip(), shop: oakville });
     const look = (p: RoutePath) => `${p.interchanges}|${p.turnBacks.length}|${Math.round(p.km)}`;
     expect(new Set(toOakville.map(look)).size).toBe(toOakville.length);
     // Fargo → Minneapolis → Edmonton: BNSF to Winnipeg then CN, twice, 10 m apart. One card.

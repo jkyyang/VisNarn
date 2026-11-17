@@ -45,9 +45,13 @@ export interface CarRouter {
 const STRAIGHT_LINE_FACTOR = 1.2;
 const REVERSE_KM = 100;
 
-/** Lines and track the rules allow: the Class I railroads ticked, plus regional railroads, short lines and passenger-owned track when included. */
+/**
+ * Lines and track the rules allow: the Class I railroads ticked, plus regional railroads and short lines when
+ * included. Passenger-owned track is included unless turned off; the router then uses it only where no
+ * freight-owned way is close in length (core/router.ts PASSENGER_TRACK_COST).
+ */
 function trackOf(rules: Trip["rules"]): Track {
-  const include = rules.include ?? { regional: false, shortLine: false, passenger: false };
+  const include = rules.include ?? { regional: false, shortLine: false, passenger: true };
   const allowedMask = maskOf(rules.allowed) | (include.regional ? 1 << REGIONAL : 0) | (include.shortLine ? 1 << SHORT_LINE : 0);
   return { allowedMask, passenger: include.passenger };
 }
