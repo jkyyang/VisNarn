@@ -6,8 +6,6 @@ const EVERY_ROUTE: Record<Route, true> = {
   "GET /api/meta": true,
   "GET /api/assumptions": true,
   "PUT /api/assumptions": true,
-  "GET /api/import-profile": true,
-  "PUT /api/import-profile": true,
   "GET /api/places/suggest": true,
   "POST /api/places/resolve": true,
   "GET /api/places/nearest": true,
@@ -19,19 +17,16 @@ const EVERY_ROUTE: Record<Route, true> = {
   "GET /api/codes": true,
   "POST /api/codes/import": true,
   "DELETE /api/codes/:codeType": true,
-  "GET /api/batches": true,
-  "POST /api/batches": true,
-  "GET /api/batches/:batchId": true,
-  "DELETE /api/batches/:batchId": true,
-  "GET /api/batches/:batchId/cars/:row": true,
-  "PUT /api/batches/:batchId/cars/:row/fix": true,
-  "DELETE /api/batches/:batchId/cars/:row/fix": true,
-  "POST /api/check": true,
+  "POST /api/route": true,
+  "GET /api/saved-routes": true,
+  "POST /api/saved-routes": true,
+  "PUT /api/saved-routes/:routeId": true,
+  "DELETE /api/saved-routes/:routeId": true,
 };
 const ROUTES = Object.keys(EVERY_ROUTE) as Route[];
 
 /** Awkward values on purpose: a slash, a space, a percent sign and non-ASCII letters must survive the trip. */
-const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", batchId: "b%7", codeType: "sp lc", row: "12" };
+const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", routeId: "r%7 é", codeType: "sp lc" };
 
 describe("urlFor / routeMatcher", () => {
   it("urlFor fills path params (encoded) and appends the query", () => {
@@ -42,7 +37,7 @@ describe("urlFor / routeMatcher", () => {
     });
     expect(urlFor("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.1, withinKm: 2.5 } }).url).toBe("/api/places/nearest?lon=-97.34&lat=31.1&withinKm=2.5");
     expect(urlFor("GET /api/places/suggest", { query: { q: "Temple, TX & co", role: "shop" } }).url).toBe("/api/places/suggest?q=Temple%2C+TX+%26+co&role=shop");
-    expect(urlFor("GET /api/batches/:batchId/cars/:row", { params: { batchId: "b1", row: "3" } }).url).toBe("/api/batches/b1/cars/3");
+    expect(urlFor("DELETE /api/saved-routes/:routeId", { params: { routeId: "r1" } }).url).toBe("/api/saved-routes/r1");
   });
 
   it("routeMatcher(urlFor(route, request)) finds the same route and params, for every route in Api", () => {
@@ -50,7 +45,7 @@ describe("urlFor / routeMatcher", () => {
     for (const route of ROUTES) {
       const names = [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
       const params = Object.fromEntries(names.map((name) => [name, PARAM_VALUES[name]]));
-      const { method, url } = urlFor(route as "GET /api/batches/:batchId/cars/:row", { params } as never);
+      const { method, url } = urlFor(route as "DELETE /api/saved-routes/:routeId", { params } as never);
       const found = match(method, new URL(url, "http://127.0.0.1").pathname);
       expect(found, route).toEqual({ route, params });
     }
@@ -68,7 +63,7 @@ describe("urlFor / routeMatcher", () => {
     expect(match("GET", "/api/shops/EX-1")).toBeNull();
     expect(match("POST", "/api/meta")).toBeNull();
     expect(match("GET", "/api/shops/")).toBeNull();
-    expect(match("GET", "/api/batches/b1/cars")).toBeNull();
-    expect(match("GET", "/api/batches/%E0%A4%A")).toBeNull();
+    expect(match("GET", "/api/saved-routes/r1/x")).toBeNull();
+    expect(match("DELETE", "/api/saved-routes/%E0%A4%A")).toBeNull();
   });
 });

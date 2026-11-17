@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
-import type { Pill } from "./words.ts";
 
 export type RGBA = [number, number, number, number];
 export interface ThemeColors {
@@ -10,15 +9,14 @@ export interface ThemeColors {
   accent: RGBA;
   warn: RGBA;
   panel: RGBA;
-  /** The selected route, Google-Maps blue. */
+  /** The accent of the selected route's pill and of the stop pins. */
   route: RGBA;
-  /** Routes that are not selected, and the ghost of the route before a fix. */
+  /** Routes that are not selected. */
   alternative: RGBA;
   /** The white edge under a route line and around rings. */
   casing: RGBA;
+  /** The selected route is drawn in its railroads' colours. */
   rail: Record<Railroad, RGBA>;
-  /** The status colours, for the car markers: the same tokens the pills use, so they follow the theme. */
-  status: Record<Pill, RGBA>;
 }
 
 function hexOf(style: CSSStyleDeclaration, name: string, fallback: string): RGBA {
@@ -47,13 +45,6 @@ function read(scope?: Element | null): ThemeColors {
     alternative: hex("--alt-route", "#9aa0a6"),
     casing: hex("--casing", "#ffffff"),
     rail: Object.fromEntries(RAILROADS.map((r) => [r, hex(`--rr-${r}`, RAIL_FALLBACK[r])])) as Record<Railroad, RGBA>,
-    status: {
-      "at-risk": hex("--risk", "#c5221f"),
-      tight: hex("--tight", "#b06000"),
-      "on-time": hex("--ok", "#188038"),
-      "check-route": hex("--check", "#7b1fa2"),
-      "cannot-check": hex("--cannot", "#5f6368"),
-    },
   };
 }
 

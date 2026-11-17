@@ -15,7 +15,7 @@ function Logo(): ReactElement {
 
 const ExampleBadge = () => <span className="example-badge">EXAMPLE DATA</span>;
 
-/** Logo, "Shop Arrival Check", and the "EXAMPLE DATA" badge while the server holds only seeded example rows. */
+/** Logo, "Shop Arrival Check", and the "EXAMPLE DATA" badge while the server holds only seeded EXAMPLE shops. */
 export function AppHeader(props: { exampleOnly: boolean }): ReactElement {
   return (
     <header className="app-header">
@@ -28,21 +28,16 @@ export function AppHeader(props: { exampleOnly: boolean }): ReactElement {
   );
 }
 
-const CARS: Screen = { name: "cars", batchId: null, car: null, shop: null, hide: [] };
 const SHOPS: Screen = { name: "shops", edit: null };
 
-/** Route · Cars (n) · Shops. `actNow` is the number on the Cars tab: cars to act on in the newest batch. */
-export function ModeTabs(props: { current: Screen["name"]; actNow: number | null }): ReactElement {
-  const tab = (target: Screen, label: string, icon: ReactElement, extra?: ReactElement) => {
-    const current = props.current === target.name || (target.name === "route" && props.current === "fix");
-    return (
-      <a className="tab" {...linkTo(target)} aria-current={current ? "page" : undefined}>
-        {icon}
-        {label}
-        {extra}
-      </a>
-    );
-  };
+/** Route · Shops. */
+export function ModeTabs(props: { current: Screen["name"] }): ReactElement {
+  const tab = (target: Screen, label: string, icon: ReactElement) => (
+    <a className="tab" {...linkTo(target)} aria-current={props.current === target.name ? "page" : undefined}>
+      {icon}
+      {label}
+    </a>
+  );
   return (
     <nav className="tabs" aria-label="Mode">
       {tab(
@@ -52,18 +47,6 @@ export function ModeTabs(props: { current: Screen["name"]; actNow: number | null
           <path d="M4 15V7.5a3 3 0 0 1 6 0v3a3 3 0 0 0 6 0V3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           <circle cx="4" cy="15" r="1.8" fill="currentColor" />
         </svg>,
-      )}
-      {tab(
-        CARS,
-        "Cars",
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <path d="M3 5h12M3 9h12M3 13h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>,
-        props.actNow ? (
-          <span className="tab-count" aria-label={`${props.actNow} to act on now`}>
-            {props.actNow}
-          </span>
-        ) : undefined,
       )}
       {tab(
         SHOPS,
@@ -77,7 +60,7 @@ export function ModeTabs(props: { current: Screen["name"]; actNow: number | null
   );
 }
 
-/** Back arrow, title and subtitle, for Fix route and Shops. */
+/** Back arrow, title and subtitle, for Shops. */
 export function BackHeader(props: { back: Screen; title: string; sub: string; exampleOnly?: boolean }): ReactElement {
   return (
     <header className="back-header">

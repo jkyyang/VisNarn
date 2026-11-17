@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
+import type { SavedRouteDraft } from "../../shared/plans.ts";
 import { callApi, createQueryCache, type QueryState, type Transport } from "./query.ts";
 
 interface Call {
@@ -42,15 +43,15 @@ describe("query cache", () => {
 
   it("a request with the same meaning but keys in another order is the same read", () => {
     const cache = createQueryCache(fakeTransport().transport);
-    expect(cache.keyOf("POST /api/check", { body: { a: 1, b: 2 } })).toBe(cache.keyOf("POST /api/check", { body: { b: 2, a: 1 } }));
+    expect(cache.keyOf("POST /api/route", { body: { a: 1, b: 2 } })).toBe(cache.keyOf("POST /api/route", { body: { b: 2, a: 1 } }));
   });
 
   it("a changed request aborts the superseded call when nobody else wants it", async () => {
     const { calls, transport } = fakeTransport();
     const cache = createQueryCache(transport);
-    const stop = cache.subscribe("POST /api/check", { body: { car: 1 } }, () => {});
+    const stop = cache.subscribe("POST /api/route", { body: { car: 1 } }, () => {});
     stop();
-    const stop2 = cache.subscribe("POST /api/check", { body: { car: 2 } }, () => {});
+    const stop2 = cache.subscribe("POST /api/route", { body: { car: 2 } }, () => {});
     expect(calls[0].signal.aborted).toBe(true);
     expect(calls[1].signal.aborted).toBe(false);
     stop2();
@@ -87,7 +88,7 @@ describe("query cache", () => {
     const { calls, transport } = fakeTransport();
     const cache = createQueryCache(transport);
     const pollMs = (view: unknown) => ((view as { done: boolean }).done ? null : 400);
-    const stop = cache.subscribe("GET /api/batches/:batchId", { params: { batchId: "b" } }, () => {}, { pollMs });
+    const stop = cache.subscribe("POST /api/route", { body: { plan: "b" } }, () => {}, { pollMs });
     calls[0].resolve({ done: false });
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(400);
@@ -96,7 +97,7 @@ describe("query cache", () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(calls).toHaveLength(2);
 
-    const stopAgain = cache.subscribe("GET /api/batches/:batchId", { params: { batchId: "c" } }, () => {}, { pollMs });
+    const stopAgain = cache.subscribe("POST /api/route", { body: { plan: "c" } }, () => {}, { pollMs });
     calls[2].resolve({ done: false });
     await vi.advanceTimersByTimeAsync(0);
     stopAgain();
@@ -147,9 +148,10 @@ describe("callApi", () => {
       return new Response("null", { status: 200 });
     }) as typeof fetch;
     await callApi("http://127.0.0.1:1", "GET /api/places/suggest", { query: { q: "Tem ple", role: "shop" } });
-    await callApi("", "PUT /api/batches/:batchId/cars/:row/fix", { params: { batchId: "b/1", row: "3" }, body: { stops: [] } });
+    const draft: SavedRouteDraft = { name: "EXAMPLE", plan: { start: { kind: "text", text: "a" }, stops: [], destination: { kind: "text", text: "b" } }, option: null };
+    await callApi("", "PUT /api/saved-routes/:routeId", { params: { routeId: "r/1" }, body: draft });
     expect(seen[0].url).toBe("http://127.0.0.1:1/api/places/suggest?q=Tem+ple&role=shop");
-    expect(seen[1].url).toBe("/api/batches/b%2F1/cars/3/fix");
-    expect(seen[1].init).toMatchObject({ method: "PUT", body: '{"stops":[]}' });
+    expect(seen[1].url).toBe("/api/saved-routes/r%2F1");
+    expect(seen[1].init).toMatchObject({ method: "PUT", body: JSON.stringify(draft) });
   });
 });

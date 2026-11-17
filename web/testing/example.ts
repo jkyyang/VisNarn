@@ -1,6 +1,6 @@
 /**
- * EXAMPLE data for page tests and for looking at the page before the server answers: the six shops
- * and six cars of the mockups, with made-up track. Not company data, and never imported by the app.
+ * EXAMPLE data for page tests: the six shops of the mockups and made-up track between a few cities.
+ * Not company data, and never imported by the app.
  */
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, NetworkNode } from "../../shared/places.ts";
@@ -46,7 +46,7 @@ const node = (fraId: number, near: string, at: LngLat, railroads: Railroad[], ya
   km: 0,
 });
 
-/** Nodes a map click can snap to: the city nodes, and the wye at Temple that fixes the EXAMPLE car. */
+/** Nodes a map click can snap to: the city nodes, and the wye at Temple where BNSF and UP meet. */
 export const NODES: NetworkNode[] = [
   node(357961, "Temple, TX", [-97.34607, 31.09534], ["BNSF"], true),
   node(358070, "TEMPLE, TX wye", [-97.362, 31.121], ["BNSF", "UP"], false),
@@ -82,7 +82,7 @@ export interface PathSpec {
   legs: LegSpec[];
   /** Turn-backs, each before the leg with that index. */
   turnBacks: { beforeLeg: number; turnBack: TurnBack }[];
-  /** Only offered when the report has stops (the EXAMPLE fix), or only without. */
+  /** Only offered when the plan has stops, or only without. */
   when?: "stops" | "no-stops";
 }
 
@@ -100,7 +100,7 @@ const NLR: LngLat = [-92.27, 34.77];
 const BNSF_EAST: LngLat[] = [TEMPLE, [-97.23, 30.93], [-96.86, 30.71], [-96.09, 30.39], [-95.46, 30.31], [-95.09, 30.34], [-94.18, 30.35], [-93.89, 30.66], [-94.11, 31.53], [-94.24, 31.94], [-94.74, 32.5], [-94.05, 33.43], [-93.59, 33.67], [-93.05, 34.12], [-92.29, 34.75], NLR];
 const BNSF_SUBS = ["LAMPASAS", "GALVESTON", "CONROE", "SILSBEE", "SAN AUGUSTINE", "LONGVIEW", "LITTLE ROCK"];
 
-/** Routes by "B > shop" (city names). Anything else gets one straight-ish leg. */
+/** Routes by "start > destination" (city names). Anything else gets one straight-ish leg. */
 export const ROUTES: Record<string, PathSpec[]> = {
   "Temple, TX > North Little Rock, AR": [
     {
@@ -160,13 +160,3 @@ export const ROUTES: Record<string, PathSpec[]> = {
   "Red Deer, AB > Calgary, AB": [{ strategies: ["pick", "shortest", "fewest-interchanges", "no-turn-backs"], km: 152, legs: [{ railroad: "CPKC", points: [[-113.81, 52.27], [-113.9, 51.7], [-114.07, 51.05]], subdivisions: ["RED DEER"] }], turnBacks: [] }],
   "Omaha, NE > North Platte, NE": [{ strategies: ["pick", "shortest", "fewest-interchanges", "no-turn-backs"], km: 450, legs: [{ railroad: "UP", points: [[-95.94, 41.26], [-97.6, 41.1], [-99.08, 40.7], [-100.77, 41.12]], subdivisions: ["LANE", "KEARNEY"] }], turnBacks: [] }],
 };
-
-/** The EXAMPLE cars: where they are, their shop's code, and the margin each was set up to show. */
-export const EXAMPLE_CARS: { carId: string; a: string; b: string; shop: string; marginH: number }[] = [
-  { carId: "104233", a: "Taylor, TX", b: "Temple, TX", shop: "EX-NLR-01", marginH: 23 },
-  { carId: "551930", a: "Fargo, ND", b: "Minneapolis, MN", shop: "EX-KCY-01", marginH: -14 },
-  { carId: "402196", a: "Waycross, GA", b: "Jacksonville, FL", shop: "EX-BHM-01", marginH: -13 },
-  { carId: "318045", a: "Toronto, ON", b: "Hamilton, ON", shop: "EX-CHI-01", marginH: 40 },
-  { carId: "663012", a: "Edmonton, AB", b: "Red Deer, AB", shop: "EX-CAL-01", marginH: 37 },
-  { carId: "220871", a: "Des Moines, IA", b: "Omaha, NE", shop: "EX-NPL-01", marginH: 79 },
-];

@@ -4,8 +4,8 @@
  * <MapContent> anywhere in its tree.
  *
  * Layer choices (Map / Satellite, Class I network, Real tracks, Auto / Day / Night) are view state
- * owned here. A screen can force Real tracks on (Fix route does) without owning that state. The day
- * or night look is set on the whole map section, so the cards over the map change with it.
+ * owned here. The day or night look is set on the whole map section, so the cards over the map
+ * change with it.
  */
 import {
   createContext,
@@ -28,20 +28,18 @@ import { mapLook, sunPosition } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
-/** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one junction. */
+/** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
 
 export interface MapContentProps {
   scene: MapScene | null;
   focus: MapFocus;
-  /** Show OpenRailwayMap tracks whatever the layer switch says. */
-  forceTracks?: boolean;
-  /** While set, the cursor is a crosshair and the next click is reported here instead of selecting things. */
+  /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here. */
   onPick?: (lon: number, lat: number, toleranceKm: number) => void;
   onSelect?: (target: SceneTarget) => void;
   /** Undo / redo of route changes, shown with the map controls when given. */
   history?: { undo: (() => void) | null; redo: (() => void) | null };
-  /** Cards and chips laid over the map: detail card, junction inspector, delta balloon, pick prompt. */
+  /** Cards laid over the map (the pick prompt on Shops). */
   children?: ReactNode;
 }
 
@@ -116,7 +114,7 @@ const canDrawMaps = () => typeof window !== "undefined" && ("WebGL2RenderingCont
 function NoMap(): ReactElement {
   return (
     <div className="no-map" role="note">
-      The map couldn't start in this browser. The arrival check works without it.
+      The map couldn't start in this browser. Places can still be typed.
     </div>
   );
 }

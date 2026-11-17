@@ -1,25 +1,27 @@
 /**
  * The Store on node:sqlite. The only file that knows the schema.
  *
- *   meta        (key PK, value)                                  schema_version
- *   settings    (key PK, json)                                   'assumptions', 'import_profile'
- *   shops       (id PK, name, code UNIQUE NULL, location_json, example, updated_at)
- *   code_sets   (code_type PK, label, imported_at)
- *   node_codes  (code_type, code, name NULL, location_json, PRIMARY KEY (code_type, code))
- *   batches     (id PK, name, as_of, created_at, source_json, issues_json, example, content_hash UNIQUE)
- *   batch_rows  (batch_id, row, report_json, PRIMARY KEY (batch_id, row))
- *   route_fixes (id INTEGER PK AUTOINCREMENT, batch_id, row, stops_json, saved_at, reverted_at NULL)
+ *   meta         (key PK, value)                                  schema_version
+ *   settings     (key PK, json)                                   'assumptions'
+ *   shops        (id PK, name, code UNIQUE NULL, location_json, example, updated_at)
+ *   code_sets    (code_type PK, label, imported_at)
+ *   node_codes   (code_type, code, name NULL, location_json, PRIMARY KEY (code_type, code))
+ *   saved_routes (id PK, name, plan_json, option NULL)                          since schema 2
  *
- * Nested domain values (PlaceRef, NodeLocation, CarReport) are stored as JSON text: the format of
+ * Dormant since schema 2, kept because they hold user data: batches, batch_rows, route_fixes and the
+ * 'import_profile' settings key. Nothing reads or writes them.
+ *
+ * Nested domain values (PlaceRef, NodeLocation, a plan) are stored as JSON text: the format of
  * company node codes is still unknown, and no query needs to look inside them. Columns exist only
- * for what is looked up: ids, (code_type, code), shop code and name, (batch_id, row).
+ * for what is looked up: ids, (code_type, code), shop code and name, a saved route's name.
  */
 import { chmodSync } from "node:fs";
 import process from "node:process";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../../shared/assumptions.ts";
-import type { Batch, BatchId, CarReport, ImportProfile, SavedFix, StopRef } from "../../shared/cars.ts";
 import type { CodeSet, CodeType, NodeCode, NodeLocation, Shop, ShopId } from "../../shared/places.ts";
+import type { FullPlan, SavedRoute, SavedRouteId } from "../../shared/plans.ts";
+import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Instant } from "../../shared/time.ts";
 import type { Store } from "./store.ts";
 
@@ -71,16 +73,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX route_fixes_by_row ON route_fixes (batch_id, row, id);
   `,
+  `
+  CREATE TABLE saved_routes (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan_json TEXT NOT NULL, option TEXT);
+  `,
 ];
-
-/** Until the user saves one: the old fixed columns, positions as free text, zone-less times in this laptop's zone. */
-function defaultImportProfile(): ImportProfile {
-  return {
-    columns: { carId: "car_id", a: "last_node", b: "next_node", shop: "shop", reportedAt: "reported_at", prepEnd: "prep_end" },
-    positions: "text",
-    zonelessTimes: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" },
-  };
-}
 
 type Row = Record<string, unknown>;
 
@@ -148,23 +144,13 @@ export function openStore(file: string): Store {
     location: parse<NodeLocation>(row.location_json),
   });
 
-  const BATCH_COLUMNS = "b.*, (SELECT COUNT(*) FROM batch_rows r WHERE r.batch_id = b.id) AS row_count";
-  const batchOf = (row: Row): Batch => ({
-    id: String(row.id) as BatchId,
+  const savedRouteOf = (row: Row): SavedRoute => ({
+    id: String(row.id) as SavedRouteId,
     name: String(row.name),
-    asOf: String(row.as_of) as Instant,
-    createdAt: String(row.created_at) as Instant,
-    source: parse(row.source_json),
-    rows: Number(row.row_count),
-    issues: parse(row.issues_json),
-    example: row.example === 1,
+    plan: parse<FullPlan>(row.plan_json),
+    // A value this version does not know reads as "no choice": the router's own route.
+    option: (ROUTE_STRATEGIES as readonly unknown[]).includes(row.option) ? (row.option as RouteStrategy) : null,
   });
-
-  const fixOf = (row: Row): SavedFix => ({ stops: parse<StopRef[]>(row.stops_json), savedAt: String(row.saved_at) as Instant });
-
-  /** The latest fix row for a batch row, reverted or not. */
-  const latestFix = (batchId: BatchId, row: number) =>
-    db.prepare("SELECT * FROM route_fixes WHERE batch_id = ? AND row = ? ORDER BY id DESC LIMIT 1").get(batchId, row) as Row | undefined;
 
   const setting = <T>(key: string): T | null => {
     const row = db.prepare("SELECT json FROM settings WHERE key = ?").get(key) as Row | undefined;
@@ -259,54 +245,23 @@ export function openStore(file: string): Store {
         }),
     },
 
-    batches: {
-      all: () => (db.prepare(`SELECT ${BATCH_COLUMNS} FROM batches b ORDER BY b.created_at DESC, b.rowid DESC`).all() as Row[]).map(batchOf),
+    savedRoutes: {
+      all: () => (db.prepare("SELECT * FROM saved_routes ORDER BY name COLLATE NOCASE, rowid").all() as Row[]).map(savedRouteOf),
       get: (id) => {
-        const row = db.prepare(`SELECT ${BATCH_COLUMNS} FROM batches b WHERE b.id = ?`).get(id) as Row | undefined;
-        return row ? batchOf(row) : null;
+        const row = db.prepare("SELECT * FROM saved_routes WHERE id = ?").get(id) as Row | undefined;
+        return row ? savedRouteOf(row) : null;
       },
-      create: (batch, reports, contentHash) =>
-        transaction(() => {
-          const known = db.prepare(`SELECT ${BATCH_COLUMNS} FROM batches b WHERE b.content_hash = ?`).get(contentHash) as Row | undefined;
-          if (known) return batchOf(known);
-          db.prepare(
-            "INSERT INTO batches (id, name, as_of, created_at, source_json, issues_json, example, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          ).run(batch.id, batch.name, batch.asOf, batch.createdAt, json(batch.source), json(batch.issues), batch.example ? 1 : 0, contentHash);
-          const insert = db.prepare("INSERT INTO batch_rows (batch_id, row, report_json) VALUES (?, ?, ?)");
-          reports.forEach((report, row) => insert.run(batch.id, row, json({ ...report, stops: [] })));
-          return wrote({ ...batch, rows: reports.length });
-        }),
-      remove: (id) => {
-        const removed = db.prepare("DELETE FROM batches WHERE id = ?").run(id).changes;
-        return Number(removed) > 0 ? wrote(true) : false;
-      },
-      reports: (id) =>
-        (db.prepare("SELECT report_json FROM batch_rows WHERE batch_id = ? ORDER BY row").all(id) as Row[]).map((row) => ({ ...parse<CarReport>(row.report_json), stops: [] })),
-    },
-
-    fixes: {
-      current: (batchId) => {
-        const rows = db
-          .prepare(
-            `SELECT f.* FROM route_fixes f
-             WHERE f.batch_id = ? AND f.reverted_at IS NULL
-               AND f.id = (SELECT MAX(g.id) FROM route_fixes g WHERE g.batch_id = f.batch_id AND g.row = f.row)`,
-          )
-          .all(batchId) as Row[];
-        return new Map(rows.map((row) => [Number(row.row), fixOf(row)]));
-      },
-      save: (batchId, row, stops, at) =>
-        transaction(() => {
-          const latest = latestFix(batchId, row);
-          if (latest && latest.reverted_at === null && sameJson(parse(latest.stops_json), stops)) return fixOf(latest);
-          db.prepare("INSERT INTO route_fixes (batch_id, row, stops_json, saved_at) VALUES (?, ?, ?, ?)").run(batchId, row, json(stops), at);
-          return wrote({ stops, savedAt: at });
-        }),
-      revert: (batchId, row, at) => {
-        const latest = latestFix(batchId, row);
-        if (!latest || latest.reverted_at !== null) return;
-        db.prepare("UPDATE route_fixes SET reverted_at = ? WHERE id = ?").run(at, Number(latest.id));
+      save: (route) => {
+        // ON CONFLICT DO UPDATE, not REPLACE: the row keeps its rowid, so its place among same-named routes.
+        db.prepare(
+          `INSERT INTO saved_routes (id, name, plan_json, option) VALUES (?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET name = excluded.name, plan_json = excluded.plan_json, option = excluded.option`,
+        ).run(route.id, route.name, json(route.plan), route.option);
         wrote(null);
+      },
+      remove: (id) => {
+        const removed = db.prepare("DELETE FROM saved_routes WHERE id = ?").run(id).changes;
+        return Number(removed) > 0 ? wrote(true) : false;
       },
     },
 
@@ -322,8 +277,6 @@ export function openStore(file: string): Store {
         };
       },
       saveAssumptions: (assumptions) => saveSetting("assumptions", assumptions),
-      importProfile: () => setting<ImportProfile>("import_profile") ?? defaultImportProfile(),
-      saveImportProfile: (profile) => saveSetting("import_profile", profile),
     },
 
     close: () => {
@@ -332,21 +285,4 @@ export function openStore(file: string): Store {
       db.close();
     },
   };
-}
-
-/** Equal as JSON whatever the key order. */
-function sameJson(x: unknown, y: unknown): boolean {
-  return canonical(x) === canonical(y);
-}
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
-    return `{${entries
-      .sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
 }

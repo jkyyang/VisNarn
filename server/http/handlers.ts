@@ -7,11 +7,11 @@
  */
 import type { Request, Res, Route } from "../../shared/api.ts";
 import type { App } from "../app.ts";
-import { batchId, codeType, rowNumber, shopId } from "./decode.ts";
+import { codeType, savedRouteId, shopId } from "./decode.ts";
 
 export interface HandlerContext {
   app: App;
-  /** Aborted when the browser gives up on the request (a newer check replaced it). */
+  /** Aborted when the browser gives up on the request (a newer plan replaced it). */
   signal: AbortSignal;
 }
 
@@ -22,8 +22,6 @@ export const handlers: Handlers = {
 
   "GET /api/assumptions": (_request, { app }) => app.settings.assumptions(),
   "PUT /api/assumptions": ({ body }, { app }) => app.settings.saveAssumptions(body),
-  "GET /api/import-profile": (_request, { app }) => app.settings.importProfile(),
-  "PUT /api/import-profile": ({ body }, { app }) => app.settings.saveImportProfile(body),
 
   "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, 8),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
@@ -39,15 +37,9 @@ export const handlers: Handlers = {
   "POST /api/codes/import": ({ body }, { app }) => app.codes.import(body),
   "DELETE /api/codes/:codeType": ({ params }, { app }) => (app.codes.remove(codeType(params.codeType)), null),
 
-  "GET /api/batches": (_request, { app }) => app.batches.list(),
-  "POST /api/batches": ({ body }, { app }) => app.batches.upload(body),
-  "GET /api/batches/:batchId": ({ params }, { app }) => app.checks.batch(batchId(params.batchId)),
-  "DELETE /api/batches/:batchId": ({ params }, { app }) => (app.batches.remove(batchId(params.batchId)), null),
-  "GET /api/batches/:batchId/cars/:row": ({ params }, { app }) => app.batches.car(batchId(params.batchId), rowNumber(params.row)),
-  "PUT /api/batches/:batchId/cars/:row/fix": ({ params, body }, { app }) =>
-    app.batches.saveFix(batchId(params.batchId), rowNumber(params.row), body.stops),
-  "DELETE /api/batches/:batchId/cars/:row/fix": ({ params }, { app }) =>
-    (app.batches.revertFix(batchId(params.batchId), rowNumber(params.row)), null),
-
-  "POST /api/check": ({ body }, { app, signal }) => app.checks.car(body.report, body.asOf, signal),
+  "POST /api/route": ({ body }, { app, signal }) => app.plans.route(body, signal),
+  "GET /api/saved-routes": (_request, { app }) => app.plans.saved(),
+  "POST /api/saved-routes": ({ body }, { app }) => app.plans.save(body, null),
+  "PUT /api/saved-routes/:routeId": ({ params, body }, { app }) => app.plans.save(body, savedRouteId(params.routeId)),
+  "DELETE /api/saved-routes/:routeId": ({ params }, { app }) => (app.plans.remove(savedRouteId(params.routeId)), null),
 };

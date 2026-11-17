@@ -1,18 +1,16 @@
-/** The Shops screen: Your shops, the form for one, and the two imports (shop list, node codes). */
+/** The Shops screen: Your shops, the form for one, and the shop list import. */
 import { useEffect, useState, type ReactElement } from "react";
 import type { NetworkNode } from "../../../shared/places.ts";
 import { BackHeader } from "../../app/chrome.tsx";
 import { go, HOME, type Screen } from "../../app/routes.ts";
-import { importCodes, importShops, removeCodeSet, removeShop, saveShop, snapToNetwork, useCodeSets, useMeta, useShops } from "../../data/hooks.ts";
+import { importShops, removeShop, saveShop, snapToNetwork, useMeta, useShops } from "../../data/hooks.ts";
 import { MapContent } from "../../map/MapStage.tsx";
 import { shopsScene } from "../../map/scene.ts";
-import { PickPrompt } from "../route/FixPanel.tsx";
-import { CodeImportCard, ShopForm, ShopImportCard, ShopTable } from "./ShopsPage.tsx";
+import { PickPrompt, ShopForm, ShopImportCard, ShopTable } from "./ShopsPage.tsx";
 
 export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops" }> }): ReactElement {
   const meta = useMeta();
   const shops = useShops();
-  const codeSets = useCodeSets();
   // Picking the shop's location on the map: view state of this screen.
   const [picking, setPicking] = useState(false);
   const [missed, setMissed] = useState(false);
@@ -39,7 +37,7 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     <BackHeader
       back={HOME}
       title="Your shops"
-      sub="Shop nodes you can pick as a destination. You add and edit them; nothing is built in."
+      sub="Shops you can put on a route. You add and edit them; nothing is built in."
       exampleOnly={meta.status === "ready" && meta.data.exampleOnly}
     />
   );
@@ -106,13 +104,12 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
         )}
       </div>
       <ShopImportCard run={importShops} />
-      <CodeImportCard codeSets={codeSets.status === "ready" ? codeSets.data : []} run={importCodes} onRemove={removeCodeSet} />
       <MapContent
         scene={shopsScene(list, editingAt)}
         focus={pickedHere ? { kind: "place", lon: pickedHere.lon, lat: pickedHere.lat, zoom: 11 } : editingAt ? { kind: "place", lon: editingAt.lon, lat: editingAt.lat, zoom: 9 } : { kind: "fit" }}
         onPick={picking ? (lon, lat, km) => void onPick(lon, lat, km) : undefined}
       >
-        {picking && <PickPrompt target="shop" missed={missed} onCancel={() => setPicking(false)} />}
+        {picking && <PickPrompt missed={missed} onCancel={() => setPicking(false)} />}
       </MapContent>
     </div>
   );

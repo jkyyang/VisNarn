@@ -17,9 +17,9 @@ export type ShopId = string & { readonly __brand: "ShopId" };
 /** A user-defined set of location codes, e.g. "splc" or "station". No code set is built in. */
 export type CodeType = string;
 
-/** A location as it was given. Stored and sent exactly like this; resolved again at every check. */
+/** A location as it was given. Stored and sent exactly like this; resolved again every time it is used. */
 export type PlaceRef =
-  /** Typed by a person, or a batch column the import profile leaves as free text. */
+  /** Typed by a person, or an import cell read as free text. */
   | { kind: "text"; text: string }
   /** One of Your shops. */
   | { kind: "shop"; shopId: ShopId }
@@ -111,7 +111,7 @@ export function locationOf(place: ResolvedPlace): NodeLocation {
 export interface Shop {
   id: ShopId;
   name: string;
-  /** The user's own code for it, e.g. "EX-NLR-01". Batch rows may name the shop by this or by name. */
+  /** The user's own code for it, e.g. "EX-NLR-01". A typed place may name the shop by this or by name. */
   code: string | null;
   location: NodeLocation;
   /** True for the seeded EXAMPLE rows. */
@@ -146,4 +146,34 @@ export interface NodeCode {
   code: string;
   name: string | null;
   location: NodeLocation;
+}
+
+/** Company data arrives as one of these. Adding the database is a new member here and a new source in server/intake. */
+export type UploadSource = { kind: "csv"; fileName: string; text: string };
+
+/** Where an import came from. */
+export interface SourceInfo {
+  kind: "csv" | "database";
+  /** "EXAMPLE shops.csv". */
+  label: string;
+}
+
+export interface RowIssue {
+  /** 0-based position among the data rows; `line` is the line in the file, for "line 7 matches no node". */
+  row: number;
+  line: number;
+  message: string;
+}
+
+/** A preview (commit: false) or the result (commit: true) of importing shops or codes. */
+export interface ImportRequest {
+  source: UploadSource;
+  commit: boolean;
+}
+
+export interface ImportReport<T> {
+  committed: boolean;
+  ready: T[];
+  /** Rows that did not match a node, listed for the person to fix. They are never saved. */
+  issues: RowIssue[];
 }

@@ -1,42 +1,16 @@
 /**
- * The car being worked on in the Route and Fix route screens: what is typed, what was last checked,
- * and the stops a person has added. View state only: it lives in memory, in the browser. The check
- * itself comes from the server (useCarCheck), and a fix is saved there with saveFix.
- *
- * `draft` is what the inputs show; `submitted` is what the check is computed from. Typing touches
- * the draft only. "Check" copies draft → submitted, and a map pick writes its one field to both.
- * Stops take effect at once and keep their history, which is what Undo, Redo and the delta balloon
- * work on.
+ * The plan being worked on in the route planner: its places with their undo history, which field ⌖
+ * is on, and whether the last map click missed. View state only: it lives in memory, in the browser.
+ * The routes come from the server (usePlannedRoute); a plan is kept there only when it is saved.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { BatchCar, CarReport, CheckedCar, StopRef } from "../../../shared/cars.ts";
-import { haversineKm } from "../../../shared/geo.ts";
-import type { NetworkNode, PlaceRef } from "../../../shared/places.ts";
+import { useCallback, useEffect, useReducer, useRef } from "react";
+import { haversineKm, type LngLat } from "../../../shared/geo.ts";
+import type { PlaceRef } from "../../../shared/places.ts";
+import type { FullPlan, Plan, PlanField, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
 import type { Railroad } from "../../../shared/railroads.ts";
-import { instant, type Instant } from "../../../shared/time.ts";
-import type { CarKey } from "../../app/routes.ts";
-import { snapToNetwork, type QueryState } from "../../data/hooks.ts";
-import { fromLocalInput, instantToLocalInput, toLocalInput } from "../../format.ts";
+import { snapToNetwork } from "../../data/hooks.ts";
 
 type LonLat = { lon: number; lat: number };
-
-/** A place input: the reference that will be checked, and the text shown for it. */
-export interface PlaceInput {
-  ref: PlaceRef;
-  shown: string;
-}
-
-export interface CarDraft {
-  carId: string;
-  a: PlaceInput;
-  b: PlaceInput;
-  shop: PlaceInput;
-  /** <input type="datetime-local"> values, in the browser's zone. */
-  reportedAt: string;
-  prepEnd: string;
-}
-
-export type PickTarget = "a" | "b" | "shop" | "stop";
 
 export interface History<T> {
   past: T[];
@@ -44,185 +18,137 @@ export interface History<T> {
   future: T[];
 }
 
-export interface CarSession {
-  car: CarKey;
-  draft: CarDraft;
-  submitted: CarDraft;
-  stops: History<StopRef[]>;
-  /** When the session began: the "as of" time for a car typed by hand. */
-  startedAt: Instant;
-  pick: PickTarget | null;
-  /** The last map click was too far from any track. */
-  pickMissed: boolean;
-  /** A stop was clicked where railroads meet: waiting for the answer to "Which line?". */
-  lineChoice: NetworkNode | null;
-  /** Where the stop waiting for "Which line?" goes among the others. */
-  lineChoiceIndex: number;
+export interface PlanSession {
+  /** The saved route this session edits; null for a new plan. */
+  savedId: SavedRouteId | null;
+  plan: History<Plan>;
+  /** A field whose ⌖ is on; null: clicks go start → destination → stops. */
+  pick: PlanField | null;
+  /** The last click was too far from any track. */
+  missed: boolean;
 }
 
-export type SessionAction =
-  | { type: "edit"; field: "carId" | "reportedAt" | "prepEnd"; value: string }
-  | { type: "editPlace"; field: "a" | "b" | "shop"; value: PlaceInput }
-  | { type: "swapAB" }
-  | { type: "submit" }
-  | { type: "pick"; target: PickTarget | null }
-  | { type: "pickMissed" }
-  | { type: "picked"; field: "a" | "b" | "shop"; value: PlaceInput }
-  | { type: "stopPicked"; node: NetworkNode; index: number }
-  | { type: "lineChosen"; railroad: Railroad }
+export type PlanAction =
+  /** Typed and Enter, a suggestion, a click, or × to clear. */
+  | { type: "setPlace"; field: PlanField; ref: PlaceRef | null }
+  /** Ignored when the node or shop is already in the plan. */
+  | { type: "addStop"; ref: PlaceRef; index: number }
+  /** The line chosen at a node stop; null = any. */
+  | { type: "setLine"; index: number; railroad: Railroad | null }
   | { type: "removeStop"; index: number }
+  | { type: "moveStop"; from: number; to: number }
+  /** Undoable. */
+  | { type: "clear" }
+  | { type: "pick"; field: PlanField | null }
+  | { type: "missed" }
+  /** Adopt the id after the first save; the history stays. */
+  | { type: "saved"; id: SavedRouteId }
   | { type: "undo" }
   | { type: "redo" };
 
-const text = (value: string): PlaceInput => ({ ref: { kind: "text", text: value }, shown: value });
+export const EMPTY_PLAN: Plan = { start: null, stops: [], destination: null };
 
-/**
- * The EXAMPLE car of the mockups, reported this hour, prep ending at midnight two days on. Free
- * text, so it resolves through Your shops when the EXAMPLE shop is there and as a city otherwise.
- */
-export function exampleDraft(now: Date): CarDraft {
-  const reported = new Date(now);
-  reported.setMinutes(0, 0, 0);
-  const prepEnd = new Date(reported);
-  prepEnd.setDate(prepEnd.getDate() + 2);
-  prepEnd.setHours(0, 0, 0, 0);
-  return {
-    carId: "EXAMPLE 104233",
-    a: text("Taylor, TX"),
-    b: text("Temple, TX"),
-    shop: text("North Little Rock, AR"),
-    reportedAt: toLocalInput(reported),
-    prepEnd: toLocalInput(prepEnd),
-  };
+export function startSession(savedId: SavedRouteId | null, plan: Plan): PlanSession {
+  return { savedId, plan: { past: [], present: plan, future: [] }, pick: null, missed: false };
 }
 
-/** What an input shows for a reference it did not type itself. The check's place label replaces a blank. */
-export function shownOf(ref: PlaceRef): string {
-  switch (ref.kind) {
+function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
+  if (x === null || y === null) return x === y;
+  switch (x.kind) {
     case "text":
-      return ref.text;
-    case "code":
-      return ref.code;
-    case "node":
-      return `FRA node ${ref.fraId}`;
-    case "coord":
-      return `${ref.lon}, ${ref.lat}`;
+      return y.kind === "text" && x.text === y.text;
     case "shop":
-      return "";
+      return y.kind === "shop" && x.shopId === y.shopId;
+    case "code":
+      return y.kind === "code" && x.codeType === y.codeType && x.code === y.code;
+    case "node":
+      return y.kind === "node" && x.fraId === y.fraId && x.railroad === y.railroad;
+    case "coord":
+      return y.kind === "coord" && x.lon === y.lon && x.lat === y.lat;
   }
 }
 
-const input = (ref: PlaceRef): PlaceInput => ({ ref, shown: shownOf(ref) });
-
-/** A batch row as form values. */
-export function draftOf(row: BatchCar): CarDraft {
-  const { report } = row;
-  return {
-    carId: report.carId,
-    a: input(report.a),
-    b: input(report.b),
-    shop: input(report.shop),
-    reportedAt: instantToLocalInput(report.reportedAt),
-    prepEnd: instantToLocalInput(report.prepEnd),
-  };
+export function samePlan(x: Plan, y: Plan): boolean {
+  return samePlace(x.start, y.start) && samePlace(x.destination, y.destination) && x.stops.length === y.stops.length && x.stops.every((stop, i) => samePlace(stop, y.stops[i]));
 }
 
-/** `stops`: the fix the batch row has saved, as the starting point; empty for a typed car. */
-export function startSession(car: CarKey, draft: CarDraft, stops: StopRef[], startedAt: Instant): CarSession {
-  return {
-    car,
-    draft,
-    submitted: draft,
-    stops: { past: [], present: stops, future: [] },
-    startedAt,
-    pick: null,
-    pickMissed: false,
-    lineChoice: null,
-    lineChoiceIndex: 0,
-  };
+export function isFull(plan: Plan): plan is FullPlan {
+  return plan.start !== null && plan.destination !== null;
 }
 
-const sameNode = (stop: StopRef, fraId: number) => stop.place.kind === "node" && stop.place.fraId === fraId;
+/** The same spot on the ground: a node whatever line was chosen there, one shop, or an equal reference. */
+const sameSpot = (x: PlaceRef, y: PlaceRef) => (x.kind === "node" && y.kind === "node" ? x.fraId === y.fraId : samePlace(x, y));
 
-function pushStops(session: CarSession, next: StopRef[]): CarSession {
-  const { stops } = session;
-  return { ...session, stops: { past: [...stops.past, stops.present], present: next, future: [] } };
+/** True when the place is already the start, a stop or the destination. */
+export function inPlan(plan: Plan, ref: PlaceRef): boolean {
+  return [plan.start, ...plan.stops, plan.destination].some((place) => place !== null && sameSpot(place, ref));
 }
 
-function insertStop(session: CarSession, node: NetworkNode, railroad: Railroad | null, index: number): CarSession {
-  const present = session.stops.present;
-  const at = Math.max(0, Math.min(index, present.length));
-  const stop: StopRef = { place: { kind: "node", fraId: node.fraId, railroad }, note: null };
-  return pushStops({ ...session, pick: null, pickMissed: false, lineChoice: null }, [...present.slice(0, at), stop, ...present.slice(at)]);
+/** A change of plan goes on the history; one that changes nothing does not. */
+function push(session: PlanSession, next: Plan): PlanSession {
+  const { past, present } = session.plan;
+  if (samePlan(present, next)) return session;
+  return { ...session, plan: { past: [...past, present], present: next, future: [] } };
 }
 
-export function sessionReducer(session: CarSession, action: SessionAction): CarSession {
+export function planReducer(session: PlanSession, action: PlanAction): PlanSession {
+  const plan = session.plan.present;
+  const stops = plan.stops;
   switch (action.type) {
-    case "edit":
-      return { ...session, draft: { ...session.draft, [action.field]: action.value } };
-    case "editPlace":
-      return { ...session, draft: { ...session.draft, [action.field]: action.value } };
-    case "swapAB":
-      // A mix-up of A and B is a likely cause of "passes A again": the swap applies to what is checked at once.
-      return {
-        ...session,
-        draft: { ...session.draft, a: session.draft.b, b: session.draft.a },
-        submitted: { ...session.submitted, a: session.submitted.b, b: session.submitted.a },
-      };
-    case "submit":
-      return { ...session, submitted: session.draft };
+    case "setPlace":
+      return { ...push(session, { ...plan, [action.field]: action.ref }), pick: null, missed: false };
+    case "addStop": {
+      if (inPlan(plan, action.ref)) return session.missed ? { ...session, missed: false } : session;
+      const at = Math.max(0, Math.min(action.index, stops.length));
+      return { ...push(session, { ...plan, stops: [...stops.slice(0, at), action.ref, ...stops.slice(at)] }), missed: false };
+    }
+    case "setLine": {
+      const stop = stops[action.index];
+      if (stop?.kind !== "node") return session;
+      return push(session, { ...plan, stops: stops.map((s, i) => (i === action.index ? { ...stop, railroad: action.railroad } : s)) });
+    }
+    case "removeStop":
+      if (action.index < 0 || action.index >= stops.length) return session;
+      return push(session, { ...plan, stops: stops.filter((_, i) => i !== action.index) });
+    case "moveStop": {
+      const { from, to } = action;
+      if (from === to || from < 0 || to < 0 || from >= stops.length || to >= stops.length) return session;
+      const next = stops.filter((_, i) => i !== from);
+      next.splice(to, 0, stops[from]);
+      return push(session, { ...plan, stops: next });
+    }
+    case "clear":
+      return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
     case "pick":
-      return { ...session, pick: action.target, pickMissed: false, lineChoice: null };
-    case "pickMissed":
-      return { ...session, pickMissed: true };
-    case "picked":
-      return {
-        ...session,
-        draft: { ...session.draft, [action.field]: action.value },
-        submitted: { ...session.submitted, [action.field]: action.value },
-        pick: null,
-        pickMissed: false,
-      };
-    case "stopPicked": {
-      if (session.stops.present.some((stop) => sameNode(stop, action.node.fraId))) return { ...session, pick: null, pickMissed: false };
-      if (action.node.railroads.length > 1) return { ...session, pick: null, pickMissed: false, lineChoice: action.node, lineChoiceIndex: action.index };
-      return insertStop(session, action.node, null, action.index);
-    }
-    case "lineChosen":
-      if (!session.lineChoice) return session;
-      return insertStop(session, session.lineChoice, action.railroad, session.lineChoiceIndex);
-    case "removeStop": {
-      const present = session.stops.present;
-      if (action.index < 0 || action.index >= present.length) return session;
-      return pushStops(session, present.filter((_, i) => i !== action.index));
-    }
+      return { ...session, pick: action.field, missed: false };
+    case "missed":
+      return { ...session, missed: true };
+    case "saved":
+      return { ...session, savedId: action.id };
     case "undo": {
-      const { past, present, future } = session.stops;
+      const { past, present, future } = session.plan;
       if (!past.length) return session;
-      return { ...session, stops: { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] } };
+      return { ...session, plan: { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] }, missed: false };
     }
     case "redo": {
-      const { past, present, future } = session.stops;
+      const { past, present, future } = session.plan;
       if (!future.length) return session;
-      return { ...session, stops: { past: [...past, present], present: future[0], future: future.slice(1) } };
+      return { ...session, plan: { past: [...past, present], present: future[0], future: future.slice(1) }, missed: false };
     }
   }
 }
 
-/** The report to check: the submitted values and the current stops. Null while a time is not filled in. */
-export function reportOf(session: CarSession, stops: StopRef[] = session.stops.present): CarReport | null {
-  const { submitted } = session;
-  const reportedAt = fromLocalInput(submitted.reportedAt);
-  const prepEnd = fromLocalInput(submitted.prepEnd);
-  if (!reportedAt || !prepEnd) return null;
-  return { carId: submitted.carId.trim(), a: submitted.a.ref, b: submitted.b.ref, shop: submitted.shop.ref, stops, reportedAt, prepEnd };
+/** What the next click on the map fills: the field whose ⌖ is on, else the start, the destination, then a stop. */
+export function nextTarget(session: PlanSession): PlanField | "stop" {
+  const plan = session.plan.present;
+  return session.pick ?? (plan.start === null ? "start" : plan.destination === null ? "destination" : "stop");
 }
 
 const km = (p: LonLat, q: LonLat) => haversineKm(p.lon, p.lat, q.lon, q.lat);
 
-/** Where a newly clicked stop belongs among the existing ones: where it adds the least straight-line detour between B and the shop. */
-export function stopInsertIndex(b: LonLat, stops: LonLat[], shop: LonLat, clicked: LonLat): number {
-  const chain = [b, ...stops, shop];
+/** Where a newly clicked stop belongs among the existing ones: where it adds the least straight-line detour between start and destination. */
+export function stopInsertIndex(start: LonLat, stops: LonLat[], destination: LonLat, clicked: LonLat): number {
+  const chain = [start, ...stops, destination];
   let best = stops.length;
   let bestCost = Infinity;
   for (let i = 0; i + 1 < chain.length; i++) {
@@ -235,126 +161,121 @@ export function stopInsertIndex(b: LonLat, stops: LonLat[], shop: LonLat, clicke
   return best;
 }
 
-export interface CarSessionHandle {
-  session: CarSession;
-  dispatch: (action: SessionAction) => void;
-  /** The report for the current stops, and the same car with no stops (the "Before" column of Fix route). */
-  report: CarReport | null;
-  baseline: CarReport | null;
-  /** The moment positions are judged from: the batch's "as of" for a row, the session's start for a typed car. */
-  asOf: Instant;
-  /** The form differs from what was last checked. */
-  dirty: boolean;
-  /**
-   * The stops differ from the fix the batch row has saved. Compared against the row as the server
-   * last returned it (saving a fix refreshes that), so the session keeps no copy of saved state.
-   */
-  unsaved: boolean;
-  /**
-   * A map click while picking: snaps to the network through the server, then dispatches. `places`
-   * (the last check's) lets a new stop be put in route order; without them it goes last.
-   */
-  applyPick: (lon: number, lat: number, toleranceKm: number, places: CheckedCar["places"] | null) => Promise<void>;
+/** Where a new stop goes: by least detour when every place of the plan is known, else last. */
+function insertIndex(plan: Plan, places: PlanPlaces | null, at: LonLat): number {
+  const start = places?.start;
+  const destination = places?.destination;
+  const stops = places?.stops ?? [];
+  if (!start?.ok || !destination?.ok || stops.length !== plan.stops.length) return plan.stops.length;
+  const known = stops.flatMap((stop) => (stop.ok ? [stop.place] : []));
+  return known.length === stops.length ? stopInsertIndex(start.place, known, destination.place, at) : plan.stops.length;
 }
 
-const keyOf = (car: CarKey) => (car.kind === "typed" ? "typed" : `${car.batchId}/${car.row}`);
-
-/**
- * A car typed by hand survives leaving the Route screen and coming back, for as long as the page is
- * open. Memory only: nothing about a car is written to the browser's storage.
- */
-let typedMemory: CarSession | null = null;
-
-/** Starts the next typed car from the EXAMPLE values again (a page test that opens the app afresh). */
-export function forgetTypedCar(): void {
-  typedMemory = null;
+export interface PlanSessionHandle {
+  session: PlanSession;
+  dispatch: (action: PlanAction) => void;
+  /** Snap, then fill nextTarget. Ignored while a previous snap is in flight. Rejects when the server cannot be reached. */
+  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null) => Promise<void>;
+  /** A shop square: fill nextTarget with that ref. */
+  clickPlace: (ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => void;
 }
 
-type Held = { key: string; session: CarSession } | null;
-type HeldAction = { type: "start"; key: string; session: CarSession } | { type: "act"; action: SessionAction };
+type Held = { key: string; session: PlanSession };
+type HeldAction = { type: "start"; held: Held | null } | { type: "act"; action: PlanAction };
 
-function heldReducer(held: Held, action: HeldAction): Held {
-  if (action.type === "start") return { key: action.key, session: action.session };
+function heldReducer(held: Held | null, action: HeldAction): Held | null {
+  if (action.type === "start") return action.held;
   if (!held) return held;
-  const session = sessionReducer(held.session, action.action);
+  const session = planReducer(held.session, action.action);
   return session === held.session ? held : { ...held, session };
 }
 
-function freshTyped(): CarSession {
-  const now = new Date();
-  return startSession({ kind: "typed" }, exampleDraft(now), [], instant(now));
-}
+const NEW = "new";
 
-/** A blank session to show while a batch row is still loading. */
-function waiting(car: CarKey): CarSession {
-  const blank: CarDraft = { carId: "", a: text(""), b: text(""), shop: text(""), reportedAt: "", prepEnd: "" };
-  return startSession(car, blank, [], instant(new Date()));
+/**
+ * The session the URL asks for: the one held when it fits; for a new plan, an empty one; for a saved
+ * route, the plan just saved under that id (keeping its undo history) or else the saved plan, once it
+ * has loaded (null until then).
+ */
+function fitting(held: Held | null, savedId: SavedRouteId | null, saved: SavedRoute | null): Held | null {
+  const key = savedId ?? NEW;
+  if (held?.key === key) return held;
+  if (savedId === null) return { key, session: startSession(null, EMPTY_PLAN) };
+  if (held && held.session.savedId === savedId) return { key, session: held.session };
+  return saved?.id === savedId ? { key, session: startSession(savedId, saved.plan) } : null;
 }
 
 /**
- * The session for a car. A typed car starts from the EXAMPLE values; a batch row starts from the
- * row once it has loaded, and starts over when the URL names another row. Esc cancels a pick.
+ * One slot for the whole page: the plan survives going to Shops and back, for as long as the page is
+ * open. Memory only: nothing about a plan is written to the browser's storage.
  */
-export function useCarSession(car: CarKey, row: QueryState<BatchCar>): CarSessionHandle {
-  const key = keyOf(car);
-  const [held, send] = useReducer(heldReducer, null, (): Held => (car.kind === "typed" ? { key, session: typedMemory ?? freshTyped() } : null));
+let memory: Held | null = null;
 
-  const rowData = row.status === "ready" ? row.data : null;
-  const rowMatches = rowData !== null && car.kind === "row" && rowData.batch.id === car.batchId && rowData.row === car.row;
+/** Starts the next session empty again (a page test that opens the app afresh). */
+export function forgetPlan(): void {
+  memory = null;
+}
 
-  // Start over when the URL names another car, and start a row once its data is here.
-  const current = held?.key === key ? held : null;
+/**
+ * The session for the planner. Starts over when the URL names another saved route (once it has
+ * loaded) or goes from a saved route to a new plan. Esc turns ⌖ off.
+ */
+export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute | null): PlanSessionHandle {
+  const [held, send] = useReducer(heldReducer, null, () => fitting(memory, savedId, saved));
+  const current = fitting(held, savedId, saved);
   useEffect(() => {
-    if (current) return;
-    if (car.kind === "typed") send({ type: "start", key, session: typedMemory ?? freshTyped() });
-    else if (rowMatches && rowData) send({ type: "start", key, session: startSession(car, draftOf(rowData), rowData.report.stops, rowData.batch.asOf) });
+    if (current !== held) send({ type: "start", held: current });
   });
+  if (current && current === held) memory = current;
 
-  const session = current?.session ?? waiting(car);
-  if (car.kind === "typed" && current) typedMemory = current.session;
-
-  const dispatch = useCallback((action: SessionAction) => send({ type: "act", action }), []);
+  const session = current?.session ?? startSession(savedId, EMPTY_PLAN);
+  const dispatch = useCallback((action: PlanAction) => send({ type: "act", action }), []);
 
   const latest = useRef(session);
   latest.current = session;
+  const snapping = useRef(false);
 
   useEffect(() => {
-    if (!session.pick && !session.lineChoice) return;
+    if (!session.pick) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dispatch({ type: "pick", target: null });
+      if (event.key === "Escape") dispatch({ type: "pick", field: null });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [session.pick, session.lineChoice, dispatch]);
+  }, [session.pick, dispatch]);
 
-  const applyPick = useCallback(
-    async (lon: number, lat: number, toleranceKm: number, places: CheckedCar["places"] | null) => {
-      const target = latest.current.pick;
-      if (!target) return;
-      const node = await snapToNetwork(lon, lat, toleranceKm);
-      if (latest.current.pick !== target) return;
-      if (!node) {
-        dispatch({ type: "pickMissed" });
+  const place = useCallback(
+    (ref: PlaceRef, at: LonLat, places: PlanPlaces | null) => {
+      const now = latest.current;
+      const plan = now.plan.present;
+      // A place already in the plan is not added again (a double click, or a click on a pin's own node).
+      if (inPlan(plan, ref)) {
+        if (now.pick) dispatch({ type: "pick", field: null });
         return;
       }
-      if (target !== "stop") {
-        dispatch({ type: "picked", field: target, value: { ref: { kind: "node", fraId: node.fraId, railroad: null }, shown: node.near } });
-        return;
-      }
-      const index = places
-        ? stopInsertIndex(places.b.place, places.stops.map((stop) => stop.place), places.shop.place, { lon: node.lon, lat: node.lat })
-        : latest.current.stops.present.length;
-      dispatch({ type: "stopPicked", node, index });
+      const target = nextTarget(now);
+      if (target === "stop") dispatch({ type: "addStop", ref, index: insertIndex(plan, places, at) });
+      else dispatch({ type: "setPlace", field: target, ref });
     },
     [dispatch],
   );
 
-  const ready = current !== null;
-  const report = useMemo(() => (ready ? reportOf(session) : null), [ready, session]);
-  const baseline = useMemo(() => (ready ? reportOf(session, []) : null), [ready, session]);
-  const asOf = car.kind === "row" ? (rowMatches && rowData ? rowData.batch.asOf : session.startedAt) : session.startedAt;
-  const dirty = JSON.stringify(session.draft) !== JSON.stringify(session.submitted);
-  const unsaved = rowMatches && rowData ? JSON.stringify(session.stops.present) !== JSON.stringify(rowData.report.stops) : false;
+  const clickMap = useCallback(
+    async (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null) => {
+      if (snapping.current) return;
+      snapping.current = true;
+      try {
+        const node = await snapToNetwork(lon, lat, toleranceKm);
+        if (!node) dispatch({ type: "missed" });
+        else place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
+      } finally {
+        snapping.current = false;
+      }
+    },
+    [dispatch, place],
+  );
 
-  return { session, dispatch, report, baseline, asOf, dirty, unsaved, applyPick };
+  const clickPlace = useCallback((ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => place(ref, { lon: at[0], lat: at[1] }, places), [place]);
+
+  return { session, dispatch, clickMap, clickPlace };
 }

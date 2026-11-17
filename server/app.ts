@@ -7,32 +7,29 @@ import { join } from "node:path";
 import { assumptionsProblem, loadNetwork } from "../engine/index.ts";
 import { AppError, type Meta } from "../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
-import type { CarField, ImportProfile } from "../shared/cars.ts";
 import { RAILROADS } from "../shared/railroads.ts";
-import { createBatches, type Batches } from "./cars/batches.ts";
-import { createChecks, type Checks } from "./cars/checks.ts";
 import type { Config } from "./config.ts";
-import { exampleBatch, exampleShops } from "./intake/example.ts";
+import { exampleShops } from "./intake/example.ts";
 import { createCodes, type Codes } from "./places/codes.ts";
 import { createDirectory, type Directory } from "./places/directory.ts";
 import { createShops, type Shops } from "./places/shops.ts";
+import { createPlans, type Plans } from "./plans/plans.ts";
 import { startRoutePlanner } from "./routing/planner.ts";
 import type { Store } from "./store/store.ts";
 
 export interface App {
   meta(): Meta;
+  /** The routing rules. Kept on the server; no screen shows them in stage 1. */
   settings: {
     assumptions(): Assumptions;
     /** Throws AppError("invalid") with the reason when the numbers cannot produce a result. */
     saveAssumptions(assumptions: Assumptions): Assumptions;
-    importProfile(): ImportProfile;
-    saveImportProfile(profile: ImportProfile): ImportProfile;
   };
   places: Directory;
   shops: Shops;
+  /** Company node codes: the seam for the company's own codes, with no screen yet. */
   codes: Codes;
-  batches: Batches;
-  checks: Checks;
+  plans: Plans;
   /** Stops the routing workers and closes the database. */
   close(): Promise<void>;
 }
@@ -48,11 +45,10 @@ export async function createApp(config: Config): Promise<App> {
   const shops = createShops(store, directory);
   const codes = createCodes(store, directory);
   const planner = startRoutePlanner({ networkDir: config.networkDir, networkVersion: network.version, workers: config.routeWorkers });
-  const batches = createBatches(store);
-  const checks = createChecks({ network, store, directory, planner, batches });
+  const plans = createPlans({ store, directory, planner, rules: () => store.settings.assumptions().routing });
 
   try {
-    if (store.fresh) await addExamples(store, shops, batches);
+    if (store.fresh) addExamples(store, shops);
   } catch (error) {
     await planner.close();
     store.close();
@@ -61,11 +57,11 @@ export async function createApp(config: Config): Promise<App> {
 
   return {
     meta() {
-      const rows = [...store.shops.all(), ...store.batches.all()];
+      const shopRows = store.shops.all();
       return {
         graphVersion: network.version,
         railroads: RAILROADS,
-        exampleOnly: rows.length > 0 && rows.every((row) => row.example),
+        exampleOnly: shopRows.length > 0 && shopRows.every((shop) => shop.example) && store.savedRoutes.all().length === 0,
         storage: databaseFile,
       };
     },
@@ -74,33 +70,15 @@ export async function createApp(config: Config): Promise<App> {
       saveAssumptions(assumptions) {
         const problem = assumptionsProblem(assumptions);
         if (problem) throw new AppError("invalid", problem, fieldAtFault(assumptions));
-        // Saving the numbers already in force writes nothing, so it leaves every batch's routing where it was.
+        // Saving the numbers already in force writes nothing, so every route worked out under them stays valid.
         if (JSON.stringify(assumptions) !== JSON.stringify(store.settings.assumptions())) store.settings.saveAssumptions(assumptions);
         return store.settings.assumptions();
-      },
-      importProfile: () => store.settings.importProfile(),
-      saveImportProfile(profile) {
-        const seen = new Map<string, Exclude<CarField, "stops">>();
-        for (const [field, column] of Object.entries(profile.columns) as [Exclude<CarField, "stops">, string][]) {
-          const name = column.trim().toLowerCase();
-          const other = seen.get(name);
-          if (other) throw new AppError("invalid", `Two fields read the same column "${column.trim()}". Give each field its own column.`, `columns.${field}`);
-          seen.set(name, field);
-        }
-        const clean: ImportProfile = {
-          columns: Object.fromEntries(Object.entries(profile.columns).map(([field, column]) => [field, column.trim()])) as ImportProfile["columns"],
-          positions: profile.positions === "text" ? "text" : { codeType: profile.positions.codeType.trim() },
-          zonelessTimes: profile.zonelessTimes,
-        };
-        if (JSON.stringify(clean) !== JSON.stringify(store.settings.importProfile())) store.settings.saveImportProfile(clean);
-        return store.settings.importProfile();
       },
     },
     places: directory,
     shops,
     codes,
-    batches,
-    checks,
+    plans,
     async close() {
       await planner.close();
       store.close();
@@ -109,10 +87,10 @@ export async function createApp(config: Config): Promise<App> {
 }
 
 /**
- * The first start only (an empty database): the EXAMPLE shops and the EXAMPLE batch. A user who
- * deletes them does not get them back. An EXAMPLE shop this network cannot place is left out.
+ * The first start only (an empty database): the EXAMPLE shops. A user who deletes them does not get
+ * them back. An EXAMPLE shop this network cannot place is left out.
  */
-async function addExamples(store: Store, shops: Shops, batches: Batches): Promise<void> {
+function addExamples(store: Store, shops: Shops): void {
   for (const draft of exampleShops()) {
     try {
       const { place: _place, ...shop } = shops.save(draft, null);
@@ -122,7 +100,6 @@ async function addExamples(store: Store, shops: Shops, batches: Batches): Promis
       console.error(`EXAMPLE shop ${draft.name} was not added: ${error.message}`);
     }
   }
-  await batches.upload(exampleBatch(new Date()));
 }
 
 /** The assumption a problem is about: the one whose default value makes that problem go away. */

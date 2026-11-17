@@ -3,21 +3,21 @@
  * decoded here and nowhere else; past this file the server trusts its types.
  *
  * Each decoder checks shape and ranges only (a number is finite, a `kind` is one we know, a
- * railroad is in RAILROADS, an Instant has a zone) and throws AppError("invalid") naming the
+ * railroad is in RAILROADS) and throws AppError("invalid") naming the
  * field. Whether a shop exists or a place resolves is the application's business, not the decoder's.
  * Decoders build new objects from the fields they know, so anything else a client sends is dropped.
  */
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { Assumptions, EstimateBasis, TrackIncluded } from "../../shared/assumptions.ts";
-import type { BatchId, BatchUpload, CarField, CarReport, ImportProfile, ImportRequest, StopRef, UploadSource } from "../../shared/cars.ts";
-import type { CodeType, FraId, PlaceRef, PlaceRole, ShopDraft, ShopId } from "../../shared/places.ts";
+import type { CodeType, FraId, ImportRequest, PlaceRef, PlaceRole, ShopDraft, ShopId, UploadSource } from "../../shared/places.ts";
+import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
-import { asInstant, isTimeZone, type Instant, type ZonelessRule } from "../../shared/time.ts";
+import { ROUTE_STRATEGIES } from "../../shared/route.ts";
 
 type RoutesWith<Part extends "body" | "query"> = { [R in Route]: Api[R][Part] extends undefined ? never : R }[Route];
 
-/** A value at `path` ("report.a.lon") turned into T, or AppError("invalid") naming that path. */
+/** A value at `path` ("plan.start.lon") turned into T, or AppError("invalid") naming that path. */
 type Decoder<T> = (value: unknown, path: string) => T;
 
 const SHORT_TEXT = 1_000;
@@ -99,13 +99,6 @@ const list =
 
 const railroad: Decoder<Railroad> = oneOf(RAILROADS);
 
-const instantOf: Decoder<Instant> = (value, path) => {
-  const t = text(100)(value, path);
-  const parsed = asInstant(t);
-  if (!parsed) invalid(path, `${path} must be a time with its zone, such as 2026-11-17T09:00:00-06:00.`);
-  return parsed;
-};
-
 const codeTypeOf: Decoder<CodeType> = nonEmpty(64);
 
 // ---- domain values ----
@@ -126,19 +119,25 @@ const placeRef: Decoder<PlaceRef> = (value, path) => {
   }
 };
 
-const stopRef: Decoder<StopRef> = (value, path) => ({
-  place: field(value, path, "place", placeRef),
-  note: field(value, path, "note", nullable(text())),
+/** At most this many stops: a plan is clicked together by hand. */
+const MAX_STOPS = 50;
+
+const plan: Decoder<Plan> = (value, path) => ({
+  start: field(value, path, "start", nullable(placeRef)),
+  stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
+  destination: field(value, path, "destination", nullable(placeRef)),
 });
 
-const carReport: Decoder<CarReport> = (value, path) => ({
-  carId: field(value, path, "carId", text(200)),
-  a: field(value, path, "a", placeRef),
-  b: field(value, path, "b", placeRef),
-  shop: field(value, path, "shop", placeRef),
-  stops: field(value, path, "stops", list(stopRef, 50)),
-  reportedAt: field(value, path, "reportedAt", nullable(instantOf)),
-  prepEnd: field(value, path, "prepEnd", nullable(instantOf)),
+const fullPlan: Decoder<FullPlan> = (value, path) => ({
+  start: field(value, path, "start", placeRef),
+  stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
+  destination: field(value, path, "destination", placeRef),
+});
+
+const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
+  name: field(value, path, "name", nonEmpty(120)),
+  plan: field(value, path, "plan", fullPlan),
+  option: field(value, path, "option", nullable(oneOf(ROUTE_STRATEGIES))),
 });
 
 const shopDraft: Decoder<ShopDraft> = (value, path) => ({
@@ -183,27 +182,6 @@ const assumptions: Decoder<Assumptions> = (value, path) => {
   };
 };
 
-const PROFILE_COLUMNS = ["carId", "a", "b", "shop", "reportedAt", "prepEnd"] as const satisfies readonly Exclude<CarField, "stops">[];
-
-const zonelessRule: Decoder<ZonelessRule> = (value, path) => {
-  if (value === "reject") return "reject";
-  const zone = field(value, path, "zone", nonEmpty(100));
-  if (!isTimeZone(zone)) invalid(at(path, "zone"), `${zone} is not a time zone this computer knows (try America/Chicago).`);
-  return { zone };
-};
-
-const importProfile: Decoder<ImportProfile> = (value, path) => {
-  const columnsPath = at(path, "columns");
-  const given = field(value, path, "columns", object);
-  const columns = Object.fromEntries(PROFILE_COLUMNS.map((name) => [name, field(given, columnsPath, name, nonEmpty(200))])) as ImportProfile["columns"];
-  const positions = object(value, path).positions;
-  return {
-    columns,
-    positions: positions === "text" ? "text" : { codeType: field(positions, at(path, "positions"), "codeType", codeTypeOf) },
-    zonelessTimes: field(value, path, "zonelessTimes", zonelessRule),
-  };
-};
-
 /** CSV text can be large; the HTTP layer already caps the whole body. */
 const uploadSource: Decoder<UploadSource> = (value, path) => {
   field(value, path, "kind", oneOf(["csv"] as const));
@@ -215,26 +193,19 @@ const importRequest: Decoder<ImportRequest> = (value, path) => ({
   commit: field(value, path, "commit", boolean),
 });
 
-const batchUpload: Decoder<BatchUpload> = (value, path) => ({
-  name: field(value, path, "name", text(300)),
-  asOf: field(value, path, "asOf", instantOf),
-  source: field(value, path, "source", uploadSource),
-});
-
 const role: Decoder<PlaceRole> = oneOf(["position", "shop"] as const);
 
 /** One decoder per route that has a body: a route added to `Api` without one does not compile. */
 export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R]["body"] } = {
   "PUT /api/assumptions": (json) => assumptions(json, ""),
-  "PUT /api/import-profile": (json) => importProfile(json, ""),
   "POST /api/places/resolve": (json) => ({ ref: field(json, "", "ref", placeRef), role: field(json, "", "role", role) }),
   "POST /api/shops": (json) => shopDraft(json, ""),
   "PUT /api/shops/:shopId": (json) => shopDraft(json, ""),
   "POST /api/shops/import": (json) => importRequest(json, ""),
   "POST /api/codes/import": (json) => ({ ...importRequest(json, ""), codeType: field(json, "", "codeType", codeTypeOf), label: field(json, "", "label", text(200)) }),
-  "POST /api/batches": (json) => batchUpload(json, ""),
-  "PUT /api/batches/:batchId/cars/:row/fix": (json) => ({ stops: field(json, "", "stops", list(stopRef, 50)) }),
-  "POST /api/check": (json) => ({ report: field(json, "", "report", carReport), asOf: field(json, "", "asOf", instantOf) }),
+  "POST /api/route": (json) => plan(json, ""),
+  "POST /api/saved-routes": (json) => savedRouteDraft(json, ""),
+  "PUT /api/saved-routes/:routeId": (json) => savedRouteDraft(json, ""),
 };
 
 /** A query value as a number: "-97.3" → -97.3; missing or not a number → AppError naming the key. */
@@ -256,14 +227,9 @@ export const decodeQuery: { [R in RoutesWith<"query">]: (query: URLSearchParams)
 export function shopId(text: string): ShopId {
   return nonEmpty(200)(text, "shopId") as ShopId;
 }
-export function batchId(text: string): BatchId {
-  return nonEmpty(200)(text, "batchId") as BatchId;
+export function savedRouteId(text: string): SavedRouteId {
+  return nonEmpty(200)(text, "routeId") as SavedRouteId;
 }
 export function codeType(text: string): CodeType {
   return codeTypeOf(text, "codeType");
-}
-/** A whole number ≥ 0. */
-export function rowNumber(text: string): number {
-  if (!/^\d{1,9}$/.test(text)) invalid("row", "row must be a whole number.");
-  return Number(text);
 }

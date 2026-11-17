@@ -150,15 +150,4 @@ describe("Shops screen", () => {
     expect(await screen.findByText("Shop at Omaha")).toBeInTheDocument();
     expect(fake.state.shops).toHaveLength(8);
   });
-
-  it("imports a set of node codes and lists it", async () => {
-    const user = userEvent.setup();
-    openPage("/shops");
-    const card = await screen.findByRole("region", { name: "Import node codes" });
-    await user.type(within(card).getByRole("textbox", { name: "Set id" }), "splc");
-    await user.type(within(card).getByRole("textbox", { name: "Label" }), "SPLC");
-    await user.upload(within(card).getByLabelText("Choose CSV file"), new File(["code,name,lon,lat\n668240,Temple,-97.34,31.1\n"], "splc.csv", { type: "text/csv" }));
-    await user.click(await within(card).findByRole("button", { name: "Save 1 codes as “SPLC”" }));
-    expect(await within(card).findByRole("list", { name: "Code sets loaded" })).toHaveTextContent("SPLC splc · 1 codes");
-  });
 });

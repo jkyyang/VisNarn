@@ -16,7 +16,7 @@ import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, ty
 import { AppError, type AppErrorKind } from "../../shared/app.ts";
 
 /** Routes that change nothing on the server. Two of them are POSTs because their input is a document. */
-export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/check" | "POST /api/places/resolve">;
+export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve">;
 export type WriteRoute = Exclude<Route, ReadRoute>;
 
 export type QueryState<T> =
@@ -28,7 +28,7 @@ export type QueryState<T> =
   | { status: "ready"; data: T; stale: boolean };
 
 export interface QueryOptions<T> {
-  /** Read again after this many ms while it returns a number (a batch that is still being checked). */
+  /** Read again after this many ms while it returns a number (an answer the server is still working on). */
   pollMs?: (data: T) => number | null;
 }
 

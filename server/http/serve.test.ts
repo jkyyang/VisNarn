@@ -44,8 +44,8 @@ function raw(port: number, method: string, path: string, headers: Record<string,
 
 const json = (headers: Record<string, string> = {}) => ({ "content-type": "application/json", ...headers });
 
-let carStarted: () => void = () => {};
-let carAborted: Promise<unknown> = Promise.resolve();
+let routeStarted: () => void = () => {};
+let routeAborted: Promise<unknown> = Promise.resolve();
 
 /** Only what these tests call; the rest of App is never reached. */
 const fakeApp = {
@@ -67,11 +67,11 @@ const fakeApp = {
       throw new Error("save failed");
     },
   },
-  checks: {
-    car: (_report: unknown, _asOf: unknown, signal: AbortSignal) =>
+  plans: {
+    route: (_plan: unknown, signal: AbortSignal) =>
       new Promise((_resolve, reject) => {
-        carAborted = new Promise((done) => signal.addEventListener("abort", () => (done(signal.reason), reject(signal.reason))));
-        carStarted();
+        routeAborted = new Promise((done) => signal.addEventListener("abort", () => (done(signal.reason), reject(signal.reason))));
+        routeStarted();
       }),
   },
 } as unknown as App;
@@ -183,14 +183,13 @@ describe("serve: the API envelope", () => {
   });
 
   it("aborts the app's work when the browser gives up on the request", async () => {
-    const started = new Promise<void>((done) => (carStarted = done));
-    const report = { carId: "1", a: { kind: "text", text: "A" }, b: { kind: "text", text: "B" }, shop: { kind: "text", text: "S" }, stops: [], reportedAt: null, prepEnd: null };
-    const body = JSON.stringify({ report, asOf: "2026-11-17T12:00:00Z" });
+    const started = new Promise<void>((done) => (routeStarted = done));
+    const body = JSON.stringify({ start: { kind: "text", text: "A" }, stops: [], destination: { kind: "text", text: "B" } });
     const socket = connect(port, "127.0.0.1");
-    socket.write(`POST /api/check HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
+    socket.write(`POST /api/route HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
     await started;
     socket.destroy();
-    await expect(carAborted).resolves.toBeInstanceOf(Error);
+    await expect(routeAborted).resolves.toBeInstanceOf(Error);
   });
 });
 
@@ -214,7 +213,7 @@ describe("serve: the page", () => {
   });
 
   it("serves the built page, and index.html for any page address", async () => {
-    for (const path of ["/", "/cars", "/route/cars/12?x=1"]) {
+    for (const path of ["/", "/shops", "/route/saved/12?x=1"]) {
       const page = await raw(sitePort, "GET", path);
       expect(page.status, path).toBe(200);
       expect(page.headers["content-type"]).toMatch(/^text\/html/);

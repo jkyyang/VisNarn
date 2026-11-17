@@ -4,13 +4,11 @@
  * A source (a CSV file now, a database query later) yields records: header → text, nothing more.
  * The readers below turn records into domain rows and a list of what they could not read. They do
  * not touch the network or the database, so a new source is one new `RecordSource` and nothing else
- * changes: batches, shops and codes from Synapse or CPS would arrive as the same rows.
+ * changes: shops and codes from a company database would arrive as the same rows.
  */
 import { createHash } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
-import type { CarField, CarReport, ImportProfile, RowIssue, SourceInfo, UploadSource } from "../../shared/cars.ts";
-import type { CodeType, FraId, PlaceRef, ShopDraft } from "../../shared/places.ts";
-import { readTime, type Instant } from "../../shared/time.ts";
+import type { CodeType, FraId, PlaceRef, RowIssue, ShopDraft, SourceInfo, UploadSource } from "../../shared/places.ts";
 import { csvSource } from "./csv.ts";
 
 export interface RawRecord {
@@ -44,78 +42,6 @@ export interface Parsed<T> {
   contentHash: string;
 }
 
-/** How a field is named in messages. Plain words: the people reading them use English as a second language. */
-const FIELD_WORDS: Record<Exclude<CarField, "stops">, string> = {
-  carId: "car id",
-  a: "last node (A)",
-  b: "next node (B)",
-  shop: "shop",
-  reportedAt: "report time",
-  prepEnd: "prep end time",
-};
-
-/**
- * Cars from a company export. Places stay as given: a typed `code` ref when the profile names a
- * code set for positions, free text otherwise; the shop cell is always free text (resolved against
- * Your shops first). Times become Instants under the profile's zone rule, or null plus an issue.
- * Throws AppError("invalid") when a column the profile names is missing: that is the file's
- * problem, not a row's.
- */
-export async function readCars(source: RecordSource, profile: ImportProfile): Promise<Parsed<CarReport>> {
-  const records = await all(source);
-  const fields = Object.keys(FIELD_WORDS) as (keyof typeof FIELD_WORDS)[];
-  const column = (field: keyof typeof FIELD_WORDS) => profile.columns[field].trim().toLowerCase();
-  requireColumns(
-    source,
-    records,
-    fields.map((field) => ({ names: [column(field)], what: FIELD_WORDS[field] })),
-    "Rename them in the file, or change the column names in the import settings.",
-  );
-
-  const items: CarReport[] = [];
-  const issues: RowIssue[] = [];
-  records.forEach((record, row) => {
-    const cell = (field: keyof typeof FIELD_WORDS) => record.cells[column(field)] ?? "";
-    const issue = (field: CarField, message: string) => issues.push({ row, line: record.line, field, message });
-
-    const carId = cell("carId");
-    if (!carId) issue("carId", "The car id is empty.");
-
-    const position = (field: "a" | "b"): PlaceRef => {
-      const text = cell(field);
-      if (!text) {
-        issue(field, `The ${FIELD_WORDS[field]} is empty.`);
-        return { kind: "text", text: "" };
-      }
-      return profile.positions === "text" ? { kind: "text", text } : { kind: "code", codeType: profile.positions.codeType, code: text };
-    };
-    const a = position("a");
-    const b = position("b");
-
-    const shopText = cell("shop");
-    if (!shopText) issue("shop", "The shop is empty.");
-
-    const time = (field: "reportedAt" | "prepEnd"): Instant | null => {
-      const text = cell(field);
-      const reading = readTime(text, profile.zonelessTimes);
-      if (reading.ok) return reading.at;
-      const word = FIELD_WORDS[field];
-      issue(
-        field,
-        reading.why === "empty"
-          ? `The ${word} is empty.`
-          : reading.why === "no-zone"
-            ? `The ${word} "${text}" has no time zone. Add one (such as 2026-11-17 09:00-06:00), or choose a time zone for such times in the import settings.`
-            : `The ${word} "${text}" is not a time this tool can read. Write it like 2026-11-17 09:00.`,
-      );
-      return null;
-    };
-
-    items.push({ carId, a, b, shop: { kind: "text", text: shopText }, stops: [], reportedAt: time("reportedAt"), prepEnd: time("prepEnd") });
-  });
-  return parsed(source, records, items, issues);
-}
-
 /**
  * Shops: a `name`, and a location given by `fra_id`, by `lon` and `lat`, or by `node_code` (a code
  * looked up in the imported code sets). The shop's own code is `code`, or else `node_code`.
@@ -128,7 +54,7 @@ export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>
   const items: ShopDraft[] = [];
   const issues: RowIssue[] = [];
   records.forEach((record, row) => {
-    const issue = (message: string) => issues.push({ row, line: record.line, field: null, message });
+    const issue = (message: string) => issues.push({ row, line: record.line, message });
     const name = record.cells.name ?? "";
     if (!name) issue("The shop name is empty.");
     const nodeCode = record.cells.node_code ?? "";
@@ -155,7 +81,7 @@ export async function readCodes(source: RecordSource, codeType: CodeType): Promi
   const items: NodeCodeDraft[] = [];
   const issues: RowIssue[] = [];
   records.forEach((record, row) => {
-    const issue = (message: string) => issues.push({ row, line: record.line, field: null, message });
+    const issue = (message: string) => issues.push({ row, line: record.line, message });
     const code = record.cells.code ?? "";
     if (!code) issue("The code is empty.");
     const location = locationOf(record, null, issue, "Give the code an fra_id, or lon and lat.");
@@ -173,13 +99,13 @@ async function all(source: RecordSource): Promise<RawRecord[]> {
 }
 
 /** Columns are judged from the first record: every record of a source has the same keys. */
-function requireColumns(source: RecordSource, records: RawRecord[], wanted: { names: string[]; what: string }[], advice = "Rename them in the file."): void {
+function requireColumns(source: RecordSource, records: RawRecord[], wanted: { names: string[]; what: string }[]): void {
   if (!records.length) return;
   const have = new Set(Object.keys(records[0].cells));
   const missing = wanted.filter((w) => !w.names.some((name) => have.has(name)));
   if (!missing.length) return;
   const named = missing.map((w) => `"${w.names[0]}" (${w.what})`).join(", ");
-  throw new AppError("invalid", `${source.info.label} has no ${missing.length > 1 ? "columns" : "column"} ${named}. ${advice}`, "source");
+  throw new AppError("invalid", `${source.info.label} has no ${missing.length > 1 ? "columns" : "column"} ${named}. Rename them in the file.`, "source");
 }
 
 /** At least one way to say where a row is. "lon, lat" means both columns. */

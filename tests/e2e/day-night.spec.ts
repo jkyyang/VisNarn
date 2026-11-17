@@ -5,7 +5,7 @@
  * and the route stays drawn on top throughout.
  */
 import type { Page } from "@playwright/test";
-import { expectMapCanvases, keepScreenshot, mapRegion, test, expect } from "./app.ts";
+import { expectMapCanvases, keepScreenshot, mapRegion, planRoute, test, expect } from "./app.ts";
 
 /** NASA's tiles are downloaded once and kept by the page, so the first download is the one to wait for. */
 const nasaTiles = (page: Page) =>
@@ -14,7 +14,9 @@ const nasaTiles = (page: Page) =>
 test("Night turns the map dark with city lights, the route stays on top, and Day brings the day map back", async ({ page }) => {
   const lights = nasaTiles(page);
   await page.goto("/route");
-  await expect(page.getByRole("region", { name: "Verdict" }).getByRole("heading")).toBeVisible();
+  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+  const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
+  await expect(selectedRow).toBeVisible();
   await expectMapCanvases(page);
   const map = mapRegion(page);
 
@@ -32,7 +34,7 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   await layers.click();
 
   await expectMapCanvases(page);
-  await expect(map).toContainText("Planned route from the report · not live tracking");
+  await expect(selectedRow).toBeVisible();
   await lights;
   await keepScreenshot(page, "night");
 
@@ -50,7 +52,9 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   await page.clock.setFixedTime("2026-11-17T23:45:00Z");
   const lights = nasaTiles(page);
   await page.goto("/route");
-  await expect(page.getByRole("region", { name: "Verdict" }).getByRole("heading")).toBeVisible();
+  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+  const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
+  await expect(selectedRow).toBeVisible();
   await expectMapCanvases(page);
   const map = mapRegion(page);
 
@@ -65,7 +69,7 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   await expect(map).toHaveAttribute("data-look", "night");
   await expect(layers).toHaveAccessibleName(/^Map layers: Satellite · (Sunset|Night)$/);
   await expect(map.locator(".maplibregl-ctrl-attrib")).toContainText("NASA");
-  await expect(map).toContainText("Planned route from the report · not live tracking");
+  await expect(selectedRow).toBeVisible();
   await lights;
   await expectMapCanvases(page);
   await keepScreenshot(page, "earth-dusk");

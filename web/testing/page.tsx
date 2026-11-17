@@ -4,7 +4,7 @@
  */
 import { render, type RenderResult } from "@testing-library/react";
 import App from "../app/App.tsx";
-import { forgetTypedCar } from "../screens/route/session.ts";
+import { forgetPlan } from "../screens/route/session.ts";
 
 /** jsdom draws nothing, but the page only loads its map where WebGL exists; the canvas is faked anyway. */
 function pretendWebGL(): void {
@@ -27,7 +27,7 @@ export function pretendPhone(phone: boolean): void {
 }
 
 export function openPage(path: string): RenderResult {
-  forgetTypedCar();
+  forgetPlan();
   pretendWebGL();
   window.history.replaceState(null, "", path);
   return render(<App />);

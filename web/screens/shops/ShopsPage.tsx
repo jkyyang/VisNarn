@@ -1,11 +1,19 @@
 /** The Shops screen's parts. Views only. */
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
-import type { ImportReport, ImportRequest, RowIssue } from "../../../shared/cars.ts";
-import type { CodeSet, CodeType, NetworkNode, NodeCode, PlaceRef, ShopDraft, ShopView } from "../../../shared/places.ts";
+import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
 import { usePlace } from "../../data/hooks.ts";
-import { fmtLongDay, fmtLonLat } from "../../format.ts";
+import { fmtLonLat } from "../../format.ts";
 import { readFileText } from "../../ui/files.ts";
-import { placeHint } from "../../words.ts";
+
+/** "Found on the network · served by BNSF and UP", or the problem in words. */
+function placeHint(resolution: PlaceResolution): { ok: boolean; text: string } {
+  if (!resolution.ok) return { ok: false, text: resolution.problem.message };
+  const { place } = resolution;
+  const names = place.railroads.length > 1 ? `${place.railroads.slice(0, -1).join(", ")} and ${place.railroads[place.railroads.length - 1]}` : place.railroads.join("");
+  const served = names ? ` · served by ${names}` : "";
+  if (place.match.confidence === "snapped" && place.match.snapKm >= 1) return { ok: true, text: `Nearest track is ${Math.round(place.match.snapKm)} km away${served}` };
+  return { ok: true, text: `Found on the network${served}` };
+}
 
 const ShopPin = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={Math.round(size * 1.22)} viewBox="0 0 18 22" aria-hidden="true">
@@ -163,7 +171,7 @@ export function ShopForm(props: {
     setLocRef({ kind: "node", fraId: props.picked.fraId, railroad: null });
   }, [props.picked]);
 
-  // The server reads the text the way it reads a batch cell: a code, "lon, lat", a city, a node.
+  // The server reads the text the way it reads an import cell: a code, "lon, lat", a city, a node.
   const ref = useMemo<PlaceRef | null>(() => locRef ?? (locText.trim() ? { kind: "text", text: locText.trim() } : null), [locRef, locText]);
   const resolution = usePlace(ref, "shop");
   const resolved = resolution.status === "ready" && !resolution.stale ? resolution.data : null;
@@ -203,7 +211,7 @@ export function ShopForm(props: {
           <input id={`${ids}-name`} ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. North Little Rock, AR" />
         </div>
         <div className="field">
-          <label htmlFor={`${ids}-code`}>Shop code (optional, how batch rows name it)</label>
+          <label htmlFor={`${ids}-code`}>Shop code (optional)</label>
           <input id={`${ids}-code`} className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. EX-NLR-01" />
         </div>
         <div className="field">
@@ -253,7 +261,7 @@ export function ShopForm(props: {
         {/* Its own row, away from where "Delete" was, with "Keep" focused: a double click cannot delete. */}
         {props.onDelete && confirmDelete && (
           <div className="confirm-row" role="group" aria-label="Delete this shop">
-            <span>Delete this shop? Batch rows that name it will show Cannot check.</span>
+            <span>Delete this shop?</span>
             <span className="confirm-actions">
               <button type="button" className="btn btn--small" onClick={() => setConfirmDelete(false)} autoFocus>
                 Keep it
@@ -298,7 +306,7 @@ function IssueList(props: { issues: RowIssue[] }): ReactElement | null {
 
 type Preview<T> = { fileName: string; text: string; report: ImportReport<T> };
 
-/** Choose a file, preview it (commit false), then save it (commit true). Shared by both import cards. */
+/** Choose a file, preview it (commit false), then save it (commit true). */
 function useImport<T>(run: (request: ImportRequest) => Promise<ImportReport<T>>) {
   const [preview, setPreview] = useState<Preview<T> | null>(null);
   const [saved, setSaved] = useState<ImportReport<T> | null>(null);
@@ -432,120 +440,21 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
   );
 }
 
-/**
- * The same card for a set of company node codes, which also asks which code set the file is (an
- * existing one to replace, or a new id and label) and lists the sets already loaded.
- * Not on the design canvas: the back end must be able to load node codes, and this is the smallest way in.
- */
-export function CodeImportCard(props: {
-  codeSets: CodeSet[];
-  run: (request: ImportRequest & { codeType: CodeType; label: string }) => Promise<ImportReport<NodeCode>>;
-  onRemove: (codeType: CodeType) => Promise<unknown>;
-}): ReactElement {
-  const [target, setTarget] = useState<string>("");
-  const [codeType, setCodeType] = useState("");
-  const [label, setLabel] = useState("");
-  const ids = useId();
-  const existing = props.codeSets.find((set) => set.codeType === target) ?? null;
-  const chosenType = existing ? existing.codeType : codeType.trim();
-  const chosenLabel = existing ? existing.label : label.trim() || codeType.trim();
-  const flow = useImport((request) => props.run({ ...request, codeType: chosenType, label: chosenLabel }));
-  const [removeError, setRemoveError] = useState<string | null>(null);
-
+/** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near that spot." */
+export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
   return (
-    <section className="import-card" aria-label="Import node codes">
-      <div className="import-row">
-        <ImportIcon />
-        <div className="grow">
-          <h2>Import node codes (CSV)</h2>
-          <div className="muted small">
-            A code set lets batch rows name places by your company's codes. Columns: <span className="mono">code, name, lon, lat</span> or <span className="mono">code, fra_node</span>. A code is only
-            looked up in its own set, never read as an FRA node.
-          </div>
-        </div>
-      </div>
-      <div className="code-target">
-        <div className="field">
-          <label htmlFor={`${ids}-set`}>Code set</label>
-          <select id={`${ids}-set`} value={target} onChange={(e) => setTarget(e.target.value)}>
-            <option value="">A new code set</option>
-            {props.codeSets.map((set) => (
-              <option key={set.codeType} value={set.codeType}>
-                Replace “{set.label}”
-              </option>
-            ))}
-          </select>
-        </div>
-        {!existing && (
-          <>
-            <div className="field">
-              <label htmlFor={`${ids}-type`}>Set id</label>
-              <input id={`${ids}-type`} className="mono" value={codeType} onChange={(e) => setCodeType(e.target.value)} placeholder="splc" />
-            </div>
-            <div className="field">
-              <label htmlFor={`${ids}-label`}>Label</label>
-              <input id={`${ids}-label`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="SPLC" />
-            </div>
-          </>
-        )}
-        <FileButton label={flow.busy ? "Reading…" : "Choose CSV file"} onFile={flow.choose} disabled={flow.busy || !chosenType} />
-      </div>
-      {flow.preview && (
-        <div className="import-preview" role="region" aria-label="Code import preview">
-          <p>
-            <strong>{flow.preview.report.ready.length}</strong> codes are ready in {flow.preview.fileName}
-            {flow.preview.report.issues.length > 0 && (
-              <>
-                {" "}
-                · <strong>{flow.preview.report.issues.length}</strong> rows match no node and will not be saved
-              </>
-            )}
-          </p>
-          <IssueList issues={flow.preview.report.issues} />
-          <div className="actions">
-            <button type="button" className="btn" onClick={flow.cancel}>
-              Cancel
-            </button>
-            <button type="button" className="btn btn--primary" disabled={!flow.preview.report.ready.length || flow.busy} onClick={flow.commit}>
-              Save {flow.preview.report.ready.length} codes as “{chosenLabel}”
-            </button>
-          </div>
-        </div>
-      )}
-      {flow.saved && (
-        <p className="ok-note" role="status">
-          Saved {flow.saved.ready.length} codes.
-        </p>
-      )}
-      {flow.error && (
-        <p className="error" role="alert">
-          {flow.error}
-        </p>
-      )}
-      {props.codeSets.length > 0 && (
-        <ul className="code-sets" aria-label="Code sets loaded">
-          {props.codeSets.map((set) => (
-            <li key={set.codeType}>
-              <span>
-                <span className="strong">{set.label}</span> <span className="mono muted small">{set.codeType}</span> · {set.count.toLocaleString("en-US")} codes · imported {fmtLongDay(set.importedAt)}
-              </span>
-              <button
-                type="button"
-                className="link-btn"
-                aria-label={`Remove code set ${set.label}`}
-                onClick={() => props.onRemove(set.codeType).catch((e: unknown) => setRemoveError(e instanceof Error ? e.message : "Could not remove."))}
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {removeError && (
-        <p className="error" role="alert">
-          {removeError}
-        </p>
-      )}
-    </section>
+    <div className="map-card pick-prompt" role="status">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      <span>
+        {props.missed ? "No track near that spot. Zoom in and click closer to a line · " : "Click the map to set the shop · "}
+        <kbd>Esc</kbd> to cancel
+      </span>
+      <button type="button" className="btn btn--dark" onClick={props.onCancel}>
+        Cancel
+      </button>
+    </div>
   );
 }

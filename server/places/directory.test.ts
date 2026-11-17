@@ -2,8 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { loadNetwork, type RailNetwork } from "../../engine/index.ts";
 import { AppError } from "../../shared/app.ts";
-import type { UploadSource } from "../../shared/cars.ts";
-import type { FraId, NodeCode, PlaceRef, PlaceResolution, Shop, ShopId } from "../../shared/places.ts";
+import type { FraId, NodeCode, PlaceRef, PlaceResolution, Shop, ShopId, UploadSource } from "../../shared/places.ts";
 import type { Instant } from "../../shared/time.ts";
 import { openStore } from "../store/sqlite.ts";
 import type { Store } from "../store/store.ts";

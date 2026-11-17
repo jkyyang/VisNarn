@@ -1,7 +1,6 @@
 /** Company location codes: user-imported sets that map a code to a place on the network. */
 import { AppError } from "../../shared/app.ts";
-import type { ImportReport, ImportRequest, RowIssue } from "../../shared/cars.ts";
-import { locationOf, type CodeSet, type CodeType, type NodeCode } from "../../shared/places.ts";
+import { locationOf, type CodeSet, type CodeType, type ImportReport, type ImportRequest, type NodeCode, type RowIssue } from "../../shared/places.ts";
 import { instant } from "../../shared/time.ts";
 import { openSource, readCodes } from "../intake/intake.ts";
 import type { Store } from "../store/store.ts";
@@ -32,7 +31,7 @@ export function createCodes(store: Store, directory: Directory): Codes {
       parsed.items.forEach((draft, row) => {
         if (bad.has(row)) return;
         const line = parsed.lines[row];
-        const issue = (message: string) => issues.push({ row, line, field: null, message });
+        const issue = (message: string) => issues.push({ row, line, message });
         const key = draft.code.toLowerCase();
         const earlier = seen.get(key);
         if (earlier !== undefined) return issue(`The code ${draft.code} is already on line ${earlier}.`);

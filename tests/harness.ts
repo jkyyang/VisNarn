@@ -22,14 +22,12 @@ export interface TestApp {
   dataDir: string;
   /** One typed HTTP call to the test server. */
   api<R extends Route>(route: R, ...request: RequestArgs<R>): Promise<Res<R>>;
-  /** Reads a batch until every row is checked, as the Cars screen does. */
-  settled(batchId: string): Promise<Res<"GET /api/batches/:batchId">>;
   /** Stops the server and the app. The data folder is removed unless `keepData` (for a restart on it). */
   close(options?: { keepData: boolean }): Promise<void>;
 }
 
 /**
- * Starts on an empty data folder, so the EXAMPLE shops and the EXAMPLE batch are there, or on the
+ * Starts on an empty data folder, so the EXAMPLE shops are there, or on the
  * `dataDir` of a TestApp closed with `keepData`, to see what survives a restart.
  */
 export async function startTestApp(options: { dataDir?: string } = {}): Promise<TestApp> {
@@ -48,15 +46,6 @@ export async function startTestApp(options: { dataDir?: string } = {}): Promise<
     url: server.url,
     dataDir,
     api,
-    async settled(batchId) {
-      const deadline = Date.now() + 60_000;
-      for (;;) {
-        const view = await api("GET /api/batches/:batchId", { params: { batchId } });
-        if (view.progress.checked === view.progress.total) return view;
-        if (Date.now() > deadline) throw new Error(`Batch ${batchId} still has ${view.progress.total - view.progress.checked} rows pending after 60 s.`);
-        await new Promise((done) => setTimeout(done, 50));
-      }
-    },
     async close({ keepData } = { keepData: false }) {
       await server.close();
       await app.close();

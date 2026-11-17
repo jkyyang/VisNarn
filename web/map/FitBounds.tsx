@@ -6,14 +6,12 @@ import type { Bounds } from "../../shared/geo.ts";
  * Room for the floating controls, and at the sides for the labels that hang off the outermost
  * pins. A wide map can spare that room; a phone cannot.
  */
-function fitOptions(mapWidth: number, leftInset: number, topInset: number) {
+function fitOptions(mapWidth: number) {
   const side = Math.round(Math.min(150, Math.max(40, mapWidth * 0.14)));
   // On a wide map the layers card (about 200 px) floats top-right: keep the route out from under it.
   // On a phone the round buttons take the right edge: keep pins and their labels clear of them.
   const right = mapWidth >= 640 ? Math.max(side, 240) : Math.max(side, 72);
-  // A card over the map's left side (the selected car) leaves the rest for the scene, if enough is left.
-  const left = leftInset && mapWidth - leftInset - right >= 320 ? Math.max(side, leftInset) : side;
-  return { padding: { top: Math.max(72, topInset), bottom: 84, left, right }, maxZoom: 11 };
+  return { padding: { top: 72, bottom: 84, left: side, right }, maxZoom: 11 };
 }
 
 /** True when `bounds` lie wholly inside the visible map. */
@@ -23,14 +21,16 @@ export function isInView(view: { getWest(): number; getSouth(): number; getEast(
 }
 
 /**
- * Moves the camera to `bounds` whenever they change and are not already in view, and again whenever `nonce` changes ("Fit whole
- * route"). Renders nothing; must be a child of the map.
+ * Moves the camera to `bounds` when they first appear (a plan that has just got its route), when they
+ * change and are not already in view, and whenever `nonce` changes ("Fit whole route"). Renders
+ * nothing; must be a child of the map.
  */
-export function FitBounds(props: { bounds: Bounds | null; nonce?: number; leftInset?: number; topInset?: number }) {
-  const { bounds, nonce = 0, leftInset = 0, topInset = 0 } = props;
+export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
+  const { bounds, nonce = 0 } = props;
   const map = useMap().current;
   const mounted = useRef(false);
   const lastNonce = useRef(nonce);
+  const hadBounds = useRef(false);
   const key = bounds?.join();
 
   useEffect(() => {
@@ -40,16 +40,19 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number; leftIn
     mounted.current = true;
     const asked = nonce !== lastNonce.current;
     lastNonce.current = nonce;
+    // Before a plan has its route there is nothing to frame; the moment it has one, it is framed.
+    const appeared = !!bounds && !hadBounds.current;
+    hadBounds.current = !!bounds;
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
-    // Switching tabs or route cards must not zoom the map back and forth: if everything is already
+    // Switching tabs or routes must not zoom the map back and forth: if everything is already
     // on screen the camera stays where the user put it. "Fit whole route" always moves it.
-    if (!first && !asked && isInView(map.getBounds(), bounds)) return;
-    const options = fitOptions(map.getContainer().clientWidth, leftInset, topInset);
+    if (!first && !asked && !appeared && isInView(map.getBounds(), bounds)) return;
+    const options = fitOptions(map.getContainer().clientWidth);
     map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : 800 });
     // Keyed on the numbers, not the array: a re-check that lands on the same route must not
     // pull the camera back from wherever the user has panned to.
-  }, [map, key, nonce, leftInset, topInset]);
+  }, [map, key, nonce]);
 
   return null;
 }

@@ -4,30 +4,25 @@
  * compile error and not a 404 at run time.
  *
  * Only server/http and web/data import this file (scripts/architecture.test.ts checks). Everything
- * else speaks the domain types the routes carry (./places.ts, ./cars.ts, ./route.ts,
+ * else speaks the domain types the routes carry (./places.ts, ./plans.ts, ./route.ts,
  * ./assumptions.ts), and those are plain JSON by construction, so there is no second set of "wire"
  * types to keep in step with them.
  */
 import type { AppErrorKind, Meta } from "./app.ts";
 import type { Assumptions } from "./assumptions.ts";
 import type {
-  Batch, BatchCar, BatchUpload, BatchView, CarCheck, CarReport, ImportProfile, ImportReport, ImportRequest, SavedFix, StopRef,
-} from "./cars.ts";
-import type {
-  CodeSet, CodeType, NetworkNode, NodeCode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
+  CodeSet, CodeType, ImportReport, ImportRequest, NetworkNode, NodeCode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
 } from "./places.ts";
-import type { Instant } from "./time.ts";
+import type { Plan, PlannedRoute, SavedRoute, SavedRouteDraft } from "./plans.ts";
 
 type Endpoint<Res, Body = undefined, Query = undefined> = { res: Res; body: Body; query: Query };
 
 export interface Api {
   "GET /api/meta": Endpoint<Meta>;
 
+  /** The routing rules the planner uses. Kept on the server; no screen shows them in stage 1. */
   "GET /api/assumptions": Endpoint<Assumptions>;
   "PUT /api/assumptions": Endpoint<Assumptions, Assumptions>;
-  /** How uploads are read: column names, how positions are named, the zone for times without one. */
-  "GET /api/import-profile": Endpoint<ImportProfile>;
-  "PUT /api/import-profile": Endpoint<ImportProfile, ImportProfile>;
 
   /** Autocomplete for a place input: Your shops, company codes and city names that match. */
   "GET /api/places/suggest": Endpoint<PlaceSuggestion[], undefined, { q: string; role: PlaceRole }>;
@@ -42,27 +37,19 @@ export interface Api {
   "DELETE /api/shops/:shopId": Endpoint<null>;
   "POST /api/shops/import": Endpoint<ImportReport<ShopView>, ImportRequest>;
 
+  /** Company node codes. Kept on the server for when the company's code format is known; no screen uses them. */
   "GET /api/codes": Endpoint<CodeSet[]>;
   "POST /api/codes/import": Endpoint<ImportReport<NodeCode>, ImportRequest & { codeType: CodeType; label: string }>;
   "DELETE /api/codes/:codeType": Endpoint<null>;
 
-  "GET /api/batches": Endpoint<Batch[]>;
-  /** Uploading the same content twice returns the batch that is already there. */
-  "POST /api/batches": Endpoint<Batch, BatchUpload>;
-  /**
-   * The morning list as far as it has been checked. Reading it is what starts the checking: rows not
-   * routed yet come back as "pending", and the caller reads again until progress is complete.
-   */
-  "GET /api/batches/:batchId": Endpoint<BatchView>;
-  "DELETE /api/batches/:batchId": Endpoint<null>;
-  "GET /api/batches/:batchId/cars/:row": Endpoint<BatchCar>;
-  /** "Use for this batch row". Saving the stops the row already has changes nothing. */
-  "PUT /api/batches/:batchId/cars/:row/fix": Endpoint<SavedFix, { stops: StopRef[] }>;
-  /** Back to the router's own route. The fix stays in the history table. */
-  "DELETE /api/batches/:batchId/cars/:row/fix": Endpoint<null>;
-
-  /** Check one car as described. Nothing is stored; the same report always gives the same answer. */
-  "POST /api/check": Endpoint<CarCheck, { report: CarReport; asOf: Instant }>;
+  /** The routes for a plan, as far as its places resolve. Nothing is stored; the same plan always gives the same answer. */
+  "POST /api/route": Endpoint<PlannedRoute, Plan>;
+  /** By name, ignoring case. */
+  "GET /api/saved-routes": Endpoint<SavedRoute[]>;
+  "POST /api/saved-routes": Endpoint<SavedRoute, SavedRouteDraft>;
+  /** Saving what is already stored changes nothing. */
+  "PUT /api/saved-routes/:routeId": Endpoint<SavedRoute, SavedRouteDraft>;
+  "DELETE /api/saved-routes/:routeId": Endpoint<null>;
 }
 
 export type Route = keyof Api;
@@ -75,7 +62,7 @@ type ParamNames<Path> = Path extends `${string}:${infer Name}/${infer Rest}`
     ? Name
     : never;
 
-/** ":batchId" in a route becomes `params.batchId`. Always text here; handlers turn it into ids and numbers. */
+/** ":shopId" in a route becomes `params.shopId`. Always text here; handlers turn it into ids and numbers. */
 export type Params<R extends Route> = { [Name in ParamNames<PathOf<R>>]: string };
 
 /** What a caller passes for a route: only the parts that route has. */

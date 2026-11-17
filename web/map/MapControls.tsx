@@ -6,8 +6,6 @@ import type { MapLayerChoice } from "./MapCanvas.tsx";
 export interface MapControlsProps {
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
-  /** Real tracks is forced on by the screen: shown checked and disabled. */
-  tracksForced: boolean;
   /** What Auto shows now, for the button and the hint under the switch. */
   look: MapLook;
   onZoom: (step: 1 | -1) => void;
@@ -37,7 +35,7 @@ export function MapControls(props: MapControlsProps): ReactElement {
   const { layers, onLayers } = props;
   const [open, setOpen] = useState(false);
   const lightLabel = useId();
-  const tracksOn = layers.tracks || props.tracksForced;
+  const tracksOn = layers.tracks;
   const lightWord = LIGHT_WORDS[props.look.phase];
   const summary = `${layers.basemap === "map" ? "Map" : "Satellite"} · ${lightWord}${tracksOn ? " + tracks" : ""}`;
 
@@ -63,10 +61,9 @@ export function MapControls(props: MapControlsProps): ReactElement {
               type="button"
               role="checkbox"
               aria-checked={tracksOn}
-              aria-disabled={props.tracksForced || undefined}
-              title={props.tracksForced ? "Fix route always shows the real tracks" : "OpenRailwayMap tracks, stations and yards"}
+              title="OpenRailwayMap tracks, stations and yards"
               className="layer-tile"
-              onClick={() => !props.tracksForced && onLayers({ ...layers, tracks: !layers.tracks })}
+              onClick={() => onLayers({ ...layers, tracks: !layers.tracks })}
             >
               <Thumb kind="tracks" />
               Real tracks
@@ -105,7 +102,7 @@ export function MapControls(props: MapControlsProps): ReactElement {
         </button>
       </div>
       {props.history && (
-        <div className="ctl-group">
+        <div className="ctl-group ctl-group--history">
           <button type="button" className="map-btn" aria-label="Undo route change" disabled={!props.history.undo} onClick={() => props.history?.undo?.()}>
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
               <path d="M7 4L3 8l4 4M3 8h8a4 4 0 0 1 0 8H8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

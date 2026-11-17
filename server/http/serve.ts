@@ -1,5 +1,5 @@
 /**
- * The HTTP shell on node:http. It knows the protocol and nothing about cars: match the route,
+ * The HTTP shell on node:http. It knows the protocol and nothing about rail: match the route,
  * decode the request, call the handler, encode the answer.
  *
  * Local-only rules, because there is no login yet:
@@ -31,7 +31,7 @@ export interface Server {
   close(): Promise<void>;
 }
 
-/** Largest request body accepted: a CSV of a few thousand cars is well under this. */
+/** Largest request body accepted: a CSV of a few thousand shops is well under this. */
 const BODY_LIMIT = 5 * 1024 * 1024;
 
 const TYPES: Record<string, string> = {
@@ -154,7 +154,7 @@ export async function serve(app: App, options: { port: number; webDir: string | 
       if (controller.signal.aborted) return;
       if (error instanceof AppError) return sendJson(res, STATUS_OF[error.kind], envelope(error.kind, error.message, error.field));
       if (error instanceof Refusal) return sendJson(res, error.status, envelope("invalid", error.message));
-      // The route and the stack only: a request body may hold car data and is never written to a log.
+      // The route and the stack only: a request body may hold company data and is never written to a log.
       console.error(`${found.route} failed:`, error instanceof Error ? error.stack : String(error));
       sendJson(res, 500, envelope("internal", "Something went wrong on the server. The details are in its log."));
     }

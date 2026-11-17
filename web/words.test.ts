@@ -1,127 +1,67 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ASSUMPTIONS } from "../shared/assumptions.ts";
-import type { BatchView, CarSummary, CheckSummary } from "../shared/cars.ts";
-import type { RouteFlag, RouteOption, TimingStatus, Verdict } from "../shared/route.ts";
-import { addHours, type Instant } from "../shared/time.ts";
-import { atRiskText, flagSentence, headline, optionDiff, optionName, pillsOf, placeHint, reasonLine, stepWords } from "./words.ts";
+import type { FraId, PlaceResolution } from "../shared/places.ts";
+import type { RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
+import { interchangesWord, pillText, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
 
-const T0 = "2026-11-19T06:00:00.000Z" as Instant;
-
-function verdict(timing: TimingStatus, marginH: number, flags: RouteFlag[] = []): Verdict {
-  return { arrival: { ifAtB: addHours(T0, marginH), ifJustPastA: addHours(T0, marginH + 4) }, marginH, timing, flags, group: timing === "at-risk" ? "act-now" : flags.length || timing === "tight" ? "check-first" : "ok" };
+function route(id: RouteStrategy, km: number, interchanges: number): RoutePath {
+  return { strategies: [id], km, interchanges, railroads: ["BNSF"], legs: [], turnBacks: [], steps: [], passesA: false };
 }
-const checked = (v: Verdict): CheckSummary => ({ outcome: "checked", verdict: v, km: 900, straightKm: 600, railroads: ["BNSF"], at: [-97, 31], positionAgeH: 0 });
-const turnBack = (...places: string[]): RouteFlag => ({ kind: "turn-back", places });
 
-function option(id: RouteOption["id"], km: number, legs: { railroad: "BNSF" | "UP"; km: number; subs: string[] }[], v: Verdict, at = "Fort Worth, TX"): RouteOption {
-  const steps: RouteOption["steps"] = [];
-  let from = 0;
-  legs.forEach((leg, i) => {
-    if (i > 0 && legs[i - 1].railroad !== leg.railroad) steps.push({ kind: "interchange", kmFromB: from, from: legs[i - 1].railroad, to: leg.railroad, at, eta: v.arrival });
-    steps.push({ kind: "leg", kmFromB: from, leg: i, eta: v.arrival });
-    from += leg.km;
-  });
-  return {
-    id,
-    strategies: [id],
-    km,
-    interchanges: steps.filter((s) => s.kind === "interchange").length,
-    railroads: [...new Set(legs.map((l) => l.railroad))],
-    legs: legs.map((l) => ({ railroad: l.railroad, km: l.km, from: "Temple, TX", to: "North Little Rock, AR", headingDeg: 45, subdivisions: l.subs, path: [] })),
-    turnBacks: [],
-    steps,
-    passesA: false,
-    verdict: v,
-  };
-}
+const found = (label: string): PlaceResolution => ({
+  ok: true,
+  place: {
+    ref: { kind: "text", text: label },
+    label,
+    lon: -94.58,
+    lat: 39.1,
+    fraId: null,
+    railroad: null,
+    railroads: ["BNSF"],
+    match: { method: "city", codeType: null, confidence: "snapped", snapKm: 0.4 },
+    example: false,
+  },
+});
+const missing: PlaceResolution = { ok: false, problem: { kind: "unknown", message: 'Nothing called "Xyz" in the city names.', candidates: [] } };
 
 describe("words", () => {
-  it("pillsOf: check-route with the timing pill; at-risk first when the car is at risk; cannot-check alone", () => {
-    expect(pillsOf(checked(verdict("tight", 23, [turnBack("Temple, TX")])))).toEqual(["check-route", "tight"]);
-    expect(pillsOf(checked(verdict("at-risk", -13, [turnBack("Jacksonville, FL")])))).toEqual(["at-risk", "check-route"]);
-    expect(pillsOf({ outcome: "cannot-check", problems: [{ field: "b", message: "No place called “X”." }] })).toEqual(["cannot-check"]);
-    expect(pillsOf(checked(verdict("on-time", 37)))).toEqual(["on-time"]);
+  it("pillText: the selected route's km; another's difference from it", () => {
+    const selected = route("pick", 828, 1);
+    expect(pillText(selected, selected)).toBe("828 km");
+    expect(pillText(route("shortest", 1008, 2), selected)).toBe("+180 km · 1 more interchange");
+    expect(pillText(route("shortest", 788, 1), selected)).toBe("−40 km");
+    expect(pillText(route("shortest", 828.4, 0), selected)).toBe("same km · 1 fewer interchange");
+    expect(pillText(route("shortest", 2828, 4), selected)).toBe("+2,000 km · 3 more interchanges");
   });
 
-  it("a flagged route is never shown as On time", () => {
-    for (const flag of [turnBack("Hamilton, ON"), { kind: "detour", ratio: 1.9 }, { kind: "passes-a-again" }, { kind: "approach-not-on-track" }] as RouteFlag[]) {
-      expect(pillsOf(checked(verdict("on-time", 40, [flag])))).toEqual(["check-route"]);
-    }
+  it("routeName joins the short names of the places, stops after 'via'", () => {
+    expect(routeName({ start: found("Kansas City, MO"), stops: [], destination: found("Chicago, IL") })).toBe("Kansas City → Chicago");
+    expect(routeName({ start: found("Kansas City, MO"), stops: [found("Galesburg, IL"), found("Peoria, IL")], destination: found("Chicago, IL") })).toBe(
+      "Kansas City → Chicago via Galesburg, Peoria",
+    );
   });
 
-  it("headline says to check the route first whenever a flag is set", () => {
-    expect(headline(verdict("tight", 23, [turnBack("Temple, TX")]))).toBe("Check the route before using this result");
-    expect(headline(verdict("at-risk", -2, [{ kind: "stale-position", ageH: 72 }]))).toBe("Check the route before using this result");
-    expect(headline(verdict("on-time", 34))).toBe("Arrives after prep ends, with room to spare");
-    expect(headline(verdict("at-risk", -14))).toBe("Prep may end too late");
+  it("placeProblem is the problem's own line, or nothing", () => {
+    expect(placeProblem(missing)).toBe('Nothing called "Xyz" in the city names.');
+    expect(placeProblem(found("Chicago, IL"))).toBeNull();
+    expect(placeProblem(null)).toBeNull();
   });
 
-  it("reasonLine reads 'Can arrive about 14 h before prep ends.' and adds the route problem", () => {
-    expect(reasonLine(checked(verdict("at-risk", -14)))).toBe("Can arrive about 14 h before prep ends.");
-    expect(reasonLine(checked(verdict("at-risk", -13, [turnBack("72 km from Jacksonville, FL")])))).toBe("Can arrive about 13 h before prep ends. Route turns back 72 km from Jacksonville, FL.");
-    expect(reasonLine(checked(verdict("tight", 23, [turnBack("Temple, TX")])))).toBe("Turns back at Temple, TX (yard track). Check the route first.");
-    expect(reasonLine(checked(verdict("on-time", 40, [turnBack("Hamilton, ON", "Chicago, IL")])))).toBe("Timing looks fine, but 2 turn-backs: Hamilton, ON and Chicago, IL.");
-    expect(reasonLine({ outcome: "pending" })).toMatch(/checked/);
-  });
-
-  it("names flags in plain words", () => {
-    expect(flagSentence(turnBack("Temple, TX"))).toBe("Turns back at Temple, TX (yard track).");
-    expect(flagSentence({ kind: "passes-a-again" })).toMatch(/A and B may be the wrong way round/);
-  });
-
-  it("optionDiff reads '−207 km, 1 more interchange, about 11 h later'", () => {
-    const pick = option("pick", 1046, [{ railroad: "BNSF", km: 1046, subs: ["LAMPASAS", "LITTLE ROCK"] }], verdict("tight", 23));
-    const up = option("shortest", 839, [{ railroad: "BNSF", km: 212, subs: ["FORT WORTH"] }, { railroad: "UP", km: 627, subs: ["DALLAS"] }], verdict("on-time", 34));
-    expect(optionDiff(up, pick)).toBe("−207 km, 1 more interchange, about 11 h later");
-    expect(optionDiff(pick, pick)).toBeNull();
-  });
-
-  it("names an option by its main railroad and what sets it apart", () => {
-    const pick = option("pick", 1046, [{ railroad: "BNSF", km: 1046, subs: ["LAMPASAS", "GALVESTON", "LITTLE ROCK"] }], verdict("tight", 23));
-    const up = option("shortest", 839, [{ railroad: "BNSF", km: 212, subs: ["FORT WORTH"] }, { railroad: "UP", km: 627, subs: ["DALLAS"] }], verdict("on-time", 34));
-    expect(optionName(pick, [pick, up])).toBe("BNSF via Lampasas and Little Rock subs");
-    expect(optionName(up, [pick, up])).toBe("UP via Fort Worth");
-    expect(stepWords(up.steps[1], up).title).toBe("Change railroad BNSF → UP at Fort Worth, TX");
-    expect(stepWords(pick.steps[0], pick).title).toBe("BNSF toward North Little Rock (heading NE)");
-  });
-
-  it("says where a place was found, or what is wrong with it", () => {
-    expect(placeHint({ ok: false, problem: { kind: "unknown", message: "No place called “Tmple”.", candidates: [] } })).toEqual({ ok: false, text: "No place called “Tmple”." });
-    const place = {
-      ref: { kind: "text" as const, text: "Temple, TX" },
-      label: "Temple, TX",
-      lon: -97.3,
-      lat: 31.1,
-      fraId: null,
-      railroad: null,
-      railroads: ["BNSF" as const, "UP" as const],
-      match: { method: "city" as const, codeType: null, confidence: "snapped" as const, snapKm: 0.3 },
-      example: false,
+  it("short words for places, interchanges and turn-backs", () => {
+    expect(shortPlace("Temple, TX")).toBe("Temple");
+    expect(shortPlace("72 km from Jacksonville, FL")).toBe("72 km from Jacksonville");
+    expect(interchangesWord(1)).toBe("1 interchange");
+    expect(interchangesWord(2)).toBe("2 interchanges");
+    const turnBack: TurnBack = {
+      at: { fraId: 357961 as FraId, lon: -97.35, lat: 31.1, near: "Temple, TX" },
+      railroad: "BNSF",
+      arrives: { subdivision: "LAMPASAS", headingDeg: 182 },
+      leaves: { subdivision: "LAMPASAS", headingDeg: 6 },
+      turnDeg: 176,
+      track: "stub-end",
     };
-    expect(placeHint({ ok: true, place })).toEqual({ ok: true, text: "Found on the network · served by BNSF and UP" });
-  });
-
-  it("atRiskText groups act-now cars by shop and states the assumptions and that the estimate is rough", () => {
-    const car = (row: number, carId: string, shop: string, v: Verdict): CarSummary => ({ row, carId, shop, shopExample: shop === "Kansas City, MO", fixed: false, check: checked(v), group: v.group });
-    const cars = [
-      car(1, "551930", "Kansas City, MO", verdict("at-risk", -14)),
-      car(2, "402196", "Birmingham, AL", verdict("at-risk", -13, [turnBack("72 km from Jacksonville, FL")])),
-      car(0, "104233", "North Little Rock, AR", verdict("tight", 23, [turnBack("Temple, TX")])),
-    ];
-    const view: BatchView = {
-      batch: { id: "b" as BatchView["batch"]["id"], name: "EXAMPLE", asOf: "2026-11-17T15:00:00.000Z" as Instant, createdAt: T0, source: { kind: "csv", label: "x" }, rows: 3, issues: [], example: true },
-      progress: { checked: 3, total: 3 },
-      cars,
-    };
-    const text = atRiskText(view, cars, DEFAULT_ASSUMPTIONS);
-    const lines = text.split("\n");
-    expect(lines[0]).toMatch(/^At-risk cars, Tue Nov 17 \(rough estimate, EXAMPLE\)$/);
-    // A shop that is an EXAMPLE location says so in the list the planner reads; a real one does not.
-    expect(lines).toContain("Kansas City, MO (EXAMPLE shop)");
-    expect(lines).toContain("Birmingham, AL");
-    expect(lines).toContain("  551930  can arrive ~14 h before prep ends");
-    expect(text).toContain("also check route: a turn-back 72 km from Jacksonville, FL");
-    expect(text).not.toContain("104233");
-    expect(lines[lines.length - 1]).toBe("Assumes 400 km/day placeholder · +24 h per interchange · buffer 24 h");
+    expect(turnBackMove(turnBack)).toEqual({ arrives: "on Lampasas Sub heading S", leaves: "heading N" });
+    expect(turnBackMove({ ...turnBack, leaves: { subdivision: "GALVESTON", headingDeg: 135 } }).leaves).toBe("on Galveston Sub heading SE");
+    expect(trackWords("stub-end")).toBe("yard track (stub end)");
+    expect(trackWords("yard")).toBe("yard track");
   });
 });

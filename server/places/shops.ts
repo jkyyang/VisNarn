@@ -1,8 +1,7 @@
 /** Your shops: the destinations the user defines. Rules for saving one, and what the network says about each. */
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
-import type { ImportReport, ImportRequest, RowIssue } from "../../shared/cars.ts";
-import { locationOf, refOf, type Shop, type ShopDraft, type ShopId, type ShopView } from "../../shared/places.ts";
+import { locationOf, refOf, type ImportReport, type ImportRequest, type RowIssue, type Shop, type ShopDraft, type ShopId, type ShopView } from "../../shared/places.ts";
 import { openSource, readShops } from "../intake/intake.ts";
 import type { Store } from "../store/store.ts";
 import type { Directory } from "./directory.ts";
@@ -77,7 +76,7 @@ export function createShops(store: Store, directory: Directory): Shops {
       parsed.items.forEach((draft, row) => {
         if (bad.has(row)) return;
         const line = parsed.lines[row];
-        const issue = (message: string) => issues.push({ row, line, field: null, message });
+        const issue = (message: string) => issues.push({ row, line, message });
         const key = (draft.code?.trim() || `name:${draft.name.trim()}`).toLowerCase();
         const earlier = seen.get(key);
         if (earlier !== undefined) return issue(`This row repeats ${draft.code ? `the code ${draft.code}` : `the name ${draft.name}`} from line ${earlier}.`);

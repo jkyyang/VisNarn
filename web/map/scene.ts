@@ -1,25 +1,26 @@
 /**
- * What the map draws, as plain data. No map library in here: ./layers.ts is a direct rendering of a
- * scene, and the screens build scenes from domain values with the functions below.
+ * What the map draws, as plain data. No map library in here: ./layers.ts and ./RouteMarks.tsx are a
+ * direct rendering of a scene, and the screens build scenes from domain values with the functions below.
  */
-import type { CarSummary, CheckedCar } from "../../shared/cars.ts";
 import { haversineKm, type Bounds, type LngLat } from "../../shared/geo.ts";
-import type { ResolvedPlace, ShopView } from "../../shared/places.ts";
+import type { PlaceRef, PlaceResolution, ResolvedPlace, ShopId, ShopView } from "../../shared/places.ts";
+import type { PlannedRoute } from "../../shared/plans.ts";
 import type { Railroad } from "../../shared/railroads.ts";
-import type { RouteOption, RouteStrategy, TurnBack } from "../../shared/route.ts";
-import { fmtKmShort, fmtWindow } from "../format.ts";
-import { pillsOf, shortPlace, type Pill } from "../words.ts";
+import type { RoutePath, RouteStrategy, TurnBack } from "../../shared/route.ts";
+import { pillText } from "../words.ts";
 
-export type PinKind = "a" | "b" | "shop" | "stop";
+export type PinKind = "start" | "stop" | "destination" | "shop";
 
 export interface ScenePin {
   kind: PinKind;
-  /** Drawn inside the pin: A, B, the shop mark, or the stop number. */
+  /** Drawn inside the pin: the stop number, or "+" for the place being edited on Shops. */
   glyph: string;
   label: string;
   position: LngLat;
   /** Which side the label goes on, so neighbouring labels point away from each other. */
   side: -1 | 1;
+  /** A shop square: clicking it puts that shop in the plan. */
+  shopId: ShopId | null;
 }
 
 /** One route as drawn: a path per leg with its railroad colour, and chevrons along it for the direction of travel. */
@@ -28,51 +29,38 @@ export interface SceneRoute {
   legs: { railroad: Railroad; path: LngLat[] }[];
   /** Arrowheads at a few zoom spacings: position and bearing. */
   chevrons: { position: LngLat; bearingDeg: number; minZoom: number }[];
-  /** "BNSF · 1,046 km" / "about Thu 19 night – Fri 20 early". */
-  callout: { position: LngLat; title: string; sub: string };
   interchanges: { position: LngLat; from: Railroad; to: Railroad; place: string }[];
 }
 
-export interface SceneCar {
-  row: number;
-  carId: string;
-  position: LngLat;
-  pill: Pill;
+/** A small rounded label on the map for one route: click to select it. */
+export interface ScenePill {
+  id: RouteStrategy;
+  /** "828 km" on the selected route; "+180 km · 1 more interchange" on another. */
+  text: string;
   selected: boolean;
+  turnBacks: number;
+  /** Where it may sit, best first: on a stretch only this route runs. */
+  anchors: LngLat[];
 }
 
 export type MapScene =
   | {
       kind: "route";
-      selected: SceneRoute;
-      /** The other options, drawn grey underneath; clicking one selects it. */
-      alternatives: SceneRoute[];
-      /** Fix route only: the route before the person's stops, grey and dashed. */
-      ghost: SceneRoute | null;
-      /** A → B, dashed, with one arrow toward B: the car is somewhere on it. */
-      approach: LngLat[][];
-      pins: ScenePin[];
-      /** A ring at each place the selected route reverses. */
-      turnBacks: { index: number; position: LngLat; turnBack: TurnBack }[];
-      bounds: Bounds;
-    }
-  | {
-      kind: "fleet";
-      /** One marker per checked car, at its node B. Once the selected car's route is in, its pins mark it instead. */
-      cars: SceneCar[];
       selected: SceneRoute | null;
-      /** The selected car's A, B and shop, as on the Route screen. */
+      /** The other routes, drawn thin and grey underneath; clicking one selects it. */
+      alternatives: SceneRoute[];
+      /** Empty unless there are two or more routes. */
+      pills: ScenePill[];
+      /** The selected route's turn-backs. */
+      turnBacks: { position: LngLat; turnBack: TurnBack }[];
       pins: ScenePin[];
-      /** The selected car's A → B line. */
-      approach: LngLat[][];
-      /** From B to the shop as the crow flies, for "straight line 661 km". */
-      straight: { path: [LngLat, LngLat]; label: string; side: -1 | 1 } | null;
-      bounds: Bounds;
+      /** Null until a route exists: no camera jump after the first click. */
+      bounds: Bounds | null;
     }
   | { kind: "shops"; pins: ScenePin[]; bounds: Bounds };
 
-/** Something in the scene the user clicked. */
-export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "car"; row: number } | { kind: "turn-back"; index: number };
+/** Something in the scene the user clicked: a route to select, or a place to put in the plan. */
+export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "place"; ref: PlaceRef; position: LngLat };
 
 /** The Class I network end to end: where a scene with nothing in it is framed. */
 export const NETWORK_BOUNDS: Bounds = [-125, 24, -66, 55];
@@ -88,6 +76,8 @@ function bearingDeg([lon1, lat1]: LngLat, [lon2, lat2]: LngLat): number {
   return ((Math.atan2(y, x) / r) % 360 + 360) % 360;
 }
 
+const kmBetween = (p: LngLat, q: LngLat) => haversineKm(p[0], p[1], q[0], q[1]);
+
 /** Points every CHEVRON_KM along a path, each with the bearing of the segment it is on. */
 function chevronsAlong(path: LngLat[]): SceneRoute["chevrons"] {
   const out: SceneRoute["chevrons"] = [];
@@ -95,7 +85,7 @@ function chevronsAlong(path: LngLat[]): SceneRoute["chevrons"] {
   let walked = 0;
   for (let i = 0; i + 1 < path.length; i++) {
     const [p, q] = [path[i], path[i + 1]];
-    const length = haversineKm(p[0], p[1], q[0], q[1]);
+    const length = kmBetween(p, q);
     if (length === 0) continue;
     const bearing = bearingDeg(p, q);
     while (next <= walked + length) {
@@ -109,60 +99,68 @@ function chevronsAlong(path: LngLat[]): SceneRoute["chevrons"] {
   return out;
 }
 
-function sceneRoute(option: RouteOption, car: CheckedCar): SceneRoute {
-  const legs = option.legs.filter((leg) => leg.path.length >= 2).map((leg) => ({ railroad: leg.railroad, path: leg.path }));
+function sceneRoute(route: RoutePath): SceneRoute {
+  const legs = route.legs.filter((leg) => leg.path.length >= 2).map((leg) => ({ railroad: leg.railroad, path: leg.path }));
   const interchanges: SceneRoute["interchanges"] = [];
-  const changes = option.steps.filter((step) => step.kind === "interchange");
+  const changes = route.steps.filter((step) => step.kind === "interchange");
   for (let i = 1, c = 0; i < legs.length; i++) {
     if (legs[i].railroad === legs[i - 1].railroad) continue;
     const step = changes[c++];
     interchanges.push({ position: legs[i].path[0], from: legs[i - 1].railroad, to: legs[i].railroad, place: step && step.kind === "interchange" ? step.at : "" });
   }
-  const longest = option.legs.reduce((best, leg) => (leg.km > best.km && leg.path.length ? leg : best), option.legs[0]);
-  const mid = longest?.path[Math.floor(longest.path.length / 2)] ?? [car.places.shop.place.lon, car.places.shop.place.lat];
-  const changesWord = option.interchanges ? `${option.interchanges} interchange${option.interchanges === 1 ? "" : "s"} · ` : "";
-  return {
-    id: option.id,
-    legs,
-    chevrons: legs.flatMap((leg) => chevronsAlong(leg.path)),
-    callout: {
-      position: mid,
-      title: `${option.railroads.join(" + ")} · ${fmtKmShort(option.km)}`,
-      sub: changesWord + fmtWindow(option.verdict.arrival, car.assumptions.timing.basis),
-    },
-    interchanges,
-  };
+  return { id: route.strategies[0], legs, chevrons: legs.flatMap((leg) => chevronsAlong(leg.path)), interchanges };
+}
+
+/** The route whose strategies include `option`, else the router's own (the first). */
+export function chosenRoute(routes: readonly RoutePath[], option: RouteStrategy | null): RoutePath {
+  return (option ? routes.find((route) => route.strategies.includes(option)) : undefined) ?? routes[0];
+}
+
+/** Points on a route, at most this many, to compare it with the others. */
+const SAMPLES = 200;
+/** A sample this close to another route's is on a stretch they share. */
+const SHARED_KM = 2;
+
+function samplesOf(route: SceneRoute): LngLat[] {
+  const points = route.legs.flatMap((leg) => leg.path);
+  const step = Math.max(1, Math.ceil(points.length / SAMPLES));
+  return points.filter((_, i) => i % step === 0 || i === points.length - 1);
+}
+
+/** The points at these shares of a run's length. */
+function alongRun(run: LngLat[], shares: number[]): LngLat[] {
+  if (run.length < 2) return run.length ? shares.map(() => run[0]) : [];
+  const walked = [0];
+  for (let i = 1; i < run.length; i++) walked.push(walked[i - 1] + kmBetween(run[i - 1], run[i]));
+  const total = walked[walked.length - 1];
+  return shares.map((share) => run[Math.max(0, walked.findIndex((km) => km >= share * total))]);
 }
 
 /**
- * Moves each route's callout to the point of its middle stretch farthest from the other routes, so
- * that routes which share their middle (as alternatives often do) do not stack their labels.
+ * Where a route's pill may sit, best first: the points at 50 %, 30 % and 70 % of the longest stretch
+ * no other route runs within 2 km of (sampled at most 200 points a route), which is where routes part
+ * and what the pill tells apart; then the same shares of the whole route, for when the stretch has no
+ * room on screen (it is often short, and near a pin).
  */
-function spreadCallouts(routes: SceneRoute[]): void {
-  if (routes.length < 2) return;
-  const sample = (route: SceneRoute) => {
-    const points = route.legs.flatMap((leg) => leg.path);
-    const step = Math.max(1, Math.floor(points.length / 60));
-    return points.filter((_, i) => i % step === 0);
-  };
-  const samples = routes.map(sample);
-  const gap = ([x1, y1]: LngLat, [x2, y2]: LngLat) => Math.hypot((x1 - x2) * Math.cos((y1 * Math.PI) / 180), y1 - y2);
-  routes.forEach((route, r) => {
-    const own = samples[r];
-    const others = samples.filter((_, i) => i !== r).flat();
-    const from = Math.floor(own.length * 0.2);
-    const to = Math.max(from + 1, Math.ceil(own.length * 0.8));
-    let best: LngLat | null = null;
-    let bestGap = -1;
-    for (const point of own.slice(from, to)) {
-      const nearest = others.reduce((min, other) => Math.min(min, gap(point, other)), Infinity);
-      if (nearest > bestGap) {
-        bestGap = nearest;
-        best = point;
-      }
+export function pillAnchors(route: SceneRoute, others: SceneRoute[]): LngLat[] {
+  const own = samplesOf(route);
+  const theirs = others.flatMap(samplesOf);
+  let best: [number, number] = [0, 0];
+  let from = -1;
+  own.forEach((point, i) => {
+    const shared = theirs.some((other) => kmBetween(point, other) <= SHARED_KM);
+    if (!shared && from < 0) from = i;
+    const end = shared ? i : i === own.length - 1 ? i + 1 : -1;
+    if (from >= 0 && end >= 0) {
+      if (end - from > best[1] - best[0]) best = [from, end];
+      from = -1;
     }
-    if (best) route.callout = { ...route.callout, position: best };
   });
+  const shares = [0.5, 0.3, 0.7];
+  const whole = alongRun(own, shares);
+  if (best[1] <= best[0]) return whole;
+  const apart = alongRun(own.slice(best[0], best[1]), shares);
+  return [...apart, ...whole.filter((p) => !apart.some((q) => q[0] === p[0] && q[1] === p[1]))];
 }
 
 class BoundsBuilder {
@@ -191,90 +189,72 @@ class BoundsBuilder {
   }
 }
 
-/** "Taylor, TX" → "Taylor": a pin label has little room. */
-const pinName = (label: string) => shortPlace(label);
+const placed = (resolution: PlaceResolution | null | undefined): ResolvedPlace | null => (resolution?.ok ? resolution.place : null);
+const at = (place: ResolvedPlace): LngLat => [place.lon, place.lat];
 
-/** Where the car's A, B and shop are drawn for one option, with their pins and the A → B line. */
-function carMarks(car: CheckedCar, option: RouteOption) {
-  const { a, b, shop, stops } = car.places;
-  const approach = car.approach.paths.filter((path) => path.length >= 2);
-  const firstLeg = option.legs.find((leg) => leg.path.length);
-  const lastLeg = [...option.legs].reverse().find((leg) => leg.path.length);
+/** A shop's place that is the plan's start or destination already: its pin marks it. */
+const isEnd = (shop: ResolvedPlace, ends: (ResolvedPlace | null)[]) => ends.some((end) => end?.match.method === "shop" && end.lon === shop.lon && end.lat === shop.lat);
 
-  const aAt: LngLat = approach[0]?.[0] ?? [a.place.lon, a.place.lat];
-  const bAt: LngLat = firstLeg?.path[0] ?? approach[approach.length - 1]?.at(-1) ?? [b.place.lon, b.place.lat];
-  const shopAt: LngLat = lastLeg?.path[lastLeg.path.length - 1] ?? [shop.place.lon, shop.place.lat];
-  const aSide: -1 | 1 = aAt[0] <= bAt[0] ? -1 : 1;
-  const stopPins: ScenePin[] = stops.map((stop, i) => ({
-    kind: "stop",
-    glyph: String(i + 1),
-    label: stop.place.label,
-    position: [stop.place.lon, stop.place.lat],
-    side: 1,
-  }));
-  const beforeShop = stopPins[stopPins.length - 1]?.position ?? bAt;
-  const pins: ScenePin[] = [
-    { kind: "a", glyph: "A", label: `A · ${pinName(a.place.label)}`, position: aAt, side: aSide },
-    { kind: "b", glyph: "B", label: `B · ${pinName(b.place.label)}`, position: bAt, side: aSide === -1 ? 1 : -1 },
-    ...stopPins,
-    { kind: "shop", glyph: "", label: `Shop · ${pinName(shop.place.label)}`, position: shopAt, side: shopAt[0] >= beforeShop[0] ? 1 : -1 },
-  ];
-  return { pins, approach: approach.length ? approach : [[aAt, bAt]], bAt, shopAt };
-}
+/**
+ * The planner's map: the chosen route on top of the others, the pills that tell them apart, the
+ * turn-backs, a pin for each place as soon as it resolves, and every other saved shop as a small square
+ * to click.
+ */
+export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; shops: ShopView[] }): MapScene {
+  const { planned, option, shops } = input;
+  const routes = planned?.outcome === "routed" ? planned.routes : null;
+  const chosen = routes ? chosenRoute(routes, option) : null;
+  const start = placed(planned?.places.start);
+  const destination = placed(planned?.places.destination);
 
-/** Main and Fix route: the selected option on top of the others. `ghost` is the same car checked without the person's stops. */
-export function routeScene(car: CheckedCar, selected: RouteStrategy, ghost: RouteOption | null): MapScene {
-  const option = car.options.find((o) => o.id === selected) ?? car.options[0];
-  const { pins, approach } = carMarks(car, option);
+  // The ends sit where the chosen route starts and ends on the track.
+  const firstLeg = chosen?.legs.find((leg) => leg.path.length);
+  const lastLeg = chosen ? [...chosen.legs].reverse().find((leg) => leg.path.length) : undefined;
+  const startAt = firstLeg?.path[0] ?? (start ? at(start) : null);
+  const destinationAt = lastLeg?.path[lastLeg.path.length - 1] ?? (destination ? at(destination) : null);
+  const startSide: -1 | 1 = startAt && destinationAt && startAt[0] > destinationAt[0] ? 1 : -1;
+
+  const pins: ScenePin[] = [];
+  for (const shop of shops) {
+    const place = placed(shop.place);
+    if (!place || isEnd(place, [start, destination])) continue;
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), side: 1, shopId: shop.id });
+  }
+  if (start && startAt) pins.push({ kind: "start", glyph: "", label: start.label, position: startAt, side: startSide, shopId: null });
+  (planned?.places.stops ?? []).forEach((resolution, i) => {
+    const stop = placed(resolution);
+    if (stop) pins.push({ kind: "stop", glyph: String(i + 1), label: stop.label, position: at(stop), side: 1, shopId: null });
+  });
+  if (destination && destinationAt) pins.push({ kind: "destination", glyph: "", label: destination.label, position: destinationAt, side: startSide === -1 ? 1 : -1, shopId: null });
+
+  if (!routes || !chosen) return { kind: "route", selected: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
+
+  const selected = sceneRoute(chosen);
+  const others = routes.filter((route) => route !== chosen);
+  const alternatives = others.map(sceneRoute);
+  const all = [selected, ...alternatives];
+  const pills: ScenePill[] =
+    routes.length < 2
+      ? []
+      : [chosen, ...others].map((route, i) => ({
+          id: route.strategies[0],
+          text: pillText(route, chosen),
+          selected: i === 0,
+          turnBacks: route.turnBacks.length,
+          anchors: pillAnchors(all[i], all.filter((_, j) => j !== i)),
+        }));
 
   const bounds = new BoundsBuilder();
-  for (const o of car.options) for (const leg of o.legs) bounds.addAll(leg.path);
-  if (ghost) for (const leg of ghost.legs) bounds.addAll(leg.path);
-  for (const path of approach) bounds.addAll(path);
-  bounds.addAll(pins.map((pin) => pin.position));
-
-  const selectedRoute = sceneRoute(option, car);
-  const alternatives = car.options.filter((o) => o.id !== option.id).map((o) => sceneRoute(o, car));
-  spreadCallouts([selectedRoute, ...alternatives]);
+  for (const route of all) for (const leg of route.legs) bounds.addAll(leg.path);
+  bounds.addAll(pins.filter((pin) => pin.kind !== "shop").map((pin) => pin.position));
 
   return {
     kind: "route",
-    selected: selectedRoute,
+    selected,
     alternatives,
-    ghost: ghost ? sceneRoute(ghost, car) : null,
-    approach,
+    pills,
+    turnBacks: chosen.turnBacks.map((turnBack) => ({ position: [turnBack.at.lon, turnBack.at.lat], turnBack })),
     pins,
-    turnBacks: option.turnBacks.map((turnBack, index) => ({ index, position: [turnBack.at.lon, turnBack.at.lat], turnBack })),
-    bounds: bounds.done(),
-  };
-}
-
-/** Cars: the whole batch on one map, and the selected car's route, pins and A → B line once its check has loaded. */
-export function fleetScene(cars: CarSummary[], selectedRow: number | null, selected: CheckedCar | null): MapScene {
-  const marks = selected ? carMarks(selected, selected.options[0]) : null;
-  const sceneCars: SceneCar[] = [];
-  for (const car of cars) {
-    if (car.check.outcome !== "checked") continue;
-    sceneCars.push({ row: car.row, carId: car.carId, position: car.check.at, pill: pillsOf(car.check)[0], selected: car.row === selectedRow });
-  }
-  const bounds = new BoundsBuilder();
-  bounds.addAll(sceneCars.map((car) => car.position));
-  const route = selected ? sceneRoute(selected.options[0], selected) : null;
-  if (route) for (const leg of route.legs) bounds.addAll(leg.path);
-  if (marks) {
-    bounds.addAll(marks.pins.map((pin) => pin.position));
-    for (const path of marks.approach) bounds.addAll(path);
-  }
-  // The selected car on top, so its marker is never hidden under a neighbour's.
-  sceneCars.sort((x, y) => Number(x.selected) - Number(y.selected));
-  return {
-    kind: "fleet",
-    cars: sceneCars,
-    selected: route,
-    pins: marks?.pins ?? [],
-    approach: marks?.approach ?? [],
-    // Its label goes on the side away from the shop's, which hangs off the same end of the line.
-    straight: marks && selected ? { path: [marks.bAt, marks.shopAt], label: `straight line ${fmtKmShort(selected.straightKm)}`, side: marks.pins[marks.pins.length - 1].side === 1 ? -1 : 1 } : null,
     bounds: bounds.done(),
   };
 }
@@ -284,9 +264,9 @@ export function shopsScene(shops: ShopView[], editing: Pick<ResolvedPlace, "labe
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     if (!shop.place.ok) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: [shop.place.place.lon, shop.place.place.lat], side: 1 });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), side: 1, shopId: shop.id });
   }
-  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: [editing.lon, editing.lat], side: 1 });
+  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: [editing.lon, editing.lat], side: 1, shopId: null });
   const bounds = new BoundsBuilder();
   bounds.addAll(pins.map((pin) => pin.position));
   return { kind: "shops", pins, bounds: bounds.done() };

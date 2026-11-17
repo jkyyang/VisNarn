@@ -16,7 +16,7 @@
  *              position:  code sets → city names → Your shops        (A, B, a stop, a shop's own location)
  *            A bare number is never an FRA id: digits alone are only ever looked up as a code.
  *
- * Anything that does not resolve is a PlaceProblem, and a car with one is "Cannot check".
+ * Anything that does not resolve is a PlaceProblem, shown at the place it is about; a plan with one is not routed.
  */
 import { MAX_SNAP_KM, type City, type RailNetwork } from "../../engine/index.ts";
 import { round5 } from "../../shared/geo.ts";

@@ -1,86 +1,133 @@
 /**
- * The Route screen (Main) in a real browser against the real server: the EXAMPLE car 104233,
- * reported between Taylor, TX (A) and Temple, TX (B), going to the EXAMPLE shop at North Little Rock.
- * Its shortest-looking route turns back in Temple yard, which is what the screen must not hide.
+ * The route planner in a real browser against the real server: Taylor, TX to the EXAMPLE shop at
+ * North Little Rock, a stop clicked at Temple, the routes told apart by their pills, saved and opened
+ * again. Places only: no car and no clock.
  */
-import { expectMapCanvases, keepScreenshot, mapRegion, test, expect } from "./app.ts";
+import type { Locator, Page } from "@playwright/test";
+import type { PlannedRoute } from "../../shared/plans.ts";
+import { RAILROADS } from "../../shared/railroads.ts";
+import { clickMapAt, expect, expectMapCanvases, fittedCamera, keepScreenshot, mapRegion, planRoute, routeBounds, test } from "./app.ts";
 
-test.describe("Route screen", () => {
-  test("EXAMPLE 104233: a verdict that asks to check the route, three routes, the steps with the turn-back, and the map", async ({ page }) => {
+/** FRA node 358070 at Temple, TX, where BNSF and UP meet. */
+const TEMPLE = { lon: -97.33832, lat: 31.08799 };
+
+const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).getByRole("button");
+const stopRows = (page: Page): Locator => page.getByRole("list", { name: "Stops" }).getByRole("listitem");
+const legend = (page: Page): Locator => page.getByRole("list", { name: "Railroad colors" }).getByRole("listitem");
+const pressedRow = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).locator('[aria-pressed="true"]');
+
+/** The next routing answer the page gets. */
+const nextRoute = (page: Page) =>
+  page.waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST").then(async (r) => (await r.json()) as PlannedRoute);
+
+/** Clicks Temple on the map, after "Fit whole route" has put the camera where the test can work it out. */
+async function clickTemple(page: Page, planned: PlannedRoute): Promise<PlannedRoute> {
+  await page.getByRole("button", { name: "Fit whole route" }).click();
+  const answer = nextRoute(page);
+  await clickMapAt(page, TEMPLE, await fittedCamera(page, routeBounds(planned)));
+  return answer;
+}
+
+test.describe("Route planner", () => {
+  test("empty at first; a typed start and destination give a route, and the legend lists only its railroads", async ({ page }) => {
     await page.goto("/route");
-
-    const form = page.getByRole("form", { name: "Car position and shop" });
-    await expect(form.getByRole("textbox", { name: "Car" })).toHaveValue("EXAMPLE 104233");
-    await expect(form).toContainText("Found on the network · served by BNSF and UP");
-
-    const verdict = page.getByRole("region", { name: "Verdict" });
-    await expect(verdict.getByRole("heading")).toHaveText("Check the route before using this result");
-    await expect(verdict).toContainText("Check route");
-    // A route that turns back is never "On time", whatever the hour the test runs at.
-    await expect(verdict).not.toContainText("On time");
-    await expect(verdict).toContainText("Rough estimate");
-    await expect(verdict).toContainText("If the car is at B now");
-    await expect(verdict).toContainText("If the car just passed A");
-    await expect(verdict).toContainText("400 km/day placeholder");
-    // Rough times only, while the speed is a placeholder: a day and a part of the day, no clock time.
-    await expect(verdict).toContainText(/about (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d+ (early|morning|afternoon|evening|night)/);
-
-    const routes = page.getByRole("region", { name: "Routes" });
-    await expect(routes.getByRole("heading", { name: "3 routes" })).toBeVisible();
-    const pick = routes.getByRole("button", { name: /Router.s pick/ });
-    await expect(pick).toHaveAttribute("aria-pressed", "true");
-    await expect(pick).toContainText("1,046 km · no interchanges");
-    await expect(routes.getByRole("note").first()).toContainText("This route turns back at Temple, TX (yard track). Check it before trusting the time.");
-    const shortest = routes.getByRole("button", { name: /Shortest/ });
-    await expect(shortest).toContainText("758 km · 1 interchange");
-    // It turns back too, so its pill is never "On time". Which warning shows (Tight or Check route)
-    // depends on the hour the test runs, because the EXAMPLE times are relative to now.
-    await expect(shortest).toContainText(/Tight|Check route/);
-    await expect(shortest).not.toContainText("On time");
-    const noTurnBacks = routes.getByRole("button", { name: /No turn-backs/ });
-    await expect(noTurnBacks).toContainText("828 km · 1 interchange (BNSF → UP)");
-    await expect(noTurnBacks).toContainText("On time");
-
-    const steps = page.getByRole("region", { name: "Steps" });
-    await expect(steps.getByRole("heading", { level: 3 })).toHaveText(/^Steps · BNSF/);
-    for (const text of ["Taylor, TX", "A · last passed", "Car is somewhere here · 63 km", "Temple, TX", "B · next node", "BNSF toward North Little Rock (heading NE)", "North Little Rock, AR", "Route 1,046 km vs straight line 625 km (1.7×)"]) {
-      await expect(steps).toContainText(text);
-    }
-    const turnBack = steps.locator(".step-text").filter({ hasText: "Turns back at Temple, TX (yard track): check" });
-    await expect(turnBack).toContainText("Arrives on Galveston Sub heading NW, leaves heading SE");
-    await expect(turnBack.getByRole("button", { name: "Show on map" })).toBeVisible();
-    await expect(turnBack.getByRole("link", { name: "Fix route" })).toHaveAttribute("href", "/route/fix?at=0");
-    await expect(steps).toContainText("Yard turn-back time: not counted");
-
+    await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
+    await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toBeVisible();
     await expectMapCanvases(page);
-    await expect(mapRegion(page)).toContainText("Planned route from the report · not live tracking");
-    await keepScreenshot(page, "route");
+
+    const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    expect(planned.outcome).toBe("routed");
+    await expect(routeRows(page)).toHaveCount(planned.outcome === "routed" ? planned.routes.length : 0);
+    await expect(routeRows(page).first()).toHaveAttribute("aria-pressed", "true");
+    const railroads = planned.outcome === "routed" ? planned.routes[0].railroads : [];
+    await expect(legend(page)).toHaveText(RAILROADS.filter((railroad) => railroads.includes(railroad)));
+    await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor");
+    await expect(page.getByRole("list", { name: "Sections" })).toContainText("North Little Rock");
+    await expect(page.locator(".panel")).not.toContainText(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\d{1,2}:\d{2}|prep|margin|on time|act now|check first|not live/i);
   });
 
-  test("choosing another route shows its steps, keeps the choice in the link, and survives a reload", async ({ page }) => {
+  test("a click at Temple adds a stop; a pill selects its route and adds no stop; pills keep apart; Undo takes the stop back", async ({ page }) => {
     await page.goto("/route");
-    const routes = page.getByRole("region", { name: "Routes" });
-    const pick = routes.getByRole("button", { name: /Router.s pick/ });
-    await expect(pick).toHaveAttribute("aria-pressed", "true");
+    const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    const withStop = await clickTemple(page, planned);
+    await expect(stopRows(page)).toHaveCount(1);
+    await expect(stopRows(page).first()).toContainText("Temple");
+    expect(withStop.outcome).toBe("routed");
 
-    await routes.getByRole("button", { name: /No turn-backs/ }).click();
-    await expect(page).toHaveURL(/\/route\?option=no-turn-backs$/);
-    const noTurnBacks = routes.getByRole("button", { name: /No turn-backs/ });
-    await expect(noTurnBacks).toHaveAttribute("aria-pressed", "true");
-    await expect(pick).toHaveAttribute("aria-pressed", "false");
+    // Every visible pill is clear of the others and of the turn-back discs.
+    const pills = page.locator(".route-pill");
+    await expect.poll(async () => pills.count()).toBeGreaterThan(1);
+    const boxes = (await Promise.all((await pills.all()).map((p) => p.boundingBox()))).filter((b) => b !== null);
+    const discs = (await Promise.all((await page.locator(".turn-mark").all()).map((p) => p.boundingBox()))).filter((b) => b !== null);
+    const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    for (const [i, a] of boxes.entries()) {
+      for (const b of boxes.slice(i + 1)) expect(overlap(a, b)).toBe(false);
+      for (const d of discs) expect(overlap(a, d)).toBe(false);
+    }
+    await keepScreenshot(page, "route");
 
-    const steps = page.getByRole("region", { name: "Steps" });
-    await expect(steps.getByRole("heading", { level: 3 })).toHaveText(/^Steps · UP via Fort Worth/);
-    await expect(steps).not.toContainText("Turns back");
-    await expect(steps).toContainText(/BNSF → UP|Change to UP|interchange/i);
-    await expect(page.getByRole("region", { name: "Verdict" })).toContainText("On time");
+    // A pill click selects that route; it must not also reach the map and place a stop.
+    const before = (await pressedRow(page).textContent()) ?? "";
+    await page.locator(".route-pill:not(.is-selected)").first().click();
+    await expect(page).toHaveURL(/\?option=[a-z-]+$/);
+    await expect(pressedRow(page)).not.toHaveText(before);
+    await page.waitForTimeout(500);
+    await expect(stopRows(page)).toHaveCount(1);
 
-    await page.reload();
-    await expect(page.getByRole("region", { name: "Routes" }).getByRole("button", { name: /No turn-backs/ })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("region", { name: "Steps" }).getByRole("heading", { level: 3 })).toHaveText(/^Steps · UP via Fort Worth/);
+    await page.getByRole("button", { name: "Undo route change" }).click();
+    await expect(page.getByRole("list", { name: "Stops" })).toHaveCount(0);
+  });
 
-    await page.getByRole("region", { name: "Routes" }).getByRole("button", { name: /Shortest/ }).click();
-    await expect(page).toHaveURL(/\/route\?option=shortest$/);
-    await expect(page.getByRole("region", { name: "Verdict" }).getByRole("heading")).toHaveText("Check the route before using this result");
+  test("a stop where railroads meet offers its lines; the chosen line is sent; a saved route reopens on the same alternative", async ({ page }) => {
+    await page.goto("/route");
+    const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    await clickTemple(page, planned);
+    const lines = page.getByRole("radiogroup", { name: "Line at stop 1" });
+    await expect(lines.getByRole("radio", { name: "Any" })).toHaveAttribute("aria-checked", "true");
+    const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"UP"'));
+    await lines.getByRole("radio", { name: "UP" }).click();
+    await answered;
+    await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
+    await expect(lines.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
+
+    // Pick the second route, save, and open the saved route again from its link.
+    await routeRows(page).nth(1).click();
+    await expect(page).toHaveURL(/\?option=/);
+    const chosen = (await pressedRow(page).textContent()) ?? "";
+    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Taylor → North Little Rock via Temple");
+    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
+    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+    const savedAt = new URL(page.url()).pathname;
+
+    await page.goto(savedAt);
+    await expect(pressedRow(page)).toHaveText(chosen);
+    await expect(stopRows(page)).toHaveCount(1);
+    await expect(page.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+
+    // Delete it again with the inline confirm, so the other tests start from no saved routes.
+    await page.getByRole("button", { name: "New" }).click();
+    await page.getByRole("button", { name: "Delete EXAMPLE Taylor → North Little Rock via Temple" }).click();
+    await page.getByRole("group", { name: "Delete EXAMPLE Taylor → North Little Rock via Temple" }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
+  });
+
+  test("a turn-back is an amber mark on the map; hovering it shows where and how the route turns", async ({ page, request }) => {
+    // Taylor → Temple (the city) → North Little Rock: the router's own route turns back in Temple yard.
+    const plan = { start: { kind: "text", text: "Taylor, TX" }, stops: [{ kind: "text", text: "Temple, TX" }], destination: { kind: "text", text: "North Little Rock, AR" } };
+    const answer = (await (await request.post("/api/route", { data: plan })).json()) as PlannedRoute;
+    test.skip(answer.outcome !== "routed" || !answer.routes[0].turnBacks.length, "This network build has no turn-back on that route; the jsdom test covers the mark.");
+    const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null } })).json()) as { id: string };
+
+    await page.goto(`/route/saved/${saved.id}`);
+    await expect(routeRows(page).first()).toContainText("turn-back");
+    const mark = mapRegion(page).getByRole("button", { name: /^Turn-back at / }).first();
+    await expect(mark).toBeVisible();
+    await mark.hover();
+    await expect(page.getByRole("tooltip")).toContainText(/yard track/);
+    await expect(page.getByRole("tooltip")).toContainText(/arrives .* · leaves /);
+    await expect(legend(page).last()).toHaveText("↩Turn-back");
+    await request.delete(`/api/saved-routes/${saved.id}`);
   });
 });
