@@ -166,13 +166,14 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     watchCamera(event.target);
   };
   const railroadsShown = scene?.kind === "route" ? [scene.selected, ...scene.alternatives] : scene?.kind === "fleet" && scene.selected ? [scene.selected] : [];
+  const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
 
   return (
     <div className="map-canvas" ref={root}>
       <MapGL
         initialViewState={INITIAL_VIEW}
         // `zoom` changes only when a move ends, so the style never swaps in the middle of a zoom.
-        mapStyle={basemapStyle(layers.basemap, look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM))}
+        mapStyle={basemapStyle(layers.basemap, darkStreets)}
         // Map ↔ Satellite ↔ dark share nothing, so load each style clean instead of diffing into it.
         styleDiffing={false}
         attributionControl={false}
@@ -188,7 +189,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-right" />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution fold={narrow} />
-        {(layers.tracks || content?.forceTracks) && <RealTracks />}
+        {(layers.tracks || content?.forceTracks) && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} leftInset={scene?.kind === "fleet" && !narrow ? CAR_CARD_INSET : 0} topInset={scene?.kind === "fleet" && narrow ? CAR_CARD_TOP_PHONE : 0} />}
         <FlyTo focus={content?.focus} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />

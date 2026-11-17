@@ -2,7 +2,7 @@
  * Free basemaps, no API key.
  * - Map: OpenFreeMap vector styles (OpenStreetMap data), light "liberty" / dark "dark".
  * - Satellite: Esri World Imagery + Esri boundaries & places labels.
- * - Optional overlay: OpenRailwayMap tracks, stations and yards.
+ * - Optional overlay, Real tracks: the rail lines in the same OpenFreeMap vector tiles.
  * Check each provider's terms before production use (Esri imagery needs an ArcGIS account for commercial apps).
  */
 import type { StyleSpecification } from "maplibre-gl";
@@ -40,8 +40,5 @@ export function basemapStyle(kind: BasemapKind, dark: boolean): string | StyleSp
   return `https://tiles.openfreemap.org/styles/${dark ? "dark" : "liberty"}`;
 }
 
-export const OPENRAILWAYMAP_TILES = ["a", "b", "c"].map(
-  (s) => `https://${s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`,
-);
-export const OPENRAILWAYMAP_ATTRIBUTION =
-  'Rail overlay © <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC-BY-SA), © OpenStreetMap contributors';
+/** OpenFreeMap's vector tiles (OpenMapTiles schema) as TileJSON, which also carries their attribution. */
+export const OPENFREEMAP_TILES = "https://tiles.openfreemap.org/planet";
