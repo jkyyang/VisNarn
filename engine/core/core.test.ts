@@ -6,7 +6,7 @@ import { cityPoint, loadTestCore } from "./testing.ts";
 
 let graph: RailGraph;
 let router: Router;
-const opt = { allowedMask: ALL_RAILROADS_MASK, interchangeKm: 500 };
+const opt = { allowedMask: ALL_RAILROADS_MASK, passenger: false, interchangeKm: 500 };
 const only = (...rr: string[]) => ({ ...opt, allowedMask: rr.reduce((m, r) => m | (1 << RAILROADS.indexOf(r as never)), 0) });
 const at = (name: string) => cityPoint(graph, name);
 
@@ -25,12 +25,12 @@ describe("RailGraph", () => {
   });
   it("lets a point be served by one chosen railroad only", () => {
     const hit = graph.nearestNode(-97.34, 31.1)!;
-    const all = graph.serving(graph.nodePoint(hit.node));
+    const all = graph.serving(graph.nodePoint(hit.node), { allowedMask: ALL_RAILROADS_MASK, passenger: true });
     const [first] = [...all.keys()];
-    expect([...graph.serving({ ...graph.nodePoint(hit.node), only: first }).keys()]).toEqual([first]);
+    expect([...graph.serving({ ...graph.nodePoint(hit.node), only: first }, { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()]).toEqual([first]);
   });
   it("finds who serves Austin", () => {
-    expect([...graph.serving(at("Austin, TX")).keys()].map((i) => RAILROADS[i])).toEqual(["UP"]);
+    expect([...graph.serving(at("Austin, TX"), { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()].map((i) => RAILROADS[i])).toEqual(["UP"]);
   });
 });
 

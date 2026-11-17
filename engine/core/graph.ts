@@ -10,15 +10,35 @@
  *   uint32 nNodes, uint32 nEdges
  *   float32[nNodes*2] lon,lat        uint8[nNodes] mainline railroad mask   (+ pad bytes)
  *   uint32[nEdges] u   uint32[nEdges] v   float32[nEdges] km
- *   uint8[nEdges] railroad mask       uint16[nEdges] subdivision index
+ *   uint8[nEdges] line mask           uint16[nEdges] subdivision index
  *   uint16[nEdges] heading leaving u  uint16[nEdges] heading leaving v   (degrees, 0 = north)
- *   uint8[nEdges] flags (bit 0 = yard track)
+ *   uint8[nEdges] flags (YARD_FLAG, PASSENGER_FLAG)
+ * Line masks (edges and the node mainline mask) have one bit per line: the Class I railroads in RAILROADS
+ * order, then REGIONAL and SHORT_LINE, which stand for all regional and all short-line railroads.
  */
 import { haversineKm } from "../../shared/geo.ts";
 import type { FraId } from "../../shared/places.ts";
 import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
 
+/** Lines the router can run on: each Class I railroad, then every regional railroad, then every short line. */
+export const LINES = [...RAILROADS, "regional", "short line"] as const;
+export type Line = (typeof LINES)[number];
+export const REGIONAL = LINES.indexOf("regional");
+export const SHORT_LINE = LINES.indexOf("short line");
+
 export const ALL_RAILROADS_MASK = (1 << RAILROADS.length) - 1;
+export const ALL_LINES_MASK = (1 << LINES.length) - 1;
+
+/** graph.bin edge flags. */
+const YARD_FLAG = 1;
+/** Owned by a passenger, commuter or transit agency (pipeline/railroad_classes.py PASSENGER). */
+const PASSENGER_FLAG = 2;
+
+/** The track a route may use: lines by bit (LINES order), and whether passenger-owned track counts. */
+export interface Track {
+  allowedMask: number;
+  passenger: boolean;
+}
 
 /** Railroads as the bit mask graph.bin uses. */
 export const maskOf = (railroads: readonly Railroad[]): number =>
@@ -57,9 +77,11 @@ export class RailGraph {
   readonly edgeCount: number;
   readonly lon: Float32Array;
   readonly lat: Float32Array;
-  /** Bit i set = railroad i has mainline touching this node. Used for snapping places. */
+  /** Bit i set = line i has mainline touching this node. Used for snapping places. */
   readonly mainMask: Uint8Array;
-  /** Bit i set = railroad i has any track at this node. Used for interchanges. */
+  /** mainMask, without lines that reach this node on passenger-owned track only. */
+  readonly freightMainMask: Uint8Array;
+  /** Bit i set = line i has any track at this node. Used for interchanges. */
   readonly atMask: Uint8Array;
   readonly edgeU: Uint32Array;
   readonly edgeV: Uint32Array;
@@ -73,6 +95,8 @@ export class RailGraph {
   readonly yardNode: Uint8Array;
   /** 1 = this segment is yard track. A car may only change direction between two yard segments. */
   readonly edgeYard: Uint8Array;
+  /** 1 = owned by a passenger agency: used only when the route allows passenger-owned track. */
+  readonly edgePassenger: Uint8Array;
   /** CSR adjacency: edges of node n are adj[adjOffset[n] .. adjOffset[n+1]). */
   readonly adjOffset: Uint32Array;
   readonly adj: Uint32Array;
@@ -100,7 +124,8 @@ export class RailGraph {
     this.headU = new Uint16Array(buf.slice(o, (o += e * 2)));
     this.headV = new Uint16Array(buf.slice(o, (o += e * 2)));
     const flags = new Uint8Array(buf.slice(o, (o += e)));
-    this.edgeYard = flags.map((f) => f & 1);
+    this.edgeYard = flags.map((f) => f & YARD_FLAG);
+    this.edgePassenger = flags.map((f) => (f & PASSENGER_FLAG ? 1 : 0));
     if (o !== buf.byteLength) throw new Error(`graph.bin size mismatch: read ${o} of ${buf.byteLength} bytes`);
 
     this.lon = new Float32Array(n);
@@ -111,9 +136,10 @@ export class RailGraph {
     }
 
     this.atMask = new Uint8Array(n);
+    const freightAtMask = new Uint8Array(n);
     this.yardNode = new Uint8Array(n);
     for (let k = 0; k < e; k++) {
-      if (flags[k] & 1) this.yardNode[this.edgeU[k]] = this.yardNode[this.edgeV[k]] = 1;
+      if (flags[k] & YARD_FLAG) this.yardNode[this.edgeU[k]] = this.yardNode[this.edgeV[k]] = 1;
     }
     const off = new Uint32Array(n + 1);
     for (let k = 0; k < e; k++) {
@@ -122,7 +148,12 @@ export class RailGraph {
       off[v + 1]++;
       this.atMask[u] |= this.edgeMask[k];
       this.atMask[v] |= this.edgeMask[k];
+      if (!this.edgePassenger[k]) {
+        freightAtMask[u] |= this.edgeMask[k];
+        freightAtMask[v] |= this.edgeMask[k];
+      }
     }
+    this.freightMainMask = this.mainMask.map((mask, i) => mask & freightAtMask[i]);
     for (let i = 0; i < n; i++) off[i + 1] += off[i];
     this.adjOffset = off;
     this.adj = new Uint32Array(2 * e);
@@ -160,13 +191,13 @@ export class RailGraph {
     return this.fraIndex.get(fraId) ?? -1;
   }
 
-  /** Nearest node; with needMask, only nodes where one of those railroads has mainline. */
-  nearestNode(lon: number, lat: number, needMask = 0, maxKm = Infinity): { node: number; km: number } | null {
+  /** Nearest node; with needMask, only nodes where one of those lines is in `mainline` (by default, has mainline there). */
+  nearestNode(lon: number, lat: number, needMask = 0, maxKm = Infinity, mainline = this.mainMask): { node: number; km: number } | null {
     let best = -1;
     let bd = Infinity;
     const cl = Math.cos((lat * Math.PI) / 180);
     for (let i = 0; i < this.nodeCount; i++) {
-      if (needMask && !(this.mainMask[i] & needMask)) continue;
+      if (needMask && !(mainline[i] & needMask)) continue;
       const dx = (this.lon[i] - lon) * cl;
       const dy = this.lat[i] - lat;
       const d = dx * dx + dy * dy;
@@ -197,31 +228,37 @@ export class RailGraph {
     return { label: `FRA node ${this.fraId(node)}`, lon: this.lon[node], lat: this.lat[node], node };
   }
 
-  /** Railroads serving a point → their entry node. Exact nodes use the railroads present there. */
-  serving(p: Point, maxKm = MAX_SNAP_KM): Map<number, number> {
+  /** Allowed lines serving a point → their entry node. Exact nodes use the lines present there. */
+  serving(p: Point, track: Track, maxKm = MAX_SNAP_KM): Map<number, number> {
     const out = new Map<number, number>();
     if (p.node !== undefined) {
-      for (let c = 0; c < RAILROADS.length; c++) {
+      for (let c = 0; c < LINES.length; c++) {
         if (p.only !== undefined && p.only !== c) continue;
-        if (this.atMask[p.node] & (1 << c)) out.set(c, p.node);
+        if (this.atMask[p.node] & track.allowedMask & (1 << c)) out.set(c, p.node);
       }
       return out;
     }
     // "Which line?" names the railroad on purpose, so it keeps the plain distance limit.
-    const near = p.only !== undefined ? this.nearestNode(p.lon, p.lat, 1 << p.only, maxKm) : null;
+    const near = p.only !== undefined ? this.nearestNode(p.lon, p.lat, 1 << p.only, maxKm, this.mainline(track)) : null;
     if (p.only !== undefined) return near ? new Map([[p.only, near.node]]) : out;
-    for (const hit of this.servingNear(p.lon, p.lat, maxKm)) out.set(hit.railroad, hit.node);
+    for (const hit of this.servingNear(p.lon, p.lat, track, maxKm)) out.set(hit.line, hit.node);
     return out;
   }
 
-  /** Each railroad whose mainline is within `maxKm` and within SERVE_SLACK_KM of the nearest one. */
-  servingNear(lon: number, lat: number, maxKm = MAX_SNAP_KM): { railroad: number; node: number; km: number }[] {
-    const hits: { railroad: number; node: number; km: number }[] = [];
-    for (let c = 0; c < RAILROADS.length; c++) {
-      const hit = this.nearestNode(lon, lat, 1 << c, maxKm);
-      if (hit) hits.push({ railroad: c, ...hit });
+  /** Each allowed line whose mainline is within `maxKm` and within SERVE_SLACK_KM of the nearest allowed one. */
+  servingNear(lon: number, lat: number, track: Track, maxKm = MAX_SNAP_KM): { line: number; node: number; km: number }[] {
+    const hits: { line: number; node: number; km: number }[] = [];
+    for (let c = 0; c < LINES.length; c++) {
+      if (!(track.allowedMask & (1 << c))) continue;
+      const hit = this.nearestNode(lon, lat, 1 << c, maxKm, this.mainline(track));
+      if (hit) hits.push({ line: c, ...hit });
     }
     const nearest = Math.min(...hits.map((h) => h.km));
     return hits.filter((h) => h.km <= nearest + SERVE_SLACK_KM);
+  }
+
+  /** Node mainline masks for this track: a place snaps only to mainline the route may use. */
+  private mainline(track: Track): Uint8Array {
+    return track.passenger ? this.mainMask : this.freightMainMask;
   }
 }

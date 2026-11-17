@@ -4,22 +4,23 @@
  * INTERNAL to engine/ (see graph.ts): legs, reversals and route ends here carry node and edge
  * indexes. engine/trip.ts turns a Route into the stable-id RoutePath the rest of the app sees.
  *
- * Search state = (directed track segment the car is on, railroad, interchanges used).
- * - Moving onto the next segment needs the railroad to own or have trackage rights on it (cost = km).
+ * Search state = (directed track segment the car is on, line, interchanges used). A line is a Class I
+ * railroad, or all regional railroads together, or all short lines together (graph.ts LINES).
+ * - Moving onto the next segment needs the line to own or have trackage rights on it (cost = km), and
+ *   passenger-owned track only when `passenger` is allowed (cost = PASSENGER_TRACK_COST × km).
  * - The turn between the arriving and leaving segment must be gentle (<= maxTurnDeg). A sharper turn is a
  *   reversal: trains cannot reverse at a switch, so it is only allowed when the car both arrives and leaves
  *   on yard track (it is switched onto another train inside the yard). A junction that merely touches a yard
  *   lead does not count. It costs `reverseKm` and is reported in Route.reversals so a person can check it.
- * - Changing railroad at a node is an interchange: allowed only where both railroads have track, costs
+ * - Changing line at a node is an interchange: allowed only where both lines have track, costs
  *   `interchangeKm` so the router prefers single-line routes.
  * Because state includes the direction of travel, a route can continue from where the previous one ended
  * (a via point, or the car's A→B approach) without turning back.
  */
-import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
-import { MAX_SNAP_KM, type Point, type RailGraph } from "./graph.ts";
+import { LINES, MAX_SNAP_KM, type Line, type Point, type RailGraph, type Track } from "./graph.ts";
 
 export interface Leg {
-  railroad: Railroad;
+  railroad: Line;
   km: number;
   nodes: number[];
   path: [number, number][];
@@ -32,7 +33,7 @@ export interface Reversal {
   node: number;
   position: [number, number];
   place: string;
-  railroad: Railroad;
+  railroad: Line;
   /** The segments the car arrived and left on, and its heading on each: what the junction inspector shows. */
   arrivedOn: number;
   leftOn: number;
@@ -59,9 +60,7 @@ export interface Route {
   end: RouteEnd | null;
 }
 
-export interface RouteOptions {
-  /** Bit i set = railroad i may be used. */
-  allowedMask: number;
+export interface RouteOptions extends Track {
   /** Cost of changing railroad, in km-equivalent. */
   interchangeKm: number;
   /** Cost of reversing direction in a yard, in km-equivalent. Default 100. */
@@ -83,9 +82,14 @@ export class RouteError extends Error {
   }
 }
 
-const NR = RAILROADS.length;
+const NR = LINES.length;
 const DEFAULT_REVERSE_KM = 100;
 const DEFAULT_MAX_TURN = 90;
+/**
+ * Passenger-owned track, when allowed, costs this many times its km: a freight car takes it only where no
+ * freight-owned way is close in length (a shop on a commuter line), not as a short cut through a city centre.
+ */
+const PASSENGER_TRACK_COST = 4;
 
 /** Absolute difference between two headings, 0..180. */
 export function turnDeg(fromHeading: number, toHeading: number): number {
@@ -223,6 +227,9 @@ export class Router {
     // States reached straight from a start remember which start, so the path can be rebuilt.
     const startOf = new Map<number, Start>();
 
+    const usable = (edge: number, rr: number) => g.edgeMask[edge] & (1 << rr) && (opt.passenger || !g.edgePassenger[edge]);
+    const trackCost = (edge: number) => g.edgeKm[edge] * (g.edgePassenger[edge] ? PASSENGER_TRACK_COST : 1);
+
     /** Cost to leave `node` on `edge` for a car arriving with `heading` (null = free), or -1 if not allowed. */
     const leaveCost = (node: number, edge: number, arrivedOn: number, heading: number | null) => {
       if (heading === null) return 0;
@@ -252,11 +259,11 @@ export class Router {
           const base = st.cost + k * opt.interchangeKm;
           for (let j = g.adjOffset[st.node]; j < g.adjOffset[st.node + 1]; j++) {
             const e = g.adj[j];
-            if (!(g.edgeMask[e] & (1 << rr))) continue;
+            if (!usable(e, rr)) continue;
             const c = leaveCost(st.node, e, st.edge, st.heading);
             if (c < 0) continue;
             const t = this.state(this.dirEdge(e, g.other(e, st.node)), rr, k);
-            const nd = Math.fround(base + c + g.edgeKm[e]);
+            const nd = Math.fround(base + c + trackCost(e));
             if (nd < dist[t]) {
               startOf.set(t, { ...st, rr });
               relax(t, nd, -1);
@@ -286,10 +293,10 @@ export class Router {
       const heading = this.arrivingHeading(edge, node);
       for (let j = g.adjOffset[node]; j < g.adjOffset[node + 1]; j++) {
         const e = g.adj[j];
-        if (!(g.edgeMask[e] & bit)) continue;
+        if (!usable(e, rr)) continue;
         const c = leaveCost(node, e, edge, heading);
         if (c < 0) continue;
-        relax(this.state(this.dirEdge(e, g.other(e, node)), rr, k), d + c + g.edgeKm[e], s);
+        relax(this.state(this.dirEdge(e, g.other(e, node)), rr, k), d + c + trackCost(e), s);
       }
       if (k < this.K) {
         const dir = this.dirEdge(edge, node);
@@ -303,13 +310,13 @@ export class Router {
     return hits;
   }
 
-  private firstStarts(p: Point, how: RouteStart | null): Start[] {
+  private firstStarts(p: Point, how: RouteStart | null, opt: RouteOptions): Start[] {
     if (how && "continueFrom" in how) {
       const { node, edge, railroad } = how.continueFrom;
       return [{ node, rr: railroad, heading: this.arrivingHeading(edge, node), edge, cost: 0, prefix: [{ edge, node, rr: railroad }] }];
     }
     const heading = how && "headingDeg" in how ? how.headingDeg : null;
-    return [...this.graph.serving(p)].map(([rr, node]) => ({ node, rr, heading, edge: -1, cost: 0, prefix: [{ edge: -1, node, rr }] }));
+    return [...this.graph.serving(p, opt)].map(([rr, node]) => ({ node, rr, heading, edge: -1, cost: 0, prefix: [{ edge: -1, node, rr }] }));
   }
 
   /**
@@ -320,13 +327,13 @@ export class Router {
    */
   route(points: Point[], opt: RouteOptions, start: RouteStart | null = null): Route {
     if (points.length < 2) throw new RouteError("Need at least two points.");
-    let frontier = this.firstStarts(points[0], start);
-    if (!frontier.length) throw new RouteError(`No Class I mainline within ${MAX_SNAP_KM} km of ${points[0].label}.`, 0);
+    let frontier = this.firstStarts(points[0], start, opt);
+    if (!frontier.length) throw new RouteError(`No allowed mainline within ${MAX_SNAP_KM} km of ${points[0].label}.`, 0);
     for (let i = 0; i < points.length - 1; i++) {
       const from = points[i], to = points[i + 1];
       const last = i === points.length - 2;
-      const goals = this.graph.serving(to);
-      if (!goals.size) throw new RouteError(`No Class I mainline within ${MAX_SNAP_KM} km of ${to.label}.`, i + 1);
+      const goals = this.graph.serving(to, opt);
+      if (!goals.size) throw new RouteError(`No allowed mainline within ${MAX_SNAP_KM} km of ${to.label}.`, i + 1);
       const already: Hit[] = frontier
         .filter((st) => goals.get(st.rr) === st.node && opt.allowedMask & (1 << st.rr))
         .map((st) => ({ cost: st.cost, steps: st.prefix, heading: st.heading }));
@@ -363,13 +370,13 @@ export class Router {
       }
       if (heading !== null && (b.edge === a.edge || turnDeg(heading, g.leaving(b.edge, a.node)) > maxTurn)) {
         reversals.push({
-          node: a.node, position: [g.lon[a.node], g.lat[a.node]], place: g.nearestPlace(g.lon[a.node], g.lat[a.node]), railroad: RAILROADS[b.rr],
+          node: a.node, position: [g.lon[a.node], g.lat[a.node]], place: g.nearestPlace(g.lon[a.node], g.lat[a.node]), railroad: LINES[b.rr],
           arrivedOn: a.edge, leftOn: b.edge, arrivingDeg: heading, leavingDeg: g.leaving(b.edge, a.node), km,
         });
       }
       km += g.edgeKm[b.edge];
       if (!cur || cur.rr !== b.rr) {
-        cur = { rr: b.rr, railroad: RAILROADS[b.rr], km: 0, nodes: [a.node], subdivisions: [] };
+        cur = { rr: b.rr, railroad: LINES[b.rr], km: 0, nodes: [a.node], subdivisions: [] };
         legs.push(cur);
       }
       cur.km += g.edgeKm[b.edge];

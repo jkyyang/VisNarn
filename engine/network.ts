@@ -5,7 +5,7 @@
 import { round5 } from "../shared/geo.ts";
 import type { FraId, NetworkNode } from "../shared/places.ts";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
-import { MAX_SNAP_KM, RailGraph, type GraphMeta } from "./core/graph.ts";
+import { ALL_LINES_MASK, ALL_RAILROADS_MASK, MAX_SNAP_KM, RailGraph, type GraphMeta } from "./core/graph.ts";
 
 export { MAX_SNAP_KM };
 
@@ -15,10 +15,11 @@ export interface City {
   lat: number;
 }
 
-/** Where coordinates meet the network: each railroad whose mainline is within MAX_SNAP_KM and about as close as the nearest. */
+/** Where coordinates meet the network: each Class I whose mainline is within MAX_SNAP_KM and about as close as the nearest. */
 export interface Snap {
+  /** Empty when only a regional railroad or a short line is that close. */
   railroads: Railroad[];
-  /** Distance to the nearest of those mainlines. */
+  /** Distance to the nearest of those mainlines (or of the regional / short-line one). */
   km: number;
 }
 
@@ -27,9 +28,9 @@ export interface RailNetwork {
   readonly version: string;
   /** The node with this id, or null if this build of the network has none. `km` is 0. */
   node(fraId: FraId): NetworkNode | null;
-  /** The node nearest to a point, on any track; null when none is within `withinKm`. */
+  /** The node nearest to a point, on any Class I track; null when none is within `withinKm`. */
   nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
-  /** Null: no Class I mainline within MAX_SNAP_KM, so a car cannot be routed to or from here. */
+  /** Null: no freight mainline within MAX_SNAP_KM, so a car cannot be routed to or from here. */
   snap(lon: number, lat: number): Snap | null;
   /** One of the public city names shipped with the network, matched exactly (case-insensitive). */
   city(name: string): City | null;
@@ -67,13 +68,15 @@ export function openNetwork(bin: ArrayBuffer, meta: GraphMeta, version: string):
       return index < 0 ? null : nodeView(index, 0);
     },
     nearest(lon, lat, withinKm) {
-      const hit = graph.nearestNode(lon, lat, 0, withinKm);
+      const hit = graph.nearestNode(lon, lat, ALL_RAILROADS_MASK, withinKm, graph.atMask);
       return hit ? nodeView(hit.node, hit.km) : null;
     },
     snap(lon, lat) {
-      const hits = graph.servingNear(lon, lat, MAX_SNAP_KM);
+      // Any mainline, so a place resolves whatever track the routing rules will allow; the router decides.
+      const classI = graph.servingNear(lon, lat, { allowedMask: ALL_RAILROADS_MASK, passenger: true });
+      const hits = classI.length ? classI : graph.servingNear(lon, lat, { allowedMask: ALL_LINES_MASK, passenger: true });
       if (!hits.length) return null;
-      return { railroads: hits.map((h) => RAILROADS[h.railroad]), km: Math.min(...hits.map((h) => h.km)) };
+      return { railroads: classI.map((h) => RAILROADS[h.line]), km: Math.min(...hits.map((h) => h.km)) };
     },
     city(name) {
       return byName.get(name.trim().toLowerCase()) ?? null;

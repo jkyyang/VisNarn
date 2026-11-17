@@ -9,7 +9,7 @@
  */
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
-import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
+import type { Assumptions, EstimateBasis, TrackIncluded } from "../../shared/assumptions.ts";
 import type { BatchId, BatchUpload, CarField, CarReport, ImportProfile, ImportRequest, StopRef, UploadSource } from "../../shared/cars.ts";
 import type { CodeType, FraId, PlaceRef, PlaceRole, ShopDraft, ShopId } from "../../shared/places.ts";
 import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
@@ -153,6 +153,12 @@ const basis: Decoder<EstimateBasis> = (value, path) => {
   return { kind, trips: field(value, path, "trips", wholeNumber), scope: field(value, path, "scope", oneOf(["lane", "region", "global"] as const)) };
 };
 
+const trackIncluded: Decoder<TrackIncluded> = (value, path) => ({
+  regional: field(value, path, "regional", boolean),
+  shortLine: field(value, path, "shortLine", boolean),
+  passenger: field(value, path, "passenger", boolean),
+});
+
 const assumptions: Decoder<Assumptions> = (value, path) => {
   const group = (key: string) => [field(value, path, key, object), at(path, key)] as const;
   const [routing, routingPath] = group("routing");
@@ -162,6 +168,7 @@ const assumptions: Decoder<Assumptions> = (value, path) => {
     routing: {
       allowed: [...new Set(field(routing, routingPath, "allowed", list(railroad, RAILROADS.length * 2)))],
       interchangePenaltyKm: field(routing, routingPath, "interchangePenaltyKm", number),
+      include: field(routing, routingPath, "include", nullable(trackIncluded)) ?? undefined,
     },
     timing: {
       speedKmPerDay: field(timing, timingPath, "speedKmPerDay", number),

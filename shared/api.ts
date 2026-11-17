@@ -155,7 +155,8 @@ type IsJson<T> = [T] extends [string | number | boolean | null]
       : T extends readonly (infer Item)[]
         ? IsJson<Item>
         : T extends object
-          ? false extends { [K in keyof T]-?: IsJson<T[K]> }[keyof T]
+          ? // An undefined property is left out of the JSON, so `include?: X` is plain JSON when X is.
+            false extends { [K in keyof T]-?: IsJson<Exclude<T[K], undefined>> }[keyof T]
             ? false
             : true
           : false;

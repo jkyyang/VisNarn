@@ -21,7 +21,10 @@ export type RouteStrategy = (typeof ROUTE_STRATEGIES)[number];
 
 /** One run on one railroad in one direction (a leg also ends where the car turns back). */
 export interface Leg {
+  /** With `line`, the Class I that hands the car to that smaller railroad or takes it over. */
   railroad: Railroad;
+  /** Set when the leg runs on a regional railroad or a short line, not on a Class I. */
+  line?: "regional" | "short line";
   km: number;
   from: string;
   to: string;

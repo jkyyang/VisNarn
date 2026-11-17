@@ -1,8 +1,10 @@
-"""Download Class I freight lines from the BTS NTAD North American Rail Network (NARN).
+"""Download freight lines from the BTS NTAD North American Rail Network (NARN).
 
-Keeps segments owned by, or with trackage rights for, a Class I railroad,
-on active network types: M (main), S (siding), Y (yard).
-Output: data/raw/narn_class1_lines.geojson (WGS84).
+Active network types only: M (main), S (siding), Y (yard). Two files (WGS84):
+  data/raw/narn_class1_lines.geojson  segments owned by, or with trackage rights for, a Class I railroad
+  data/raw/narn_other_lines.geojson   every other segment: regional and short-line railroads, and lines of
+                                      passenger agencies; build_graph.py classifies the owners and keeps
+                                      only track some freight railroad may run on
 """
 import json
 import sys
@@ -21,11 +23,15 @@ FIELDS = ["OBJECTID", "FRAARCID", "FRFRANODE", "TOFRANODE", "STATEAB", "COUNTRY"
 PAGE = 2000
 
 
-def where() -> str:
+def where(class1: bool) -> str:
     ins = ",".join(f"'{c}'" for c in CLASS1)
     cols = ["RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in range(1, 10)]
-    owner = " OR ".join(f"{c} IN ({ins})" for c in cols)
     nets = ",".join(f"'{n}'" for n in NETS)
+    if class1:
+        owner = " OR ".join(f"{c} IN ({ins})" for c in cols)
+    else:
+        # The exact complement: an empty column is "not Class I" too (NOT IN alone is unknown on NULL).
+        owner = " AND ".join(f"({c} IS NULL OR {c} NOT IN ({ins}))" for c in cols)
     return f"({owner}) AND NET IN ({nets})"
 
 
@@ -41,8 +47,8 @@ def fetch(params, tries=5):
     raise RuntimeError("query failed")
 
 
-def main(out: Path):
-    w = where()
+def main(out: Path, class1: bool):
+    w = where(class1)
     total = fetch({"where": w, "returnCountOnly": "true", "f": "json"})["count"]
     print(f"{total} segments match")
     feats = []
@@ -59,4 +65,5 @@ def main(out: Path):
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parent.parent
-    main(root / "data/raw/narn_class1_lines.geojson")
+    main(root / "data/raw/narn_class1_lines.geojson", class1=True)
+    main(root / "data/raw/narn_other_lines.geojson", class1=False)

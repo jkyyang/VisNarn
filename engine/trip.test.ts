@@ -5,6 +5,7 @@ import type { FraId, Waypoint } from "../shared/places.ts";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RoutePath } from "../shared/route.ts";
 import { loadNetwork } from "./load.ts";
+import { ALL_RAILROADS_MASK } from "./core/graph.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 import { combine, createCarRouter, tripKey, type CarRouter, type RouteResult, type Trip } from "./trip.ts";
 
@@ -97,8 +98,8 @@ describe("createCarRouter().route", () => {
     const graph = coreOf(network);
     const nlr = network.city("North Little Rock, AR")!;
     const same = (i: number) => {
-      const asNode = [...graph.serving(graph.nodePoint(i))];
-      const asCoordinates = [...graph.serving({ label: "", lon: graph.lon[i], lat: graph.lat[i] })];
+      const asNode = [...graph.serving(graph.nodePoint(i), { allowedMask: ALL_RAILROADS_MASK, passenger: true })];
+      const asCoordinates = [...graph.serving({ label: "", lon: graph.lon[i], lat: graph.lat[i] }, { allowedMask: ALL_RAILROADS_MASK, passenger: true })];
       return asNode.length > 1 && JSON.stringify(asNode) === JSON.stringify(asCoordinates);
     };
     const candidates = [...Array(graph.nodeCount).keys()]
@@ -112,6 +113,16 @@ describe("createCarRouter().route", () => {
     const one = routed({ ...exampleTrip(), shop: byId });
     const other = routed({ ...exampleTrip(), shop: byCoordinates });
     expect(other.path).toEqual(one.path);
+  });
+
+  it("reaches a shop on a short line only when short lines are included (Ville Platte, LA: UP is 20 km away)", () => {
+    const villePlatte: Waypoint = { label: "Ville Platte, LA", lon: -92.271, lat: 30.688, fraId: null, railroad: null };
+    const trip: Trip = { a: city("Houston, TX"), b: city("Baton Rouge, LA"), stops: [], shop: villePlatte, rules: rules() };
+    expect(router.route(trip, "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: "shop" } });
+    const { path } = routed({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: true, passenger: false } } });
+    const last = path.legs[path.legs.length - 1];
+    expect(last).toMatchObject({ line: "short line", railroad: "UP" });
+    expect(haversineKm(villePlatte.lon, villePlatte.lat, ...last.path[last.path.length - 1])).toBeLessThan(1);
   });
 
   it("honours a waypoint's railroad: a stop pinned to BNSF is not reached on UP", () => {
@@ -243,7 +254,8 @@ describe("combine / tripKey", () => {
     // Taylor → Temple → Oakville, ON: "pick" and "fewest interchanges" ran the same BNSF + CN line, 18 m
     // apart in length, but only 92 % of their points matched (a stretch of parallel yard track). One card.
     const oakville = { label: "Oakville, ON", lon: -79.7195, lat: 43.4169, fraId: null, railroad: null };
-    const toOakville = lines({ ...exampleTrip(), shop: oakville });
+    // CN reaches the shop over GO Transit's track, so passenger-owned track must be allowed.
+    const toOakville = lines({ ...exampleTrip(), shop: oakville, rules: { ...rules(), include: { regional: false, shortLine: false, passenger: true } } });
     const look = (p: RoutePath) => `${p.interchanges}|${p.turnBacks.length}|${Math.round(p.km)}`;
     expect(new Set(toOakville.map(look)).size).toBe(toOakville.length);
     // Fargo → Minneapolis → Edmonton: BNSF to Winnipeg then CN, twice, 10 m apart. One card.

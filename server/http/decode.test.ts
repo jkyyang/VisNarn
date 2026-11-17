@@ -43,6 +43,8 @@ describe("decodeBody", () => {
 
   it("reads assumptions in their three groups and refuses a number that is not finite", () => {
     expect(decodeBody["PUT /api/assumptions"](JSON.parse(JSON.stringify(DEFAULT_ASSUMPTIONS)))).toEqual(DEFAULT_ASSUMPTIONS);
+    const ticked = { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, include: { regional: true, shortLine: false, passenger: true } } };
+    expect(decodeBody["PUT /api/assumptions"](JSON.parse(JSON.stringify(ticked)))).toEqual(ticked);
     const broken = { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: "fast" } };
     expect(refusal(() => decodeBody["PUT /api/assumptions"](broken))).toMatch(/^invalid timing\.speedKmPerDay: /);
     expect(refusal(() => decodeBody["PUT /api/assumptions"]({ ...DEFAULT_ASSUMPTIONS, routing: { allowed: ["XX"], interchangePenaltyKm: 1 } }))).toMatch(

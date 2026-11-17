@@ -4,9 +4,9 @@ public/data/graph.bin layout (little-endian):
   header: uint32 n_nodes, uint32 n_edges
   float32[n_nodes*2] lon,lat      uint8[n_nodes] mainline railroad mask
   uint32[n_edges] u   uint32[n_edges] v   float32[n_edges] km
-  uint8[n_edges] railroad mask   uint16[n_edges] subdivision index
+  uint8[n_edges] railroad mask (bits 0-5 Class I, bit 6 regional, bit 7 short line)   uint16[n_edges] subdivision index
   uint16[n_edges] heading leaving u (degrees, 0 = north)   uint16[n_edges] heading leaving v
-  uint8[n_edges] flags (bit 0 = yard track)
+  uint8[n_edges] flags (bit 0 = yard track, bit 1 = owned by a passenger agency)
 Headings are measured over the first ~0.2 km of track geometry, so the router can tell a
 through move or a gentle diverging move from a reversal (trains can't reverse at a switch).
 public/data/graph_meta.json: railroad bit order, subdivision names, FRA node ids, places.
@@ -22,11 +22,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 from places import PLACES  # noqa: E402
+from railroad_classes import CLASS1, PASSENGER  # noqa: E402
 
-CLASS1 = ["BNSF", "UP", "CSXT", "NS", "CN", "CPKC"]
-BIT = {c: 1 << i for i, c in enumerate(CLASS1)}
+BIT = {c: 1 << i for i, c in enumerate(CLASS1 + ["regional", "short line"])}
 
 YARD = 1
+PASSENGER_OWNED = 2
 HEADING_KM = 0.2
 
 
@@ -67,7 +68,8 @@ for i, (a, b, d) in enumerate(G.edges(data=True)):
     # build_graph stores geometry from min(node id) to max(node id); orient it a -> b.
     coords = d["geom"] if a < b else d["geom"][::-1]
     head_u[i], head_v[i] = leaving_heading(coords), leaving_heading(coords[::-1])
-    flags[i] = YARD if d["net"] == "Y" else 0
+    passenger = d["owner"] in PASSENGER
+    flags[i] = (YARD if d["net"] == "Y" else 0) | (PASSENGER_OWNED if passenger else 0)
     if d["net"] == "M":
         main[idx[a]] |= m; main[idx[b]] |= m
 out = ROOT / "public/data"

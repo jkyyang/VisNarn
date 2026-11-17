@@ -14,6 +14,8 @@ export interface Assumptions {
     allowed: Railroad[];
     /** Extra km the router accepts to avoid changing railroad. Adds no time. */
     interchangePenaltyKm: number;
+    /** Track beyond the Class I railroads that routes may use. Missing: none of it. */
+    include?: TrackIncluded;
   };
   /** Decides when the car arrives on a given route. */
   timing: {
@@ -30,6 +32,13 @@ export interface Assumptions {
     /** A position report older than this, at the batch's "as of" time, is stale. */
     positionAgeH: number;
   };
+}
+
+/** Regional (US Class II) railroads, short lines, and track owned by passenger agencies (Amtrak, Metra, GO, ...). */
+export interface TrackIncluded {
+  regional: boolean;
+  shortLine: boolean;
+  passenger: boolean;
 }
 
 /** Placeholders until they are agreed with the team and fitted from car history. */

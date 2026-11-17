@@ -8,7 +8,7 @@ import { haversineKm, round5, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
 import type { Approach, Leg, Milestone, RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
-import { maskOf, MAX_SNAP_KM, type Point, type RailGraph } from "./core/graph.ts";
+import { ALL_RAILROADS_MASK, LINES, maskOf, MAX_SNAP_KM, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
 import { RouteError, Router, turnDeg, type Route, type RouteOptions, type RouteStart } from "./core/router.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 
@@ -33,7 +33,7 @@ export type RouteResult =
   | { ok: false; noRoute: NoRoute };
 
 /**
- * A router bound to one network. It holds about 52 MB of search scratch and is not re-entrant:
+ * A router bound to one network. It holds about 85 MB of search scratch and is not re-entrant:
  * one per thread, one `route` call at a time. Creating it takes about 20 ms.
  */
 export interface CarRouter {
@@ -45,8 +45,15 @@ export interface CarRouter {
 const STRAIGHT_LINE_FACTOR = 1.2;
 const REVERSE_KM = 100;
 
+/** Lines and track the rules allow: the Class I railroads ticked, plus regional railroads, short lines and passenger-owned track when included. */
+function trackOf(rules: Trip["rules"]): Track {
+  const include = rules.include ?? { regional: false, shortLine: false, passenger: false };
+  const allowedMask = maskOf(rules.allowed) | (include.regional ? 1 << REGIONAL : 0) | (include.shortLine ? 1 << SHORT_LINE : 0);
+  return { allowedMask, passenger: include.passenger };
+}
+
 /** Routing penalties per strategy. They steer which path is found; `km` stays real track distance. */
-function costsOf(strategy: RouteStrategy, rules: Trip["rules"]): Omit<RouteOptions, "allowedMask"> {
+function costsOf(strategy: RouteStrategy, rules: Trip["rules"]): Omit<RouteOptions, keyof Track> {
   switch (strategy) {
     case "pick":
       return { interchangeKm: rules.interchangePenaltyKm, reverseKm: REVERSE_KM };
@@ -80,13 +87,13 @@ export function createCarRouter(network: RailNetwork): CarRouter {
   };
 
   /** Why no allowed railroad can serve this waypoint, or null when one can. */
-  const notServed = (w: Waypoint, p: Point | null, at: At, allowedMask: number): NoRoute | null => {
+  const notServed = (w: Waypoint, p: Point | null, at: At, track: Track): NoRoute | null => {
     const role = capital(roleOf(at));
     if (!p) return { kind: "not-served", at, message: `${role} is FRA node ${w.fraId}, which this network does not have.` };
-    if (w.railroad && !(allowedMask & (1 << RAILROADS.indexOf(w.railroad)))) {
+    if (w.railroad && !(track.allowedMask & (1 << RAILROADS.indexOf(w.railroad)))) {
       return { kind: "not-served", at, message: `${role} must be reached on ${w.railroad}, but ${w.railroad} is not allowed.` };
     }
-    for (const rr of graph.serving(p).keys()) if (allowedMask & (1 << rr)) return null;
+    if (graph.serving(p, track).size) return null;
     const where = p.node !== undefined ? `track at ${roleOf(at)} (FRA node ${w.fraId})` : `mainline within ${MAX_SNAP_KM} km of ${roleOf(at)}`;
     const message = w.railroad ? `${w.railroad} has no ${where}.` : `No allowed railroad has ${where}.`;
     return { kind: "not-served", at, message };
@@ -94,15 +101,15 @@ export function createCarRouter(network: RailNetwork): CarRouter {
 
   return {
     route(trip, strategy) {
-      const allowedMask = maskOf(trip.rules.allowed);
-      const pick: RouteOptions = { allowedMask, ...costsOf("pick", trip.rules) };
-      const options: RouteOptions = { allowedMask, ...costsOf(strategy, trip.rules) };
+      const track = trackOf(trip.rules);
+      const pick: RouteOptions = { ...track, ...costsOf("pick", trip.rules) };
+      const options: RouteOptions = { ...track, ...costsOf(strategy, trip.rules) };
 
       const ends: [Waypoint, At][] = [[trip.b, "b"], ...trip.stops.map((w, i): [Waypoint, At] => [w, i]), [trip.shop, "shop"]];
       const onwardPoints: Point[] = [];
       for (const [w, at] of ends) {
         const p = pointOf(w);
-        const problem = notServed(w, p, at, allowedMask);
+        const problem = notServed(w, p, at, track);
         if (problem) return { ok: false, noRoute: problem };
         onwardPoints.push(p!);
       }
@@ -146,10 +153,10 @@ export function createCarRouter(network: RailNetwork): CarRouter {
 
       const aNodes = new Set<number>();
       if (approachRoute?.legs.length) aNodes.add(approachRoute.legs[0].nodes[0]);
-      else if (a) for (const node of graph.serving(a).values()) aNodes.add(node);
+      else if (a) for (const node of graph.serving(a, track).values()) aNodes.add(node);
       if (a?.node !== undefined) aNodes.add(a.node);
 
-      const path = describe(graph, onward, strategy, onwardPoints.slice(1, -1), aNodes);
+      const path = describe(graph, onward, strategy, onwardPoints.slice(1, -1), aNodes, track);
       return { ok: true, approach, straightKm: haversineKm(trip.b.lon, trip.b.lat, trip.shop.lon, trip.shop.lat), path };
     },
   };
@@ -175,23 +182,23 @@ function describe(
   strategy: RouteStrategy,
   stops: Point[],
   aNodes: Set<number>,
+  track: Track,
 ): RoutePath {
+  const railroadOf = classIRailroads(graph, route);
   const subdivision = (edge: number) => (edge >= 0 ? graph.meta.subdivs[graph.edgeSubdiv[edge]] || null : null);
   const turnBacks: TurnBack[] = route.reversals.map((r) => ({
     at: { fraId: graph.fraId(r.node), lon: round5(graph.lon[r.node]), lat: round5(graph.lat[r.node]), near: r.place },
-    railroad: r.railroad,
+    railroad: railroadOf[route.legs.findIndex((leg) => leg.railroad === r.railroad && leg.nodes.includes(r.node))],
     arrives: { subdivision: subdivision(r.arrivedOn), headingDeg: r.arrivingDeg },
     leaves: { subdivision: subdivision(r.leftOn), headingDeg: r.leavingDeg },
     turnDeg: turnDeg(r.arrivingDeg, r.leavingDeg),
     track: r.arrivedOn === r.leftOn ? "stub-end" : "yard",
   }));
-  const stopNodes = stops.map((p) => graph.serving(p));
+  const stopNodes = stops.map((p) => graph.serving(p, track));
 
   const legs: (Leg & { nodes: number[] })[] = [];
   const steps: Milestone[] = [];
   let km = 0;
-  // A change of railroad right at B is not counted: on shared track the approach's railroad is a tie the search broke, not a fact.
-  let previous: Railroad | null = null;
   let nextStop = 0;
   let nextTurnBack = 0;
   let passesA = false;
@@ -206,12 +213,15 @@ function describe(
     }
   };
 
-  for (const coreLeg of route.legs) {
-    const rr = RAILROADS.indexOf(coreLeg.railroad);
-    if (previous !== null && previous !== coreLeg.railroad) {
-      steps.push({ kind: "interchange", kmFromB: km, from: previous, to: coreLeg.railroad, at: graph.nearestPlace(graph.lon[coreLeg.nodes[0]], graph.lat[coreLeg.nodes[0]]) });
+  for (const [legIndex, coreLeg] of route.legs.entries()) {
+    const rr = LINES.indexOf(coreLeg.railroad);
+    const railroad = railroadOf[legIndex];
+    const line = coreLeg.railroad === "regional" || coreLeg.railroad === "short line" ? { line: coreLeg.railroad } : {};
+    // Each core leg is one line, so every leg after the first starts with an interchange. A change of railroad
+    // right at B makes no leg of its own: on shared track the approach's railroad is a tie the search broke, not a fact.
+    if (legIndex > 0) {
+      steps.push({ kind: "interchange", kmFromB: km, from: railroadOf[legIndex - 1], to: railroad, at: graph.nearestPlace(graph.lon[coreLeg.nodes[0]], graph.lat[coreLeg.nodes[0]]) });
     }
-    previous = coreLeg.railroad;
     visit(coreLeg.nodes[0], rr);
     let piece: (typeof legs)[number] | null = null;
     for (let j = 0; j + 1 < coreLeg.nodes.length; j++) {
@@ -223,7 +233,7 @@ function describe(
         piece = null;
       }
       if (!piece) {
-        piece = { railroad: coreLeg.railroad, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], path: [], nodes: [u] };
+        piece = { railroad, ...line, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], path: [], nodes: [u] };
         steps.push({ kind: "leg", kmFromB: km, leg: legs.length });
         legs.push(piece);
       }
@@ -265,6 +275,22 @@ function describe(
     steps,
     passesA,
   };
+}
+
+/**
+ * The Class I railroad named for each core leg. A regional or short-line leg has no Class I of its own, so it
+ * names the Class I that hands the car to it or takes it over (the leg before, else the leg after), or, on a
+ * route with no Class I at all, the Class I nearest to where the leg starts. Leg.line says the track is not its own.
+ */
+function classIRailroads(graph: RailGraph, route: Route): Railroad[] {
+  const own = route.legs.map((leg) => (RAILROADS as readonly string[]).includes(leg.railroad) ? (leg.railroad as Railroad) : null);
+  return own.map((railroad, i) => {
+    const neighbour = railroad ?? own.slice(0, i).reverse().find(Boolean) ?? own.slice(i + 1).find(Boolean);
+    if (neighbour) return neighbour;
+    const start = route.legs[i].nodes[0];
+    const nearest = graph.servingNear(graph.lon[start], graph.lat[start], { allowedMask: ALL_RAILROADS_MASK, passenger: true }, Infinity)[0];
+    return RAILROADS[nearest.line];
+  });
 }
 
 /** Everything known about how a trip can run. `paths[0]` is the router's pick. */
@@ -355,6 +381,6 @@ function pointsOf(path: RoutePath): LngLat[] {
 export function tripKey(networkVersion: string, trip: Trip): string {
   const place = (w: Waypoint): (number | string | null)[] =>
     w.fraId !== null ? [w.fraId as FraId, w.railroad] : [round5(w.lon), round5(w.lat), w.railroad];
-  const allowed = RAILROADS.filter((rr) => trip.rules.allowed.includes(rr));
-  return JSON.stringify([networkVersion, place(trip.a), place(trip.b), trip.stops.map(place), place(trip.shop), allowed, trip.rules.interchangePenaltyKm]);
+  const { allowedMask, passenger } = trackOf(trip.rules);
+  return JSON.stringify([networkVersion, place(trip.a), place(trip.b), trip.stops.map(place), place(trip.shop), allowedMask, passenger, trip.rules.interchangePenaltyKm]);
 }
