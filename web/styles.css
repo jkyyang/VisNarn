@@ -326,12 +326,7 @@ kbd {
   position: relative;
   z-index: 2;
 }
-.app[data-screen="cars"] {
-  --panel-w: 470px;
-}
-.app[data-screen="shops"] {
-  --panel-w: 760px;
-}
+/* One panel width on every screen: a tab switch must not resize the map under the user. */
 .app[data-screen="shops"] .panel {
   background: var(--bg);
 }

@@ -16,22 +16,35 @@ function fitOptions(mapWidth: number, leftInset: number, topInset: number) {
   return { padding: { top: Math.max(72, topInset), bottom: 84, left, right }, maxZoom: 11 };
 }
 
+/** True when `bounds` lie wholly inside the visible map. */
+export function isInView(view: { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number }, bounds: Bounds): boolean {
+  const [west, south, east, north] = bounds;
+  return west >= view.getWest() && east <= view.getEast() && south >= view.getSouth() && north <= view.getNorth();
+}
+
 /**
- * Moves the camera to `bounds` whenever they change, and again whenever `nonce` changes ("Fit whole
+ * Moves the camera to `bounds` whenever they change and are not already in view, and again whenever `nonce` changes ("Fit whole
  * route"). Renders nothing; must be a child of the map.
  */
 export function FitBounds(props: { bounds: Bounds | null; nonce?: number; leftInset?: number; topInset?: number }) {
   const { bounds, nonce = 0, leftInset = 0, topInset = 0 } = props;
   const map = useMap().current;
   const mounted = useRef(false);
+  const lastNonce = useRef(nonce);
   const key = bounds?.join();
 
   useEffect(() => {
     // A route that is already there when the map opens is simply where the map starts.
-    const jump = !mounted.current || matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const first = !mounted.current;
+    const jump = first || matchMedia("(prefers-reduced-motion: reduce)").matches;
     mounted.current = true;
+    const asked = nonce !== lastNonce.current;
+    lastNonce.current = nonce;
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
+    // Switching tabs or route cards must not zoom the map back and forth: if everything is already
+    // on screen the camera stays where the user put it. "Fit whole route" always moves it.
+    if (!first && !asked && isInView(map.getBounds(), bounds)) return;
     const options = fitOptions(map.getContainer().clientWidth, leftInset, topInset);
     map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : 800 });
     // Keyed on the numbers, not the array: a re-check that lands on the same route must not

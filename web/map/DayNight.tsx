@@ -36,6 +36,36 @@ function firstLabelLayer(style: StyleSpecification): string | undefined {
   return style.layers.find((layer) => layer.type === "symbol" || layer.id === "labels")?.id;
 }
 
+/** Place names over the night side: bright text on a dark halo, so they read on black and on city lights. */
+const NIGHT_LABEL_PAINT = { "text-color": "#eef1f6", "text-halo-color": "rgba(8, 10, 18, 0.92)", "text-halo-width": 1.6, "text-halo-blur": 0.4 } as const;
+type LabelPaintKey = keyof typeof NIGHT_LABEL_PAINT;
+const LABEL_KEYS = Object.keys(NIGHT_LABEL_PAINT) as LabelPaintKey[];
+interface LabelMap {
+  getPaintProperty(layer: string, name: string): unknown;
+  setPaintProperty(layer: string, name: string, value: unknown): void;
+}
+/**
+ * Each style's own label paint, kept per map so Day can put it back without reloading the style.
+ * getStyle() returns a fresh copy each call, so the loaded style is told apart by its name and sprite.
+ */
+const savedLabelPaint = new WeakMap<LabelMap, { style: string; paint: Map<string, Partial<Record<LabelPaintKey, unknown>>> }>();
+
+/** Switches every text layer of the loaded style to the night paint, or back to its own. */
+export function paintLabels(map: LabelMap, style: StyleSpecification, night: boolean): void {
+  const styleKey = `${style.name ?? ""}|${JSON.stringify(style.sprite ?? "")}`;
+  let saved = savedLabelPaint.get(map);
+  if (!saved || saved.style !== styleKey) {
+    saved = { style: styleKey, paint: new Map() };
+    savedLabelPaint.set(map, saved);
+  }
+  for (const layer of style.layers) {
+    if (layer.type !== "symbol" || !(layer.layout && "text-field" in layer.layout)) continue;
+    if (!saved.paint.has(layer.id)) saved.paint.set(layer.id, Object.fromEntries(LABEL_KEYS.map((key) => [key, map.getPaintProperty(layer.id, key)])));
+    const own = saved.paint.get(layer.id) ?? {};
+    for (const key of LABEL_KEYS) map.setPaintProperty(layer.id, key, night ? NIGHT_LABEL_PAINT[key] : own[key]);
+  }
+}
+
 /**
  * Managed by hand rather than as a react-map-gl <Layer>: its place in the stack depends on the
  * loaded style's own layer ids, which change with every basemap switch.
@@ -68,6 +98,7 @@ export function NightLights({ mode, now, satellite }: { mode: NightTileMode | "o
         map.addLayer(layer, firstLabelLayer(style));
       }
       map.setLayoutProperty(LIGHTS_ID, "visibility", shown ? "visible" : "none");
+      paintLabels(map, style, shown);
       if (shown) map.setPaintProperty(LIGHTS_ID, "raster-opacity", lightsOpacity(opacityMode, satellite));
     };
     ensure();
