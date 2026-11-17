@@ -25,8 +25,8 @@ Written first. The types in the sketch were derived from these call sites. Call 
 **Quickstart**
 
 ```
-npm run dev        # one command: API on 127.0.0.1:8787 (node --watch), page on 127.0.0.1:5173 (Vite, proxies /api)
-npm start          # built page + API together on 127.0.0.1:8787
+npm run dev        # one command: API and page on 127.0.0.1:5173 (node --watch, Vite inside the server)
+npm start          # built page + API together on 127.0.0.1:5173
 npm test           # vitest: engine, server, page, import rules
 npm run typecheck  # tsc -b: one program per area; an import across areas fails
 ```

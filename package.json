@@ -8,15 +8,16 @@
     "node": ">=23.6"
   },
   "scripts": {
-    "dev": "node --watch-path=server --watch-path=engine --watch-path=shared --disable-warning=ExperimentalWarning server/main.ts --dev",
-    "start": "vite build && node --disable-warning=ExperimentalWarning server/main.ts --web dist",
+    "dev": "node scripts/free-port.mjs && node --watch-path=server --watch-path=engine --watch-path=shared --disable-warning=ExperimentalWarning server/main.ts --dev",
+    "start": "vite build && node scripts/free-port.mjs && node --disable-warning=ExperimentalWarning server/main.ts --web dist",
     "selftest": "node --disable-warning=ExperimentalWarning server/main.ts --selftest",
     "build": "tsc -b tsconfig.areas.json && vite build",
     "typecheck": "tsc -b tsconfig.areas.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "backtest": "node --disable-warning=ExperimentalWarning scripts/backtest.ts",
-    "data": "bash pipeline/run_all.sh"
+    "data": "bash pipeline/run_all.sh",
+    "data:update": "node --disable-warning=ExperimentalWarning scripts/update-network.ts"
   },
   "dependencies": {
     "@deck.gl/mapbox": "^9.0.38",

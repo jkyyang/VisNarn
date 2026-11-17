@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 /**
- * Not 8787: a copy of the app a person is already running there may hold real car data, and the
+ * Not 5173: a copy of the app a person is already running there may hold real car data, and the
  * tests add, change and delete shops and batches. reuseExistingServer stays off for the same reason.
  */
 const PORT = Number(process.env.VISNARN_E2E_PORT ?? 8797);

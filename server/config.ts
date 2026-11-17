@@ -47,7 +47,7 @@ export function readConfig(argv: readonly string[], env: Readonly<Record<string,
     if (isInside(dataDir, served)) throw new Error(`The data folder ${dataDir} is inside ${served}, which the browser can read. Set VISNARN_DATA_DIR to a folder outside it.`);
   }
   return {
-    port: wholeNumber(env.VISNARN_PORT, 8787, 0, 65535, "VISNARN_PORT"),
+    port: wholeNumber(env.VISNARN_PORT, 5173, 0, 65535, "VISNARN_PORT"),
     dataDir,
     networkDir: DEFAULT_NETWORK_DIR,
     webDir,

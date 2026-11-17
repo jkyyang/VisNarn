@@ -9,9 +9,9 @@ const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const HOME = { HOME: homedir() };
 
 describe("readConfig", () => {
-  it("defaults: port 8787, data in ~/.visnarn, two routing workers, API only", () => {
+  it("defaults: port 5173, data in ~/.visnarn, two routing workers, API only", () => {
     expect(readConfig([], HOME)).toEqual({
-      port: 8787,
+      port: 5173,
       dataDir: join(homedir(), ".visnarn"),
       networkDir: DEFAULT_NETWORK_DIR,
       webDir: null,
@@ -45,7 +45,7 @@ describe("readConfig", () => {
   });
 
   it("knows --selftest", () => {
-    expect(readConfig(["--selftest"], HOME).port).toBe(8787);
+    expect(readConfig(["--selftest"], HOME).port).toBe(5173);
     expect(selfTestRequested(["--selftest"])).toBe(true);
     expect(selfTestRequested([])).toBe(false);
   });

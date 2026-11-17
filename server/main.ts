@@ -30,7 +30,7 @@ async function main(): Promise<number> {
   } catch (error) {
     await app?.close().catch(() => {});
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
-      throw new Error(`Port ${config.port} is already in use: another copy may be running. Stop it, or set VISNARN_PORT to another port.`);
+      throw new Error(`Port ${config.port} is still in use after scripts/free-port.mjs tried to stop its owner. Free it yourself, or set VISNARN_PORT.`);
     }
     throw error;
   }

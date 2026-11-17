@@ -11,8 +11,8 @@ before prep ends. One car on the Route screen, a morning list on the Cars screen
 ## Run
 ```
 npm install
-npm run dev        # one command, one port: http://127.0.0.1:8787 (API + page from source, hot reload)
-npm start          # build the page, then serve it and the API on http://127.0.0.1:8787
+npm run dev        # one command, one port: http://127.0.0.1:5173 (API + page from source, hot reload)
+npm start          # build the page, then serve it and the API on http://127.0.0.1:5173
 npm run selftest   # quick check: loads the network, starts a routing worker, routes the EXAMPLE car
 npm test           # vitest: engine, server, page, and the import rules
 npm run typecheck  # tsc -b: one program per area; an import across areas fails here
@@ -24,7 +24,7 @@ Node 23.6 or newer (the server runs its TypeScript sources directly). No build s
 In development Vite runs inside the Node server (middleware mode), so the page, `/api` and hot reload
 share one origin. The server restarts by itself when a file in `server/`, `engine/` or `shared/` changes.
 
-Settings (environment variables): `VISNARN_PORT` (default 8787), `VISNARN_DATA_DIR` (default
+Settings (environment variables): `VISNARN_PORT` (default 5173), `VISNARN_DATA_DIR` (default
 `~/.visnarn`), `VISNARN_ROUTE_WORKERS` (default 2: batch checks use at most one of them, so a click on
 the Route screen never waits behind the morning list).
 

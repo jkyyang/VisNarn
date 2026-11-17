@@ -26,7 +26,7 @@ import { decodeBody, decodeQuery } from "./decode.ts";
 import { handlers, type HandlerContext } from "./handlers.ts";
 
 export interface Server {
-  /** "http://127.0.0.1:8787". */
+  /** "http://127.0.0.1:5173". */
   url: string;
   close(): Promise<void>;
 }
