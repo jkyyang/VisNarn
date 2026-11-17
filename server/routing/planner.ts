@@ -1,0 +1,246 @@
+/**
+ * The route planner: "how can this trip run?" for the rest of the server.
+ *
+ * Behind `plan` are the worker threads that own the routers (a search blocks its thread for up to
+ * ~0.3 s, so it never runs on the thread that answers HTTP), a queue in which a person's request
+ * goes ahead of batch work, and the cache. Callers see none of it.
+ *
+ * The cache is keyed by tripKey (network version, waypoints, routing rules) and strategy, and holds
+ * RouteResults, which have no clock in them. So speed, delay, buffer and flag changes never reach
+ * this module, and a new network file or a moved shop simply asks under a new key. It lives in
+ * memory: after a restart routes are computed again.
+ */
+import { Worker } from "node:worker_threads";
+import { combine, tripKey, type RouteResult, type Routed, type Trip } from "../../engine/index.ts";
+import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
+import type { Job, JobResult, WorkerData } from "./protocol.ts";
+
+/** "pick": the router's own route only (enough for a list). "all": every distinct alternative too. */
+export type Want = "pick" | "all";
+
+export interface RoutePlanner {
+  /**
+   * The routes for a trip. Identical requests in flight share one computation. `background` work
+   * waits behind everything else. Aborting the signal drops the request if it has not started;
+   * the promise then rejects with the signal's reason.
+   */
+  plan(trip: Trip, want: Want, options?: { background?: boolean; signal?: AbortSignal }): Promise<Routed>;
+  /** What is already known, without starting any work. */
+  peek(trip: Trip, want: Want): Routed | undefined;
+  close(): Promise<void>;
+}
+
+/** About 100 MB of answers: a regional route has ~400 points, a continental one ~1,500. */
+const CACHE_POINTS = 2_000_000;
+
+/** One (trip, strategy) search: queued, then running on a worker, then cached. */
+interface Search {
+  id: number;
+  key: string;
+  trip: Trip;
+  strategy: RouteStrategy;
+  background: boolean;
+  running: boolean;
+  /** Plans still waiting for it. A queued search nobody waits for is dropped. */
+  interest: number;
+  promise: Promise<RouteResult>;
+  resolve(result: RouteResult): void;
+  reject(error: Error): void;
+}
+
+interface Thread {
+  worker: Worker;
+  search: Search | null;
+  dead: boolean;
+}
+
+export function startRoutePlanner(options: { networkDir: string; networkVersion: string; workers: number }): RoutePlanner {
+  const size = Math.max(1, Math.floor(options.workers));
+  // Lanes: batch work may hold at most size − 1 threads, so a person's click finds one free.
+  const backgroundLimit = Math.max(1, size - 1);
+  const threads: Thread[] = [];
+  const foreground: Search[] = [];
+  const background: Search[] = [];
+  const inFlight = new Map<string, Search>();
+  const cache = new Map<string, { result: RouteResult; points: number }>();
+  let cachedPoints = 0;
+  let nextId = 1;
+  let closed = false;
+
+  const searchKey = (trip: Trip, strategy: RouteStrategy) => `${tripKey(options.networkVersion, trip)}\u0000${strategy}`;
+
+  const cached = (key: string): RouteResult | undefined => {
+    const entry = cache.get(key);
+    if (!entry) return undefined;
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry.result;
+  };
+
+  const remember = (key: string, result: RouteResult) => {
+    const points = result.ok ? 1 + result.path.legs.reduce((n, leg) => n + leg.path.length, 0) + result.approach.paths.reduce((n, p) => n + p.length, 0) : 1;
+    cache.set(key, { result, points });
+    cachedPoints += points;
+    for (const [oldest, entry] of cache) {
+      if (cachedPoints <= CACHE_POINTS || oldest === key) break;
+      cache.delete(oldest);
+      cachedPoints -= entry.points;
+    }
+  };
+
+  const runningBackground = () => threads.filter((t) => t.search?.background).length;
+
+  const spawn = (): Thread => {
+    const data: WorkerData = { networkDir: options.networkDir };
+    const thread: Thread = { worker: new Worker(new URL("./worker.ts", import.meta.url), { workerData: data }), search: null, dead: false };
+    thread.worker.on("message", (answer: JobResult) => {
+      const search = thread.search;
+      if (!search || search.id !== answer.id) return;
+      finish(thread);
+      if ("result" in answer) {
+        remember(search.key, answer.result);
+        search.resolve(answer.result);
+      } else {
+        // Waypoints only, no car: a search holds coordinates and ids, never a report.
+        console.error(`Routing failed (${search.strategy}): ${answer.failed}`);
+        search.reject(new Error(`Routing failed: ${answer.failed}`));
+      }
+      pump();
+    });
+    const die = (why: string) => {
+      if (thread.dead) return;
+      thread.dead = true;
+      if (!closed) console.error(`A routing worker stopped (${why}); the next search starts another.`);
+      threads.splice(threads.indexOf(thread), 1);
+      const search = thread.search;
+      if (search) {
+        finish(thread);
+        search.reject(new Error(`The routing worker stopped (${why}).`));
+      }
+      if (!closed) pump();
+    };
+    thread.worker.on("error", (error) => die(error.message));
+    thread.worker.on("exit", (code) => die(`exit code ${code}`));
+    threads.push(thread);
+    return thread;
+  };
+
+  const finish = (thread: Thread) => {
+    if (thread.search) inFlight.delete(thread.search.key);
+    thread.search = null;
+    // An idle worker must not keep the process alive.
+    thread.worker.unref();
+  };
+
+  const pump = () => {
+    while (!closed) {
+      const lane = foreground.length ? foreground : background.length && runningBackground() < backgroundLimit ? background : null;
+      if (!lane) return;
+      const thread = threads.find((t) => !t.search) ?? (threads.length < size ? spawn() : null);
+      if (!thread) return;
+      const search = lane.shift()!;
+      search.running = true;
+      thread.search = search;
+      thread.worker.ref();
+      const job: Job = { id: search.id, trip: search.trip, strategy: search.strategy };
+      thread.worker.postMessage(job);
+    }
+  };
+
+  const enqueue = (key: string, trip: Trip, strategy: RouteStrategy, isBackground: boolean): Search => {
+    let resolve!: (result: RouteResult) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<RouteResult>((res, rej) => ((resolve = res), (reject = rej)));
+    // Every waiter has its own handler; this one keeps a failure nobody waits for any more from being "unhandled".
+    promise.catch(() => {});
+    const search: Search = { id: nextId++, key, trip, strategy, background: isBackground, running: false, interest: 0, promise, resolve, reject };
+    inFlight.set(key, search);
+    (isBackground ? background : foreground).push(search);
+    return search;
+  };
+
+  const drop = (search: Search) => {
+    const lane = search.background ? background : foreground;
+    const at = lane.indexOf(search);
+    if (at >= 0) lane.splice(at, 1);
+    inFlight.delete(search.key);
+  };
+
+  const strategiesFor = (want: Want): readonly RouteStrategy[] => (want === "pick" ? ["pick"] : ROUTE_STRATEGIES);
+
+  return {
+    plan(trip, want, { background: isBackground = false, signal } = {}) {
+      if (closed) return Promise.reject(new Error("The route planner is closed."));
+      if (signal?.aborted) return Promise.reject(signal.reason);
+      const strategies = strategiesFor(want);
+      const known = new Map<RouteStrategy, RouteResult>();
+      const waiting: Search[] = [];
+      for (const strategy of strategies) {
+        const key = searchKey(trip, strategy);
+        const hit = cached(key);
+        if (hit) {
+          known.set(strategy, hit);
+          continue;
+        }
+        const search = inFlight.get(key) ?? enqueue(key, trip, strategy, isBackground);
+        if (!isBackground && search.background && !search.running) {
+          background.splice(background.indexOf(search), 1);
+          search.background = false;
+          foreground.push(search);
+        }
+        search.interest++;
+        waiting.push(search);
+      }
+      const answer = () => combine(strategies.map((s) => known.get(s)!));
+      if (!waiting.length) return Promise.resolve(answer());
+      pump();
+
+      return new Promise<Routed>((resolve, reject) => {
+        let settled = false;
+        const release = () => {
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          for (const search of waiting) if (--search.interest === 0 && !search.running) drop(search);
+        };
+        const onAbort = () => {
+          if (settled) return;
+          release();
+          reject(signal!.reason);
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
+        Promise.all(waiting.map((s) => s.promise)).then(
+          (results) => {
+            if (settled) return;
+            waiting.forEach((s, i) => known.set(s.strategy, results[i]));
+            release();
+            resolve(answer());
+          },
+          (error: Error) => {
+            if (settled) return;
+            release();
+            reject(error);
+          },
+        );
+      });
+    },
+
+    peek(trip, want) {
+      const results: RouteResult[] = [];
+      for (const strategy of strategiesFor(want)) {
+        const hit = cached(searchKey(trip, strategy));
+        if (!hit) return undefined;
+        results.push(hit);
+      }
+      return combine(results);
+    },
+
+    async close() {
+      if (closed) return;
+      closed = true;
+      const stopped = new Error("The route planner was closed.");
+      for (const search of [...foreground.splice(0), ...background.splice(0), ...threads.flatMap((t) => (t.search ? [t.search] : []))]) search.reject(stopped);
+      inFlight.clear();
+      await Promise.all(threads.splice(0).map((t) => ((t.dead = true), t.worker.terminate())));
+    },
+  };
+}

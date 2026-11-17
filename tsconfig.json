@@ -1,0 +1,16 @@
+{
+  // The whole repo as one program: `npx tsc --noEmit` answers "does everything typecheck?".
+  // It cannot see area boundaries (DOM and Node types are both loaded here). `npm run typecheck`
+  // (tsc -b tsconfig.areas.json) is the strict check: one program per area, imports across a
+  // boundary that MODULE_MAP.md does not allow fail there.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client", "node"]
+  },
+  "include": ["shared", "engine", "server", "web", "scripts", "tests", "vite.config.ts", "playwright.config.ts"]
+}

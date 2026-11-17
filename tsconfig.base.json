@@ -1,0 +1,18 @@
+{
+  // Shared by every area. Each area's own tsconfig.json adds its runtime (lib, types, module) and its allowed imports.
+  "compilerOptions": {
+    "target": "ES2022",
+    "strict": true,
+    "noUnusedLocals": true,
+    // Sketch phase only: bodies throw "not implemented", so their parameters are unused. Turn back on when Phase D fills them in.
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    // Node runs these sources directly (type stripping), so a type import must be written as one,
+    // and every relative import carries its real extension (.ts / .tsx).
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  }
+}

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shop Arrival Check: fix route</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1a73e8}a:hover{color:#174ea6}
+button{font:inherit}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #202124; background: #f1f3f4; min-height: 900px; display: flex; flex-wrap: wrap">
+
+<!-- LEFT PANEL -->
+<div style="flex: 1 1 420px; min-width: 0; height: 900px; overflow-y: auto; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15); position: relative; z-index: 2">
+<div style="display: flex; align-items: center; gap: 6px; padding: 12px 12px 8px">
+<a href="Main.dc.html" aria-label="Back to route" style="width: 40px; height: 40px; border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; color: #3c4043">
+<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H4M9 5l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+<div>
+<h1 style="margin: 0; font-size: 17px; font-weight: 600">Fix route</h1>
+<div style="font-size: 12px; color: #5f6368">EXAMPLE 104233 · Temple, TX → North Little Rock, AR</div>
+</div>
+</div>
+
+<!-- warning row from the pearl chain -->
+<section aria-label="The step with the problem" style="margin: 4px 16px 0; border: 1px solid #dadce0; border-radius: 12px; padding: 6px 8px 10px">
+<ol style="list-style: none; margin: 0; padding: 0">
+<li style="display: grid; grid-template-columns: 40px 32px minmax(0, 1fr); column-gap: 6px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5f6368; text-align: right; padding-top: 11px">0</span>
+<span style="position: relative; display: block; min-height: 40px">
+<span style="position: absolute; left: 16px; top: 0; height: 20px; transform: translateX(-50%); border-left: 3px dotted #9aa0a6"></span>
+<span style="position: absolute; left: 16px; top: 20px; bottom: 0; transform: translateX(-50%); border-left: 6px solid #d0661f"></span>
+<span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 14px; height: 14px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 1.5px #1a73e8"></span>
+</span>
+<span style="padding: 10px 0"><span style="display: block; font-size: 14px; font-weight: 600; line-height: 20px">Temple, TX</span><span style="font-size: 12px; color: #5f6368">B · next node</span></span>
+</li>
+<li style="display: grid; grid-template-columns: 40px 32px minmax(0, 1fr); column-gap: 6px; background: #fff8ec; border-radius: 8px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5f6368; text-align: right; padding-top: 11px">0</span>
+<span style="position: relative; display: block; min-height: 40px">
+<span style="position: absolute; left: 16px; top: 0; bottom: 0; transform: translateX(-50%); border-left: 6px solid #d0661f"></span>
+<span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid #b06000; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 10V5a2.5 2.5 0 0 1 5 0v3.5M6.8 7l1.7 1.7L10.2 7" fill="none" stroke="#b06000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+</span>
+<span style="padding: 10px 8px 10px 0">
+<span style="display: block; font-size: 14px; font-weight: 600; line-height: 20px; color: #7b1fa2">Turns back at Temple, TX (yard track): check</span>
+<span style="display: block; font-size: 12px; color: #5f6368">Arrives on Lampasas Sub heading S, leaves heading N</span>
+<span style="display: flex; gap: 8px; margin-top: 8px">
+<button type="button" aria-pressed="true" style="font-size: 13px; font-weight: 600; color: #1a73e8; background: #e8f0fe; border: 1px solid #1a73e8; border-radius: 16px; padding: 4px 12px; cursor: pointer">Show on map</button>
+<button type="button" aria-pressed="true" style="font-size: 13px; font-weight: 600; color: #ffffff; background: #1a73e8; border: 0; border-radius: 16px; padding: 5px 13px; cursor: pointer">Fix route</button>
+</span>
+</span>
+</li>
+</ol>
+</section>
+
+<!-- stops -->
+<section aria-label="Stops" style="padding: 16px 16px 8px">
+<h2 style="margin: 0 0 8px 4px; font-size: 14px; font-weight: 600">Stops</h2>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+<li style="display: flex; align-items: center; gap: 10px; border: 1px solid #dadce0; border-radius: 8px; padding: 8px 10px">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="#fff" stroke="#80868b" stroke-width="2.5"/></svg>
+<span style="flex: 1; font-size: 14px">Taylor, TX <span style="font-size: 12px; color: #5f6368">· A, last passed</span></span>
+</li>
+<li style="display: flex; align-items: center; gap: 10px; border: 1px solid #dadce0; border-radius: 8px; padding: 8px 10px">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="#1a73e8" stroke="#fff" stroke-width="2"/></svg>
+<span style="flex: 1; font-size: 14px">Temple, TX <span style="font-size: 12px; color: #5f6368">· B, next</span></span>
+</li>
+<li style="display: flex; align-items: center; gap: 10px; border: 2px solid #1a73e8; border-radius: 8px; padding: 7px 9px; background: #f6f9fe">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="#fff" stroke="#202124" stroke-width="2.5"/></svg>
+<span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<span style="font-size: 14px; font-weight: 600">Via TEMPLE, TX wye <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 500; color: #5f6368">BNSF</span></span>
+<span style="font-size: 12px; color: #1a5fb4">Added by you · passes the wye instead of the yard</span>
+</span>
+<span style="font-size: 11px; font-weight: 600; color: #1a5fb4; background: #e8f0fe; border-radius: 6px; padding: 2px 7px">Route set by you</span>
+<button type="button" aria-label="Remove this stop" style="width: 32px; height: 32px; border: 0; background: transparent; color: #5f6368; border-radius: 16px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+</li>
+<li style="display: flex; align-items: center; gap: 10px; border: 1px solid #dadce0; border-radius: 8px; padding: 8px 10px">
+<svg width="16" height="20" viewBox="0 0 18 22" aria-hidden="true"><path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="#c5221f"/><circle cx="9" cy="9" r="2.6" fill="#fff"/></svg>
+<span style="flex: 1; font-size: 14px">North Little Rock, AR <span style="font-size: 12px; color: #5f6368">· EXAMPLE shop</span></span>
+</li>
+</ol>
+<button type="button" style="margin-top: 6px; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; border: 0; background: transparent; color: #1a73e8; font-size: 14px; font-weight: 500; cursor: pointer; border-radius: 17px">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Add another stop</button>
+</section>
+
+<!-- before / after -->
+<section aria-label="What changed" style="margin: 0 16px; border: 1px solid #dadce0; border-radius: 12px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: #f8f9fa; border-bottom: 1px solid #dadce0">
+<h2 style="margin: 0; font-size: 14px; font-weight: 600">What changed</h2>
+<span style="font-size: 11px; font-weight: 600; font-style: italic; color: #5f6368; background: #e8eaed; border-radius: 6px; padding: 2px 7px">Rough estimate</span>
+</div>
+<table style="width: 100%; border-collapse: collapse; font-size: 13px">
+<thead><tr style="color: #5f6368; font-size: 12px; text-align: left"><th scope="col" style="padding: 8px 14px 4px; font-weight: 500"></th><th scope="col" style="padding: 8px 8px 4px; font-weight: 500">Before</th><th scope="col" style="padding: 8px 14px 4px 8px; font-weight: 500">With your stop</th></tr></thead>
+<tbody>
+<tr style="border-top: 1px solid #f1f3f4"><th scope="row" style="text-align: left; padding: 7px 14px; font-weight: 500">Route length</th><td style="padding: 7px 8px; font-family: 'IBM Plex Mono', monospace; color: #5f6368">1,046 km</td><td style="padding: 7px 14px 7px 8px; font-family: 'IBM Plex Mono', monospace; font-weight: 600">926 km</td></tr>
+<tr style="border-top: 1px solid #f1f3f4"><th scope="row" style="text-align: left; padding: 7px 14px; font-weight: 500">Interchanges</th><td style="padding: 7px 8px; font-family: 'IBM Plex Mono', monospace; color: #5f6368">0</td><td style="padding: 7px 14px 7px 8px; font-family: 'IBM Plex Mono', monospace; font-weight: 600">0</td></tr>
+<tr style="border-top: 1px solid #f1f3f4"><th scope="row" style="text-align: left; padding: 7px 14px; font-weight: 500">Turn-backs</th><td style="padding: 7px 8px; font-family: 'IBM Plex Mono', monospace; color: #5f6368">1</td><td style="padding: 7px 14px 7px 8px; font-family: 'IBM Plex Mono', monospace; font-weight: 600">0</td></tr>
+<tr style="border-top: 1px solid #f1f3f4"><th scope="row" style="text-align: left; padding: 7px 14px; font-weight: 500">Earliest arrival</th><td style="padding: 7px 8px; font-style: italic; color: #5f6368">about Thu 19 night</td><td style="padding: 7px 14px 7px 8px; font-style: italic; color: #5f6368">about Thu 19 afternoon</td></tr>
+<tr style="border-top: 1px solid #f1f3f4"><th scope="row" style="text-align: left; padding: 7px 14px; font-weight: 500">Status</th>
+<td style="padding: 7px 8px"><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #7b1fa2; border: 1.5px solid #7b1fa2; border-radius: 11px; padding: 1px 7px 1px 4px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Check route</span></td>
+<td style="padding: 7px 14px 7px 8px"><span style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: #b06000; border: 1.5px solid #b06000; border-radius: 11px; padding: 1px 7px 1px 4px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.3l6.2 11.2H.8z" fill="#b06000"/></svg>Tight <span style="font-family: 'IBM Plex Mono', monospace">+16 h</span></span></td></tr>
+</tbody>
+</table>
+<div style="padding: 8px 14px 12px; font-size: 12px; color: #5f6368; font-style: italic; border-top: 1px solid #f1f3f4">Route 926 km vs straight line 631 km (1.5×) · serving yard to shop placement: not counted</div>
+</section>
+
+<div style="padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 10px">
+<button type="button" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 0; border-radius: 22px; background: #1a73e8; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 9.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Use for this batch row</button>
+<div style="font-size: 12px; color: #5f6368; text-align: center">Row 3 of “EXAMPLE cars-nov17.csv” will show the tag <span style="font-weight: 600; color: #1a5fb4">Route set by you</span>. The original route stays in history.</div>
+</div>
+</div>
+
+<!-- MAP zoomed to Temple -->
+<div style="flex: 999 1 560px; min-width: 0; height: 900px; position: relative; overflow: hidden; background: #f8f9fa">
+<svg viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Close-up map of Temple, Texas: the old route turns back in the yard; the new route passes the wye" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block">
+<defs>
+<marker id="chevF" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M3 2l4 3-4 3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="chevG" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto"><path d="M3 2l4 3-4 3" fill="none" stroke="#5f6368" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="abF" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1l8 4-8 4z" fill="#5f6368"/></marker>
+<filter id="shF" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#3c4043" flood-opacity=".28"/></filter>
+</defs>
+<rect width="1000" height="800" fill="#f8f9fa"/>
+<!-- lake and park -->
+<path d="M0 120C60 100 120 140 170 130S240 90 260 140S220 220 160 230S60 250 0 240Z" fill="#aadaff"/>
+<path d="M760 120c40-10 90 10 110 50s-20 70-70 70-80-30-80-60 10-50 40-60z" fill="#eef2ea"/>
+<path d="M120 620c50-20 120-10 140 30s-30 60-90 60-90-30-50-90z" fill="#eef2ea"/>
+<path d="M260 800C300 720 340 680 330 600S380 500 360 420" fill="none" stroke="#aadaff" stroke-width="4" stroke-linecap="round"/>
+<!-- town blocks -->
+<g fill="#eceef1">
+<rect x="600" y="230" width="70" height="50" rx="3"/><rect x="680" y="230" width="70" height="50" rx="3"/><rect x="600" y="290" width="70" height="50" rx="3"/><rect x="680" y="290" width="70" height="50" rx="3"/><rect x="760" y="290" width="60" height="50" rx="3"/><rect x="600" y="160" width="70" height="60" rx="3"/><rect x="680" y="160" width="70" height="60" rx="3"/><rect x="460" y="230" width="80" height="50" rx="3"/><rect x="460" y="160" width="80" height="60" rx="3"/><rect x="380" y="230" width="70" height="50" rx="3"/><rect x="620" y="520" width="80" height="60" rx="3"/><rect x="710" y="560" width="80" height="60" rx="3"/><rect x="420" y="560" width="90" height="60" rx="3"/><rect x="420" y="630" width="90" height="60" rx="3"/>
+</g>
+<!-- streets -->
+<g fill="none" stroke="#e1e4e8" stroke-width="9" stroke-linecap="round"><path d="M0 300L1000 290M590 0L595 800M0 470L1000 480M760 0C770 300 800 500 900 800"/></g>
+<g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round"><path d="M0 300L1000 290M590 0L595 800M0 470L1000 480M760 0C770 300 800 500 900 800"/></g>
+<g fill="none" stroke="#ffffff" stroke-width="3"><path d="M370 0V420M455 150V290M675 150V350M600 520L1000 520M410 620H520M0 380L330 380"/></g>
+<g font-family="Inter, sans-serif" font-size="11" fill="#5f6368" stroke="#f8f9fa" stroke-width="3" paint-order="stroke"><text x="800" y="286">Central Ave</text><text x="600" y="60">S 1st St</text><text x="20" y="462">Adams Ave</text><text x="40" y="180">Belton Lake</text></g>
+<text x="660" y="210" font-family="Inter, sans-serif" font-size="15" font-weight="600" fill="#3c4043" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">Temple</text>
+
+<!-- REAL TRACKS overlay: tracks with tie marks -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<!-- yard tracks -->
+<g stroke="#80868b" stroke-width="1.6"><path d="M330 392L540 404M330 400L540 412M330 408L540 420M340 416L530 428M350 424L520 436"/></g>
+<!-- BNSF: Lampasas, Fort Worth, Galveston, south line, wye, stub -->
+<g stroke="#d0661f" stroke-width="3.2">
+<path d="M0 330L320 372L440 385L480 390L560 400"/>
+<path d="M560 400L565 200L570 0"/>
+<path d="M560 400L660 457L700 480L1000 690"/>
+<path d="M560 400L560 800"/>
+<path d="M560 545C560 495 600 467 660 457"/>
+<path d="M440 385C425 395 410 420 405 470"/>
+</g>
+<g stroke="#d0661f" stroke-width="7" stroke-dasharray="1 7" opacity=".55">
+<path d="M0 330L320 372L440 385L480 390L560 400M560 400L570 0M560 400L1000 690M560 400L560 800"/>
+</g>
+<!-- UP -->
+<g stroke="#b8920f" stroke-width="3.2"><path d="M0 610L380 528L620 446L1000 310"/></g>
+<g stroke="#b8920f" stroke-width="7" stroke-dasharray="1 7" opacity=".55"><path d="M0 610L380 528L620 446L1000 310"/></g>
+</g>
+<g font-family="IBM Plex Mono, monospace" font-size="11" font-weight="500" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">
+<text x="40" y="326" fill="#8f4210">BNSF Lampasas Sub</text>
+<text x="580" y="40" fill="#8f4210">BNSF Fort Worth Sub</text>
+<text x="830" y="640" fill="#8f4210" transform="rotate(35 830 640)">BNSF Galveston Sub</text>
+<text x="40" y="600" fill="#7a6008" transform="rotate(-12 40 600)">UP</text>
+<text x="335" y="448" fill="#5f6368">yard</text>
+</g>
+
+<!-- OLD route ghost (grey dashed), second pass offset 4 px -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M560 612L560 404L480 393L440 388C426 397 412 421 407 470" stroke="#9aa0a6" stroke-width="4" stroke-dasharray="9 7" marker-mid="url(#chevG)"/>
+<path d="M403 470C407 418 422 392 437 383L480 386L557 396L702 477L1000 686" stroke="#9aa0a6" stroke-width="4" stroke-dasharray="9 7" marker-mid="url(#chevG)"/>
+<path d="M560 520L560 440" stroke="none" marker-mid="url(#chevG)"/>
+</g>
+<!-- U-turn ring -->
+<circle cx="405" cy="472" r="20" fill="none" stroke="#ffffff" stroke-width="7"/>
+<circle cx="405" cy="472" r="20" fill="none" stroke="#b06000" stroke-width="3.2"/>
+<path d="M385 480L330 520" stroke="#b06000" stroke-width="2"/>
+<rect x="160" y="508" width="172" height="32" rx="16" fill="#ffffff" stroke="#b06000" stroke-width="1.5" filter="url(#shF)"/>
+<text x="246" y="529" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#b06000">Turns back here: check</text>
+
+<!-- NEW route (blue) via the wye -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M560 612L560 545C560 495 600 467 660 457L700 480L850 585L1000 690" stroke="#ffffff" stroke-width="11"/>
+<path d="M560 612L560 580L560 545C560 495 600 467 660 457L700 480L850 585L1000 690" stroke="#1a73e8" stroke-width="6.5" marker-mid="url(#chevF)"/>
+</g>
+<!-- A to B -->
+<path d="M560 800L560 628" fill="none" stroke="#5f6368" stroke-width="2.5" stroke-dasharray="5 5" marker-end="url(#abF)"/>
+<text x="572" y="760" font-family="Inter, sans-serif" font-size="12" fill="#3c4043" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">from A · Taylor, TX (63 km)</text>
+<!-- B pin -->
+<circle cx="560" cy="612" r="10" fill="#1a73e8" stroke="#ffffff" stroke-width="3" filter="url(#shF)"/>
+<text x="578" y="617" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#202124" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">B · Temple, TX</text>
+<!-- via pin -->
+<circle cx="588" cy="478" r="9" fill="#ffffff" stroke="#202124" stroke-width="3" filter="url(#shF)"/>
+<text x="604" y="500" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#1a5fb4" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">Your stop · wye</text>
+</svg>
+
+<!-- junction inspector -->
+<section aria-label="Junction inspector" style="position: absolute; top: 16px; left: 16px; width: 330px; max-width: calc(100% - 100px); background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7" fill="none" stroke="#b06000" stroke-width="2"/><circle cx="9" cy="9" r="2" fill="#b06000"/></svg>
+<h2 style="margin: 0; font-size: 14px; font-weight: 600; flex: 1">Junction inspector</h2>
+<span style="font-size: 11px; color: #5f6368">Temple, TX yard</span>
+</div>
+<div style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; font-size: 13px">
+<span style="color: #5f6368">Arrives</span><span>on Lampasas Sub heading S</span>
+<span style="color: #5f6368">Leaves</span><span>heading N</span>
+<span style="color: #5f6368">Turn</span><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #b06000">176°</span>
+<span style="color: #5f6368">Track</span><span>yard track (stub end)</span>
+</div>
+<div style="font-size: 12px; color: #5f6368">The router reversed the car on a yard track, which a real move is unlikely to do. Add a stop at the wye to route around it.</div>
+<a href="Main.dc.html" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #1a73e8; text-decoration: none; border: 1px solid #dadce0; border-radius: 16px; padding: 4px 12px">
+<svg width="14" height="14" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 7V3h4M11 3h4v4M15 11v4h-4M7 15H3v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Back to whole route</a>
+</section>
+
+<!-- controls: layers open, zoom, undo/redo -->
+<div style="position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px">
+<div role="radiogroup" aria-label="Map layer" style="display: flex; gap: 6px; background: #fff; border-radius: 10px; padding: 6px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15)">
+<button type="button" role="radio" aria-checked="false" style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; padding: 4px 0; border: 0; background: transparent; border-radius: 8px; font-size: 11px; color: #3c4043; cursor: pointer">
+<span style="width: 48px; height: 36px; border-radius: 6px; background: #f8f9fa; border: 1px solid #dadce0; box-sizing: border-box; display: block; position: relative; overflow: hidden"><span style="position: absolute; left: -4px; top: 18px; width: 60px; height: 3px; background: #fff; transform: rotate(-12deg)"></span><span style="position: absolute; right: 0; bottom: 0; width: 18px; height: 14px; background: #aadaff"></span></span>Map</button>
+<button type="button" role="radio" aria-checked="false" style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; padding: 4px 0; border: 0; background: transparent; border-radius: 8px; font-size: 11px; color: #3c4043; cursor: pointer">
+<span style="width: 48px; height: 36px; border-radius: 6px; background: #5d6b4f; display: block; position: relative; overflow: hidden"><span style="position: absolute; left: 6px; top: 6px; width: 20px; height: 14px; background: #7a8862; border-radius: 3px"></span><span style="position: absolute; right: 4px; bottom: 4px; width: 16px; height: 12px; background: #46523c; border-radius: 3px"></span></span>Satellite</button>
+<button type="button" role="radio" aria-checked="true" style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; padding: 4px 0; border: 0; background: #e8f0fe; border-radius: 8px; font-size: 11px; font-weight: 600; color: #1a5fb4; cursor: pointer">
+<span style="width: 48px; height: 36px; border-radius: 6px; background: #f8f9fa; border: 2px solid #1a73e8; box-sizing: border-box; display: block; position: relative; overflow: hidden"><span style="position: absolute; left: -4px; top: 12px; width: 60px; height: 3px; background: #d0661f; transform: rotate(-12deg)"></span><span style="position: absolute; left: -4px; top: 20px; width: 60px; height: 3px; background: #b8920f; transform: rotate(8deg)"></span></span>Real tracks</button>
+</div>
+<div style="display: flex; flex-direction: column; background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); overflow: hidden">
+<button type="button" aria-label="Zoom in" style="width: 40px; height: 40px; border: 0; background: #fff; color: #3c4043; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+<span style="height: 1px; background: #e8eaed; margin: 0 8px"></span>
+<button type="button" aria-label="Zoom out" style="width: 40px; height: 40px; border: 0; background: #fff; color: #3c4043; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); overflow: hidden">
+<button type="button" aria-label="Undo: remove the stop" style="width: 40px; height: 40px; border: 0; background: #fff; color: #1a73e8; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h8a4 4 0 0 1 0 8H8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<span style="height: 1px; background: #e8eaed; margin: 0 8px"></span>
+<button type="button" aria-label="Redo" disabled style="width: 40px; height: 40px; border: 0; background: #fff; color: #bdc1c6; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M11 4l4 4-4 4M15 8H7a4 4 0 0 0 0 8h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+</div>
+</div>
+
+<!-- delta balloon -->
+<div role="status" style="position: absolute; left: 50%; bottom: 120px; transform: translateX(-30%); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff; border-radius: 14px; padding: 10px 12px 10px 16px; box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); border: 2px solid #1a73e8; max-width: calc(100% - 40px); box-sizing: border-box">
+<span style="display: flex; flex-direction: column">
+<span style="font-size: 14px; font-weight: 600"><span style="font-family: 'IBM Plex Mono', monospace; color: #188038">−120 km</span> · same interchanges · now: <span style="color: #b06000">Tight</span> <span style="font-style: italic; font-weight: 400; color: #5f6368">(rough)</span></span>
+<span style="font-size: 12px; color: #5f6368">Grey dashed line = the old route</span>
+</span>
+<button type="button" style="height: 34px; padding: 0 16px; border: 0; border-radius: 17px; background: #1a73e8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer">Keep</button>
+<button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #dadce0; border-radius: 17px; background: #fff; color: #1a73e8; font-size: 13px; font-weight: 600; cursor: pointer">Undo</button>
+</div>
+
+<!-- inset: the picking moment -->
+<section aria-label="A moment earlier: picking the stop" style="position: absolute; right: 16px; bottom: 16px; width: 300px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); overflow: hidden">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #202124; color: #fff; font-size: 12.5px">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>
+Click the map to add a stop · <kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #80868b; border-radius: 4px; padding: 0 4px">Esc</kbd> to cancel</div>
+<svg viewBox="0 0 300 150" style="display: block; width: 100%; height: auto" role="img" aria-label="Snap preview: ring on the nearest node where BNSF and UP lines meet">
+<rect width="300" height="150" fill="#f8f9fa"/>
+<path d="M0 30L300 140" stroke="#d0661f" stroke-width="3.5" fill="none"/>
+<path d="M0 120L300 40" stroke="#b8920f" stroke-width="3.5" fill="none"/>
+<path d="M120 150C125 110 140 90 175 80" stroke="#d0661f" stroke-width="2.5" fill="none"/>
+<circle cx="150" cy="85" r="14" fill="rgba(26,115,232,.12)" stroke="#1a73e8" stroke-width="2.5"/>
+<circle cx="150" cy="85" r="4" fill="#1a73e8"/>
+<path d="M176 104l0 16 4-4 4 8 3-1.5-4-8 6 0z" fill="#202124" stroke="#fff" stroke-width="1"/>
+<rect x="8" y="8" width="196" height="24" rx="6" fill="#202124"/>
+<text x="16" y="24" font-family="Inter, sans-serif" font-size="11" fill="#ffffff">Snaps to <tspan font-weight="700">TEMPLE, TX</tspan> · BNSF · 1.8 km</text>
+</svg>
+<div style="padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 12px; font-weight: 600">Which line? Two railroads meet here.</div>
+<div role="radiogroup" aria-label="Which line" style="display: flex; gap: 6px">
+<button type="button" role="radio" aria-checked="true" style="flex: 1; height: 32px; border: 2px solid #1a73e8; background: #e8f0fe; border-radius: 8px; font-size: 12px; font-weight: 600; color: #202124; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span style="width: 12px; height: 4px; background: #d0661f; border-radius: 2px"></span>BNSF</button>
+<button type="button" role="radio" aria-checked="false" style="flex: 1; height: 32px; border: 1px solid #dadce0; background: #fff; border-radius: 8px; font-size: 12px; font-weight: 500; color: #202124; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer"><span style="width: 12px; height: 4px; background: #b8920f; border-radius: 2px"></span>UP</button>
+</div>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "..",
+    "outDir": "../.tsbuild",
+    "tsBuildInfoFile": "../.tsbuild/shared.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": [],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["./**/*.ts"],
+  "references": []
+}

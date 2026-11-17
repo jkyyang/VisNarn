@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "..",
+    "outDir": "../.tsbuild",
+    "tsBuildInfoFile": "../.tsbuild/tests.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx"
+  },
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "references": [{ "path": "../shared" }, { "path": "../engine" }, { "path": "../server" }, { "path": "../web" }]
+}

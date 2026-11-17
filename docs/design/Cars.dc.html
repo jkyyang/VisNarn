@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shop Arrival Check: morning car list</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1a73e8}a:hover{color:#174ea6}
+button{font:inherit}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #202124; background: #f1f3f4; min-height: 900px; display: flex; flex-wrap: wrap">
+
+<!-- LEFT PANEL -->
+<div style="flex: 1 1 460px; min-width: 0; height: 900px; overflow-y: auto; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15); position: relative; z-index: 2">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#1a73e8"/><path d="M7 19c4-9 10-1 14-10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="19" r="2.4" fill="#fff"/><rect x="18.5" y="6.5" width="5" height="5" rx="1" fill="#fff"/></svg>
+<div style="font-size: 17px; font-weight: 600">Shop Arrival Check</div>
+</div>
+<span style="font-size: 11px; font-weight: 600; letter-spacing: .06em; color: #5f6368; border: 1px solid #dadce0; border-radius: 6px; padding: 3px 7px">EXAMPLE DATA</span>
+</div>
+<nav aria-label="Mode" style="display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid #dadce0">
+<a href="Main.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 12px; font-size: 14px; font-weight: 500; color: #5f6368; text-decoration: none">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 15V7.5a3 3 0 0 1 6 0v3a3 3 0 0 0 6 0V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="4" cy="15" r="1.8" fill="currentColor"/></svg>Route</a>
+<a href="Cars.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 9px; font-size: 14px; font-weight: 600; color: #1a73e8; text-decoration: none; border-bottom: 3px solid #1a73e8">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M3 9h12M3 13h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Cars</a>
+<a href="Shops.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 12px; font-size: 14px; font-weight: 500; color: #5f6368; text-decoration: none">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="7" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 8l7-5 7 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Shops</a>
+</nav>
+
+<!-- batch + parse summary -->
+<div style="padding: 14px 20px 10px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+<div>
+<h1 style="margin: 0; font-size: 18px; font-weight: 600">Morning list · Tue Nov 17</h1>
+<div style="font-size: 12px; color: #5f6368; margin-top: 2px">Batch “EXAMPLE cars-nov17.csv”</div>
+</div>
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid #dadce0; border-radius: 17px; background: #fff; color: #1a73e8; font-size: 13px; font-weight: 500; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V3M5 6l3-3 3 3M3 13h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Upload batch</button>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: #3c4043; background: #f8f9fa; border-radius: 8px; padding: 8px 10px">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="#188038" stroke-width="1.6"/><path d="M5.3 8.2l1.8 1.8 3.6-3.8" fill="none" stroke="#188038" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<span><span style="font-family: 'IBM Plex Mono', monospace">6</span> rows read · <span style="font-family: 'IBM Plex Mono', monospace">0</span> need fixing · reports <span style="font-family: 'IBM Plex Mono', monospace">0</span> days old</span>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; font-style: italic; color: #5f6368; background: #e8eaed; border-radius: 6px; padding: 2px 7px">Rough estimate</span>
+</div>
+
+<!-- count chips -->
+<div role="group" aria-label="Filter by group" style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" aria-pressed="true" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; border-radius: 16px; border: 1.5px solid #c5221f; background: #fff; color: #c5221f; font-size: 13px; font-weight: 600; cursor: pointer">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/><path d="M7 4v3.6M7 9.8v.1" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>Act now <span style="font-family: 'IBM Plex Mono', monospace">2</span></button>
+<button type="button" aria-pressed="true" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; border-radius: 16px; border: 1.5px solid #7b1fa2; background: #fff; color: #7b1fa2; font-size: 13px; font-weight: 600; cursor: pointer">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#7b1fa2"/><path d="M5.3 5.4a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.5-.7 1v.3M7 10.3v.1" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>Check first <span style="font-family: 'IBM Plex Mono', monospace">2</span></button>
+<button type="button" aria-pressed="true" style="display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 0 9px; border-radius: 16px; border: 1.5px solid #188038; background: #fff; color: #188038; font-size: 13px; font-weight: 600; cursor: pointer">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#188038"/><path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>OK <span style="font-family: 'IBM Plex Mono', monospace">2</span></button>
+</div>
+
+<div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 160px">
+<label for="shopfilter" style="font-size: 11px; color: #5f6368">Shop</label>
+<select id="shopfilter" style="height: 34px; border: 1px solid #dadce0; border-radius: 8px; padding: 0 8px; font: inherit; font-size: 13px; color: #202124; background: #fff">
+<option>All shops (6)</option><option>Kansas City, MO (EXAMPLE)</option><option>Birmingham, AL (EXAMPLE)</option><option>North Little Rock, AR (EXAMPLE)</option><option>Chicago, IL (EXAMPLE)</option><option>Calgary, AB (EXAMPLE)</option><option>North Platte, NE (EXAMPLE)</option>
+</select>
+</div>
+<button type="button" style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 0; border-radius: 17px; background: #1a73e8; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8.5" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 3H4a1.5 1.5 0 0 0-1.5 1.5V11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Copy at-risk list</button>
+</div>
+</div>
+
+<!-- list -->
+<div style="padding: 4px 12px 8px">
+<h2 style="display: flex; align-items: center; gap: 8px; margin: 8px 8px 6px; font-size: 13px; font-weight: 600; color: #c5221f">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/><path d="M7 4v3.6M7 9.8v.1" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>Act now · 2</h2>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+<li>
+<a href="Main.dc.html" aria-current="true" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border-radius: 10px; background: #e8f0fe; box-shadow: inset 0 0 0 1.5px #1a73e8; text-decoration: none; color: #202124">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #c5221f; background: #fff; border: 1.5px solid #c5221f; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/></svg>At risk</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">551930</span>
+<span style="font-size: 13px; color: #3c4043">→ Kansas City, MO</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #c5221f; text-align: right">−14 h</span>
+<span style="font-size: 13px; color: #3c4043">Can arrive about 14 h before prep ends.</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f6368"><span style="width: 22px; height: 4px; border-radius: 2px; background: #d0661f"></span>BNSF</span>
+</a>
+</li>
+<li>
+<a href="Main.dc.html" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #202124">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #c5221f; background: #fff; border: 1.5px solid #c5221f; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/></svg>At risk</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #7b1fa2; background: #fff; border: 1.5px solid #7b1fa2; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Check route</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">402196</span>
+<span style="font-size: 13px; color: #3c4043">→ Birmingham, AL</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #c5221f; text-align: right">−13 h</span>
+<span style="font-size: 13px; color: #3c4043">Can arrive about 13 h before prep ends. Route turns back 72 km from Jacksonville.</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f6368"><span style="width: 22px; height: 4px; border-radius: 2px; background: #2b6cb0"></span>CSXT</span>
+</a>
+</li>
+</ul>
+
+<h2 style="display: flex; align-items: center; gap: 8px; margin: 14px 8px 6px; font-size: 13px; font-weight: 600; color: #7b1fa2">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#7b1fa2"/><path d="M5.3 5.4a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.7.5-.7 1v.3M7 10.3v.1" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>Check first · 2 <span style="font-weight: 400; color: #5f6368">route problems come before timing</span></h2>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+<li>
+<a href="Main.dc.html" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #202124">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #7b1fa2; background: #fff; border: 1.5px solid #7b1fa2; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Check route</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #b06000; background: #fff; border: 1.5px solid #b06000; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.3l6.2 11.2H.8z" fill="#b06000"/></svg>Tight</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">104233</span>
+<span style="font-size: 13px; color: #3c4043">→ North Little Rock, AR</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #b06000; text-align: right">+23 h</span>
+<span style="font-size: 13px; color: #3c4043">Turns back at Temple, TX (yard track). Check the route first.</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f6368"><span style="width: 22px; height: 4px; border-radius: 2px; background: #d0661f"></span>BNSF</span>
+</a>
+</li>
+<li>
+<a href="Main.dc.html" style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 12px; border-radius: 10px; text-decoration: none; color: #202124">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #7b1fa2; background: #fff; border: 1.5px solid #7b1fa2; border-radius: 11px; padding: 1px 8px 1px 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>Check route</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600">318045</span>
+<span style="font-size: 13px; color: #3c4043">→ Chicago, IL</span>
+</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; color: #5f6368; text-align: right">+40 h</span>
+<span style="font-size: 13px; color: #3c4043">Timing looks fine, but 2 turn-backs: Hamilton, ON and Chicago, IL.</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; justify-self: end; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #5f6368"><span style="width: 22px; height: 4px; border-radius: 2px; background: #23866a"></span>CPKC</span>
+</a>
+</li>
+</ul>
+
+<h2 style="margin: 14px 0 0">
+<button type="button" aria-expanded="false" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 8px; border: 0; border-top: 1px solid #e8eaed; background: transparent; font-size: 13px; font-weight: 600; color: #188038; cursor: pointer; text-align: left">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#188038"/><path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+OK · 2 <span style="font-weight: 400; color: #5f6368">663012 Calgary +37 h · 220871 North Platte +79 h</span>
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="margin-left: auto"><path d="M5 3l4 4-4 4" fill="none" stroke="#5f6368" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+</h2>
+</div>
+
+<!-- copied text preview -->
+<div style="margin: 4px 20px 12px; border: 1px solid #dadce0; border-radius: 10px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: #f8f9fa; font-size: 12px; color: #5f6368; border-bottom: 1px solid #dadce0">
+<span>What “Copy at-risk list” puts on your clipboard</span>
+<span style="font-weight: 600; color: #188038">Copied</span>
+</div>
+<pre style="margin: 0; padding: 10px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 18px; color: #202124; white-space: pre-wrap">At-risk cars, Tue Nov 17 (rough estimate, EXAMPLE)
+
+Kansas City, MO
+  551930  can arrive ~14 h before prep ends
+Birmingham, AL
+  402196  can arrive ~13 h before prep ends
+          also check route: turns back near Jacksonville</pre>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 20px 20px; font-size: 12px; color: #5f6368; border-top: 1px solid #e8eaed">
+<span><kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #dadce0; border-radius: 4px; padding: 0 5px; background: #f8f9fa">↑</kbd> <kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #dadce0; border-radius: 4px; padding: 0 5px; background: #f8f9fa">↓</kbd> move</span>
+<span><kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #dadce0; border-radius: 4px; padding: 0 5px; background: #f8f9fa">Enter</kbd> open</span>
+<span><kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #dadce0; border-radius: 4px; padding: 0 5px; background: #f8f9fa">F</kbd> fix route</span>
+<span><kbd style="font-family: 'IBM Plex Mono', monospace; border: 1px solid #dadce0; border-radius: 4px; padding: 0 5px; background: #f8f9fa">C</kbd> copy note</span>
+</div>
+</div>
+
+<!-- MAP: North America overview -->
+<div style="flex: 999 1 560px; min-width: 0; height: 900px; position: relative; overflow: hidden; background: #f8f9fa">
+<svg viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid slice" role="img" aria-label="North America map with six example cars; car 551930 route from Minneapolis to Kansas City highlighted" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block">
+<defs>
+<marker id="chevC" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M3 2l4 3-4 3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="abC" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1l8 4-8 4z" fill="#5f6368"/></marker>
+<filter id="shC" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#3c4043" flood-opacity=".28"/></filter>
+</defs>
+<rect width="1000" height="720" fill="#f8f9fa"/>
+<g fill="#eef2ea"><ellipse cx="250" cy="250" rx="70" ry="60"/><ellipse cx="330" cy="330" rx="40" ry="30"/><ellipse cx="760" cy="440" rx="40" ry="24"/><ellipse cx="640" cy="120" rx="60" ry="30"/></g>
+<g fill="#aadaff">
+<path d="M0 0L20 0L10 100L36 143L5 157L18 214L13 309L13 357L46 409L82 488L118 500L144 533L167 595L237 714L237 720L0 720Z"/>
+<path d="M186 559L291 714L262 714L180 580Z"/>
+<path d="M490 720L506 690L511 643L555 607L574 602L619 612L650 619L664 588L701 585L728 602L746 597L770 631L774 666L801 709L805 720Z"/>
+<path d="M819 720L819 695L821 666L801 619L794 578L805 547L847 505L902 471L892 431L910 393L923 369L930 343L965 329L992 319L986 298L1000 262L1000 720Z"/>
+<path d="M599 200L646 179L673 148L710 152L732 179L737 202L692 200L637 195Z"/>
+<path d="M719 214L692 219L681 250L678 298L685 319L699 314L703 274L722 238Z"/>
+<path d="M746 214L757 226L764 262L777 286L790 250L802 226L774 214Z"/>
+<path d="M757 317L790 324L824 305L840 288L812 295L776 305Z"/>
+<path d="M824 281L874 278L886 259L838 269Z"/>
+<path d="M511 109L482 29L500 48L520 102Z"/>
+<path d="M783 0L790 60L810 95L830 70L837 0Z"/>
+</g>
+<g fill="none" stroke="#c6cacf" stroke-width="1.1" stroke-dasharray="5 4"><path d="M36 143L599 143M673 148L760 200L790 250M802 226L870 230L1000 200M144 533L250 560L330 560L420 640L506 690"/></g>
+<g fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"><path d="M49 176L138 174L380 230L513 193L580 238L682 312L833 270L936 226M125 499L180 448L239 339L364 363L529 327L682 312L928 340M125 499L332 484L514 529L540 601M514 529L554 378L580 238M739 506L695 511L637 472L554 378M789 587L739 506L833 400L928 340"/></g>
+<!-- Class I lines -->
+<g fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".8">
+<path d="M49 176L138 174L300 160L420 180L513 193L580 238M682 312L630 334L554 378L422 471L332 484L145 478L125 499M554 378L504 530L504 569L540 601" stroke="#d0661f"/>
+<path d="M125 499L180 448L239 339L367 332L441 330L529 327L682 312M540 601L596 481L635 390L682 312" stroke="#b8920f"/>
+<path d="M682 312L709 362L696 448L695 511M789 587L799 545L850 470L900 400L928 340" stroke="#2b6cb0"/>
+<path d="M682 312L757 317L840 288L928 340M739 506L695 511M739 506L850 450L900 410" stroke="#6b55b0"/>
+<path d="M682 312L637 472L650 619M777 286L833 270L936 226M507 121L420 70L280 40" stroke="#c0392b"/>
+<path d="M199 94L371 108L507 121L580 238L682 312M554 378L540 470L540 601M777 286L798 286L833 270" stroke="#23866a"/>
+</g>
+<!-- labels -->
+<g font-family="Inter, sans-serif" font-size="11.5" fill="#3c4043" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">
+<text x="56" y="172">Seattle</text><text x="128" y="516">Los Angeles</text><text x="372" y="360">Denver</text><text x="247" y="336">Salt Lake City</text><text x="520" y="545">Dallas</text><text x="547" y="618">Houston</text><text x="644" y="400">St. Louis</text><text x="841" y="267">Toronto</text><text x="942" y="222">Montreal</text><text x="894" y="358">New York</text><text x="746" y="502">Atlanta</text><text x="644" y="469">Memphis</text><text x="534" y="324">Omaha</text>
+</g>
+<g font-family="Inter, sans-serif" font-size="12" font-weight="500" letter-spacing="3" fill="#6f7378"><text x="230" y="60">CANADA</text><text x="300" y="420">UNITED STATES</text></g>
+
+<!-- selected car route 551930: A Fargo, B Minneapolis, shop Kansas City -->
+<path d="M513 193L576 234" fill="none" stroke="#5f6368" stroke-width="2.5" stroke-dasharray="4 4" marker-end="url(#abC)"/>
+<path d="M580 238L615 267L616 284L635 307L630 334L613 342L583 364L554 378" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M580 238L615 267L616 284L635 307L630 334L613 342L583 364L554 378" fill="none" stroke="#1a73e8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" marker-mid="url(#chevC)"/>
+<path d="M580 238L554 378" fill="none" stroke="#1a73e8" stroke-width="1.2" stroke-dasharray="2 4" opacity=".7"/>
+<circle cx="513" cy="193" r="6" fill="#fff" stroke="#80868b" stroke-width="2.5"/>
+<circle cx="580" cy="238" r="7" fill="#1a73e8" stroke="#fff" stroke-width="2.5"/>
+<path d="M554 378c-6-8-10-12-10-18a10 10 0 0 1 20 0c0 6-4 10-10 18z" fill="#c5221f" stroke="#fff" stroke-width="1.5" filter="url(#shC)"/>
+<rect x="550" y="356" width="8" height="8" rx="1" fill="#fff"/>
+<g font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#202124" stroke="#f8f9fa" stroke-width="3" paint-order="stroke"><text x="460" y="186">A · Fargo</text><text x="590" y="232">B · Minneapolis</text><text x="470" y="392">Shop · Kansas City</text></g>
+<text x="574" y="300" font-family="Inter, sans-serif" font-size="11" font-style="italic" fill="#1a5fb4" stroke="#f8f9fa" stroke-width="3" paint-order="stroke" text-anchor="end">straight line 661 km</text>
+
+<!-- other cars: status markers at B -->
+<g font-family="Inter, sans-serif" font-size="11" font-weight="600">
+<g filter="url(#shC)"><rect x="755" y="572" width="80" height="22" rx="11" fill="#fff" stroke="#c5221f" stroke-width="1.5"/></g>
+<path d="M764 578h4l3 3v4l-3 3h-4l-3-3v-4z" fill="#c5221f"/><text x="776" y="587" fill="#c5221f">402196</text>
+<g filter="url(#shC)"><rect x="512" y="556" width="80" height="22" rx="11" fill="#fff" stroke="#7b1fa2" stroke-width="1.5"/></g>
+<rect x="519" y="562" width="10" height="10" rx="2.5" fill="#7b1fa2"/><text x="533" y="571" fill="#7b1fa2">104233</text>
+<g filter="url(#shC)"><rect x="790" y="292" width="80" height="22" rx="11" fill="#fff" stroke="#7b1fa2" stroke-width="1.5"/></g>
+<rect x="797" y="298" width="10" height="10" rx="2.5" fill="#7b1fa2"/><text x="811" y="307" fill="#7b1fa2">318045</text>
+<g filter="url(#shC)"><rect x="331" y="96" width="80" height="22" rx="11" fill="#fff" stroke="#188038" stroke-width="1.5"/></g>
+<circle cx="343" cy="107" r="5" fill="#188038"/><text x="352" y="111" fill="#188038">663012</text>
+<g filter="url(#shC)"><rect x="140" y="436" width="80" height="22" rx="11" fill="#fff" stroke="#188038" stroke-width="1.5"/></g>
+<circle cx="152" cy="447" r="5" fill="#188038"/><text x="161" y="451" fill="#188038">220871</text>
+</g>
+</svg>
+
+<!-- detail card for selected car -->
+<section aria-label="Selected car 551930" style="position: absolute; top: 16px; left: 16px; width: 360px; max-width: calc(100% - 32px); background: #ffffff; border-radius: 12px; box-shadow: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15); overflow: hidden">
+<div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600">EXAMPLE 551930</span>
+<span style="margin-left: auto; font-size: 11px; font-weight: 600; font-style: italic; color: #5f6368; background: #f1f3f4; border-radius: 6px; padding: 2px 7px">Rough estimate</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #c5221f; border: 1.5px solid #c5221f; border-radius: 13px; padding: 2px 10px 2px 7px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/><path d="M7 4v3.6M7 9.8v.1" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>At risk</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: #c5221f">−14 h</span>
+</div>
+<div style="font-size: 13px; color: #3c4043">Fargo, ND → Minneapolis, MN → shop Kansas City, MO</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 3px; column-gap: 10px; font-size: 12.5px; background: #f8f9fa; border-radius: 8px; padding: 8px 10px">
+<span style="color: #5f6368">If the car is at B now</span><span style="color: #5f6368; font-style: italic">about Thu 19 evening</span>
+<span style="color: #5f6368">If the car just passed A</span><span style="color: #5f6368; font-style: italic">about Fri 20 evening</span>
+<span style="font-weight: 500">Prep ends</span><span style="font-weight: 500">Fri 20 morning</span>
+</div>
+<div style="font-size: 12.5px; color: #3c4043"><span style="display: inline-flex; align-items: center; gap: 4px; font-family: 'IBM Plex Mono', monospace; font-weight: 600"><span style="width: 10px; height: 10px; border-radius: 2px; background: #d0661f"></span>BNSF</span> · <span style="font-family: 'IBM Plex Mono', monospace">1,013 km</span> · straight line <span style="font-family: 'IBM Plex Mono', monospace">661 km</span> (1.5×)</div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #fdf0ef; border-top: 1px solid #f5d0cd">
+<svg width="18" height="18" viewBox="0 0 14 14" aria-hidden="true" style="flex: none"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/><path d="M7 4v3.6M7 9.8v.1" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+<span style="font-size: 13px; color: #7a1714; flex: 1">Prep may end too late: the car can arrive about 14 h before prep ends.</span>
+<a href="Main.dc.html" style="flex: none; font-size: 13px; font-weight: 600; color: #ffffff; background: #c5221f; text-decoration: none; border-radius: 16px; padding: 5px 12px">Open route</a>
+</div>
+</section>
+
+<!-- controls -->
+<div style="position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px">
+<button type="button" aria-label="Map layers" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px; border: 0; border-radius: 8px; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); color: #3c4043; font-size: 13px; font-weight: 500; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l7 4-7 4-7-4z" fill="none" stroke="#3c4043" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 11l7 4 7-4" fill="none" stroke="#3c4043" stroke-width="1.6" stroke-linejoin="round"/></svg>Layers · Map</button>
+<div style="display: flex; flex-direction: column; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); overflow: hidden">
+<button type="button" aria-label="Zoom in" style="width: 40px; height: 40px; border: 0; background: #fff; color: #3c4043; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+<span style="height: 1px; background: #e8eaed; margin: 0 8px"></span>
+<button type="button" aria-label="Zoom out" style="width: 40px; height: 40px; border: 0; background: #fff; color: #3c4043; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+</div>
+</div>
+
+<!-- legend -->
+<div style="position: absolute; left: 16px; bottom: 16px; background: #ffffff; border-radius: 10px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #3c4043">
+<div style="font-weight: 600">Class I railroads</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 14px; row-gap: 5px; font-family: 'IBM Plex Mono', monospace">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #d0661f"></span>BNSF</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #b8920f"></span>UP</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #2b6cb0"></span>CSXT</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #6b55b0"></span>NS</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #c0392b"></span>CN</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #23866a"></span>CPKC</span>
+</div>
+<div style="height: 1px; background: #e8eaed"></div>
+<div style="display: flex; flex-wrap: wrap; column-gap: 12px; row-gap: 4px">
+<span style="display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/></svg>At risk</span>
+<span style="display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.3l6.2 11.2H.8z" fill="#b06000"/></svg>Tight</span>
+<span style="display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#188038"/></svg>On time</span>
+<span style="display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/></svg>Check route</span>
+<span style="display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x="1" y="1" width="12" height="12" fill="#5f6368"/></svg>Cannot check</span>
+</div>
+</div>
+<div style="position: absolute; right: 16px; bottom: 16px; font-size: 11px; color: #3c4043; background: rgba(255,255,255,.85); border-radius: 4px; padding: 3px 8px">Stylized map · EXAMPLE · not live tracking</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

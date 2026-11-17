@@ -1,0 +1,13 @@
+name,code,lon,lat,fra_id,source
+"Edmonton, AB · Procor",DRAFT-PROC-EDM,-113.3956,53.5308,,"OpenStreetMap: Procor, South Industrial District"
+"Oakville, ON · Procor",DRAFT-PROC-OAK,-79.7195,43.4169,,procor.com: 2063 Speers Road
+"Regina, SK · Procor (approximate)",DRAFT-PROC-REG,-104.618,50.445,,approximate city centre; Procor lists Regina East (CP)
+"Sarnia, ON · Procor",DRAFT-PROC-SAR,-82.3376,42.9596,,procor.com: 725 Procor Drive
+"East Chicago, IN · UTLX",DRAFT-UTLX-ECH,-87.4551,41.632,,RSI directory: 1150 East 145th Street
+"El Dorado, KS · UTLX",DRAFT-UTLX-ELD,-96.8543,37.8321,,RSI directory: 1802 North Star Street
+"Marion, OH · UTLX",DRAFT-UTLX-MAR,-83.1409,40.5664,,RSI directory: 1207 Cheney Ave
+"Sayre, PA · UTLX",DRAFT-UTLX-SAY,-76.5091,41.9877,,RSI directory: 403 N Thomas Ave
+"Texarkana, AR · UTLX",DRAFT-UTLX-TXK,-94.0116,33.4423,,RSI directory: 2801 Nash Thompson Lane
+"Valdosta, GA · UTLX",DRAFT-UTLX-VLD,-83.244,30.8395,,RSI directory: 400 South Blanchard Street
+"Ville Platte, LA · UTLX (ends at UP, 20 km away)",DRAFT-UTLX-VPL,,,386145,RSI directory: 1373 Union Tank Car Road (not geocoded; nearest UP node)
+"Waterloo, IA · UTLX",DRAFT-UTLX-WAT,-92.3144,42.4871,,RSI directory: 200 Nevada Street

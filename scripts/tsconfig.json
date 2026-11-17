@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "..",
+    "outDir": "../.tsbuild",
+    "tsBuildInfoFile": "../.tsbuild/scripts.tsbuildinfo",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
+  },
+  "include": ["./**/*.ts", "../vite.config.ts"],
+  "references": [{ "path": "../shared" }, { "path": "../engine" }, { "path": "../server" }]
+}

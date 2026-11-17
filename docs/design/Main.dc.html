@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shop Arrival Check: route one car</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1a73e8}a:hover{color:#174ea6}
+button{font:inherit}
+</style>
+</helmet>
+<div style="font-family: Inter, system-ui, sans-serif; color: #202124; background: #f1f3f4; min-height: 900px; display: flex; flex-wrap: wrap">
+
+<!-- LEFT PANEL -->
+<div style="flex: 1 1 420px; min-width: 0; height: 900px; overflow-y: auto; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15); position: relative; z-index: 2; box-sizing: border-box">
+
+<!-- header -->
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 10px; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="8" fill="#1a73e8"/><path d="M7 19c4-9 10-1 14-10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="19" r="2.4" fill="#fff"/><rect x="18.5" y="6.5" width="5" height="5" rx="1" fill="#fff"/></svg>
+<div style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Shop Arrival Check</div>
+</div>
+<span style="font-size: 11px; font-weight: 600; letter-spacing: .06em; color: #5f6368; border: 1px solid #dadce0; border-radius: 6px; padding: 3px 7px">EXAMPLE DATA</span>
+</div>
+
+<!-- mode tabs -->
+<nav aria-label="Mode" style="display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid #dadce0">
+<a href="Main.dc.html" aria-current="page" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 9px; font-size: 14px; font-weight: 600; color: #1a73e8; text-decoration: none; border-bottom: 3px solid #1a73e8">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 15V7.5a3 3 0 0 1 6 0v3a3 3 0 0 0 6 0V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="4" cy="15" r="1.8" fill="currentColor"/></svg>Route</a>
+<a href="Cars.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 12px; font-size: 14px; font-weight: 500; color: #5f6368; text-decoration: none">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5h12M3 9h12M3 13h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Cars <span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; background: #fce8e6; color: #c5221f; border-radius: 9px; padding: 0 6px">2</span></a>
+<a href="Shops.dc.html" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px 12px; font-size: 14px; font-weight: 500; color: #5f6368; text-decoration: none">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="7" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2 8l7-5 7 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Shops</a>
+</nav>
+
+<!-- inputs, like Google Maps directions -->
+<form aria-label="Car position and shop" style="padding: 16px 16px 8px 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 8px; padding-left: 4px">
+<label for="carid" style="font-size: 12px; color: #5f6368; width: 32px">Car</label>
+<input id="carid" value="EXAMPLE 104233" style="flex: 1; min-width: 0; height: 36px; box-sizing: border-box; border: 1px solid #dadce0; border-radius: 8px; padding: 0 10px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: #202124">
+</div>
+
+<div style="display: grid; grid-template-columns: 36px minmax(0, 1fr) 40px; column-gap: 6px; row-gap: 6px; align-items: center">
+<!-- A -->
+<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 48px">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="#fff" stroke="#80868b" stroke-width="2.5"/></svg>
+</div>
+<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 5px 10px 6px; display: flex; flex-direction: column">
+<label for="posA" style="font-size: 11px; color: #5f6368">Car is between · A, last passed</label>
+<input id="posA" value="Taylor, TX" style="border: 0; padding: 0; font: inherit; font-size: 14px; color: #202124; outline-offset: 2px">
+</div>
+<div style="grid-row: span 2; display: flex; align-items: center; justify-content: center">
+<button type="button" aria-label="Swap A and B" style="width: 40px; height: 40px; border-radius: 20px; border: 0; background: transparent; color: #5f6368; cursor: pointer; display: inline-flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M6 3v13M6 16l-3-3M6 16l3-3M14 17V4M14 4l-3 3M14 4l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+</div>
+<!-- B -->
+<div style="display: flex; align-items: center; justify-content: center; height: 48px; position: relative">
+<svg width="16" height="40" viewBox="0 0 16 40" aria-hidden="true" style="position: absolute; top: -20px"><path d="M8 4v18" stroke="#bdc1c6" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/></svg>
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" style="position: relative"><circle cx="9" cy="9" r="7" fill="#1a73e8" stroke="#fff" stroke-width="2.5"/></svg>
+</div>
+<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 5px 10px 6px; display: flex; flex-direction: column">
+<label for="posB" style="font-size: 11px; color: #5f6368">B, next node</label>
+<input id="posB" value="Temple, TX" style="border: 0; padding: 0; font: inherit; font-size: 14px; color: #202124">
+</div>
+<!-- shop -->
+<div style="display: flex; align-items: center; justify-content: center; height: 48px; position: relative">
+<svg width="16" height="40" viewBox="0 0 16 40" aria-hidden="true" style="position: absolute; top: -20px"><path d="M8 4v18" stroke="#bdc1c6" stroke-width="2" stroke-dasharray="1 4" stroke-linecap="round"/></svg>
+<svg width="18" height="22" viewBox="0 0 18 22" aria-hidden="true" style="position: relative"><path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="#c5221f"/><circle cx="9" cy="9" r="2.6" fill="#fff"/></svg>
+</div>
+<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 5px 10px 6px; display: flex; align-items: center; gap: 8px">
+<div style="display: flex; flex-direction: column; flex: 1; min-width: 0">
+<label for="shop" style="font-size: 11px; color: #5f6368">Shop · from Your shops</label>
+<input id="shop" value="North Little Rock, AR (EXAMPLE shop)" style="border: 0; padding: 0; font: inherit; font-size: 14px; color: #202124">
+</div>
+<a href="Shops.dc.html" aria-label="Choose from Your shops" style="color: #5f6368; display: inline-flex; padding: 6px">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+</div>
+<div></div>
+</div>
+
+<button type="button" style="align-self: flex-start; margin-left: 42px; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 0; background: transparent; color: #1a73e8; font-size: 14px; font-weight: 500; border-radius: 18px; cursor: pointer">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 5.5v7M5.5 9h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Add stop (pass through a node)</button>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-left: 4px">
+<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 5px 10px 6px; display: flex; flex-direction: column">
+<label for="rep" style="font-size: 11px; color: #5f6368">Reported at</label>
+<input id="rep" value="Tue Nov 17, morning" style="border: 0; padding: 0; font: inherit; font-size: 14px; color: #202124">
+</div>
+<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 5px 10px 6px; display: flex; flex-direction: column">
+<label for="prep" style="font-size: 11px; color: #5f6368">Prep ends</label>
+<input id="prep" value="Thu Nov 19, 00:00" style="border: 0; padding: 0; font: inherit; font-size: 14px; color: #202124">
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5f6368; padding-left: 6px">
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.8" fill="none" stroke="#188038" stroke-width="1.5"/><path d="M4.6 7.2l1.6 1.6 3.2-3.4" fill="none" stroke="#188038" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+Report is 0 days old · position comes from the report, not GPS</div>
+</form>
+
+<div style="height: 8px; background: #f1f3f4"></div>
+
+<!-- verdict -->
+<section aria-label="Verdict" style="padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: flex-start; gap: 10px">
+<h2 style="margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: {{v.hColor}}; flex: 1">{{v.headline}}</h2>
+<span style="flex: none; font-size: 11px; font-weight: 600; color: #5f6368; background: #f1f3f4; border-radius: 6px; padding: 3px 7px; margin-top: 2px; font-style: italic">Rough estimate</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{v.pills}}" as="p" hint-placeholder-count="2">
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 7px; border-radius: 13px; font-size: 13px; font-weight: 600; background: #ffffff; color: {{p.c}}; border: 1.5px solid {{p.c}}">
+<sc-if value="{{p.isRisk}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 1h5L13 4.5v5L9.5 13h-5L1 9.5v-5z" fill="#c5221f"/><path d="M7 4v3.6M7 9.8v.1" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg></sc-if>
+<sc-if value="{{p.isTight}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.3l6.2 11.2H.8z" fill="#b06000"/><path d="M7 5.4v3.2M7 10.4v.1" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg></sc-if>
+<sc-if value="{{p.isOk}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#188038"/><path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></sc-if>
+<sc-if value="{{p.isRoute}}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4M7.4 8.2l1.7 1.7 1.7-1.7" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></sc-if>
+{{p.label}}</span>
+</sc-for>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; column-gap: 12px; font-size: 13px; background: #f8f9fa; border-radius: 10px; padding: 10px 12px">
+<span style="color: #5f6368">If the car is at B now</span><span style="color: #5f6368; font-style: italic">{{v.b1}}</span>
+<span style="color: #5f6368">If the car just passed A</span><span style="color: #5f6368; font-style: italic">{{v.b2}}</span>
+<span style="color: #202124; font-weight: 500">Prep ends</span><span style="color: #202124; font-weight: 500">Thu 19, 00:00</span>
+<span style="color: #202124; font-weight: 500">Margin at the earliest arrival</span><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: {{v.mColor}}">{{v.margin}}</span>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+<span style="font-size: 12px; color: #5f6368">Assumes</span>
+<span style="font-size: 12px; color: #3c4043; border: 1px dashed #bdc1c6; border-radius: 12px; padding: 2px 9px"><span style="font-family: 'IBM Plex Mono', monospace">400 km/day</span> placeholder</span>
+<span style="font-size: 12px; color: #3c4043; border: 1px dashed #bdc1c6; border-radius: 12px; padding: 2px 9px"><span style="font-family: 'IBM Plex Mono', monospace">+24 h</span> per interchange</span>
+<span style="font-size: 12px; color: #3c4043; border: 1px dashed #bdc1c6; border-radius: 12px; padding: 2px 9px">buffer <span style="font-family: 'IBM Plex Mono', monospace">24 h</span></span>
+</div>
+</section>
+
+<!-- routes -->
+<section aria-label="Routes" style="padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600">2 routes</h3>
+<span style="font-size: 12px; color: #5f6368">Click a route to compare</span>
+</div>
+<sc-for list="{{routes}}" as="rt" hint-placeholder-count="2">
+<div style="border: {{rt.border}}; border-radius: 12px; background: #ffffff; overflow: hidden">
+<button type="button" onClick="{{rt.pick}}" aria-pressed="{{rt.pressed}}" style="appearance: none; border: 0; background: transparent; text-align: left; width: 100%; font: inherit; color: inherit; padding: 12px 14px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 6px">
+<span style="display: flex; align-items: center; gap: 8px; width: 100%">
+<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 14c3-8 9-2 12-10" fill="none" stroke="{{rt.lineCol}}" stroke-width="3" stroke-linecap="round"/></svg>
+<span style="font-size: 14px; font-weight: 600; flex: 1">{{rt.name}}</span>
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: {{rt.pill.c}}; border: 1.5px solid {{rt.pill.c}}; border-radius: 11px; padding: 1px 8px 1px 5px">
+<sc-if value="{{rt.pill.isTight}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.3l6.2 11.2H.8z" fill="#b06000"/></svg></sc-if>
+<sc-if value="{{rt.pill.isOk}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6.2" fill="#188038"/><path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg></sc-if>
+{{rt.pill.label}}</span>
+</span>
+<span style="font-size: 16px; font-style: italic; color: #5f6368; padding-left: 26px">{{rt.when}}</span>
+<span style="font-size: 13px; color: #3c4043; padding-left: 26px"><span style="font-family: 'IBM Plex Mono', monospace">{{rt.dist}}</span> · {{rt.ic}}</span>
+<sc-if value="{{rt.hasDiff}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: #5f6368; padding-left: 26px">{{rt.diff}}</span></sc-if>
+<span style="display: flex; flex-wrap: wrap; gap: 6px; padding-left: 26px">
+<sc-for list="{{rt.rrs}}" as="rr" hint-placeholder-count="1">
+<span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; font-family: 'IBM Plex Mono', monospace; color: #202124; background: #f1f3f4; border-radius: 4px; padding: 2px 7px 2px 4px"><span style="width: 10px; height: 10px; border-radius: 2px; background: {{rr.col}}"></span>{{rr.code}}</span>
+</sc-for>
+<sc-for list="{{rt.tags}}" as="tg" hint-placeholder-count="2">
+<span style="font-size: 12px; color: #1a5fb4; background: #e8f0fe; border-radius: 4px; padding: 2px 7px">{{tg.t}}</span>
+</sc-for>
+</span>
+</button>
+<sc-if value="{{rt.hasAlert}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; background: #f9f1fc; border-top: 1px solid #ead7f3">
+<svg width="18" height="18" viewBox="0 0 14 14" aria-hidden="true" style="flex: none; margin-top: 1px"><rect x=".5" y=".5" width="13" height="13" rx="3.5" fill="#7b1fa2"/><path d="M4.5 11V6.3a2.3 2.3 0 0 1 4.6 0v3.4M7.4 8.2l1.7 1.7 1.7-1.7" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<span style="font-size: 13px; color: #4a1063; flex: 1">This route turns back at Temple, TX (yard track). Check it before trusting the time.</span>
+<a href="FixRoute.dc.html" style="flex: none; font-size: 13px; font-weight: 600; color: #7b1fa2; text-decoration: none; border: 1px solid #c79ad8; border-radius: 16px; padding: 4px 12px; background: #fff">Show on map</a>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</section>
+
+<div style="height: 8px; background: #f1f3f4"></div>
+
+<!-- steps: pearl chain -->
+<section aria-label="Steps" style="padding: 14px 12px 8px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; padding: 0 8px 8px">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600">Steps · {{stepsTitle}}</h3>
+<span style="font-size: 12px; color: #5f6368">km from B · rough day</span>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="8">
+<li style="display: grid; grid-template-columns: 46px 32px minmax(0, 1fr) 84px; column-gap: 6px">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #5f6368; text-align: right; padding-top: 11px">{{s.km}}</span>
+<span style="position: relative; display: block; min-height: 40px">
+<span style="position: absolute; left: 16px; top: 0; height: 20px; width: 0; transform: translateX(-50%); {{s.lt}}"></span>
+<span style="position: absolute; left: 16px; top: 20px; bottom: 0; width: 0; transform: translateX(-50%); {{s.lb}}"></span>
+<sc-if value="{{s.kPassed}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 3px solid #80868b"></span></sc-if>
+<sc-if value="{{s.kNext}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 14px; height: 14px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 1.5px #1a73e8"></span></sc-if>
+<sc-if value="{{s.kWarn}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid #b06000; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 10V5a2.5 2.5 0 0 1 5 0v3.5M6.8 7l1.7 1.7L10.2 7" fill="none" stroke="#b06000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span></sc-if>
+<sc-if value="{{s.kChange}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 2.5px solid #202124; display: flex; align-items: center; justify-content: center; box-sizing: border-box"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4h7M7 2l2 2-2 2M10 8H3M5 6L3 8l2 2" fill="none" stroke="#202124" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></sc-if>
+<sc-if value="{{s.kShop}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 3px; background: #c5221f; display: flex; align-items: center; justify-content: center"><span style="width: 6px; height: 6px; background: #fff; border-radius: 1px"></span></span></sc-if>
+<sc-if value="{{s.kNote}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; left: 16px; top: 20px; transform: translate(-50%, -50%); width: 8px; height: 8px; border-radius: 50%; background: #fff; border: 1.5px solid #9aa0a6"></span></sc-if>
+</span>
+<span style="display: block; padding: 10px 0 10px; min-width: 0">
+<sc-if value="{{s.kText}}" hint-placeholder-val="{{ true }}">
+<span style="display: block; font-size: {{s.tSize}}; line-height: 20px; font-weight: {{s.tWeight}}; font-style: {{s.tStyle}}; color: {{s.tColor}}">{{s.title}}</span>
+<sc-if value="{{s.hasSub}}" hint-placeholder-val="{{ false }}"><span style="display: block; font-size: 12px; color: #5f6368; margin-top: 1px">{{s.sub}}</span></sc-if>
+<sc-if value="{{s.kChange}}" hint-placeholder-val="{{ false }}"><span style="display: inline-block; margin-top: 4px; font-size: 12px; color: #3c4043; border: 1px dashed #bdc1c6; border-radius: 10px; padding: 1px 8px"><span style="font-family: 'IBM Plex Mono', monospace">+24 h</span> (assumed)</span></sc-if>
+<sc-if value="{{s.kWarn}}" hint-placeholder-val="{{ false }}"><span style="display: flex; gap: 8px; margin-top: 8px">
+<a href="FixRoute.dc.html" style="font-size: 13px; font-weight: 600; color: #1a73e8; text-decoration: none; border: 1px solid #dadce0; border-radius: 16px; padding: 4px 12px">Show on map</a>
+<a href="FixRoute.dc.html" style="font-size: 13px; font-weight: 600; color: #ffffff; background: #1a73e8; text-decoration: none; border-radius: 16px; padding: 5px 13px">Fix route</a>
+</span></sc-if>
+</sc-if>
+<sc-if value="{{s.kLeg}}" hint-placeholder-val="{{ false }}">
+<span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600; color: #ffffff; background: {{s.rrColor}}; border-radius: 4px; padding: 2px 7px">{{s.rr}}</span>
+<span style="font-size: 14px; font-weight: 600">{{s.legText}}</span>
+</span>
+<span style="display: block; font-size: 13px; color: #5f6368; margin-top: 2px; font-family: 'IBM Plex Mono', monospace">{{s.legKm}}</span>
+<button type="button" onClick="{{s.toggle}}" aria-expanded="{{s.open}}" style="margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; padding: 4px 0; color: #1a73e8; font-size: 13px; font-weight: 500; cursor: pointer">{{s.subCount}}
+<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="transform: {{s.chev}}"><path d="M5 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<sc-if value="{{s.open}}" hint-placeholder-val="{{ false }}">
+<ol style="list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px">
+<sc-for list="{{s.subs}}" as="sb" hint-placeholder-count="3">
+<li style="font-size: 13px; color: #3c4043; display: flex; align-items: center; gap: 8px"><span style="width: 5px; height: 5px; border-radius: 50%; background: {{s.rrColor}}"></span>{{sb.n}}</li>
+</sc-for>
+</ol>
+</sc-if>
+</sc-if>
+</span>
+<span style="font-size: 12px; font-style: italic; color: #5f6368; padding-top: 11px; line-height: 16px">{{s.day}}</span>
+</li>
+</sc-for>
+</ol>
+</section>
+
+<!-- future preview -->
+<section aria-label="Preview, not available yet" style="margin: 8px 16px 24px; border: 1px dashed #bdc1c6; border-radius: 12px; padding: 14px 14px 12px; background: #fafafa">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<h3 style="margin: 0; font-size: 13px; font-weight: 600; color: #5f6368">Arrival spread (after calibration)</h3>
+<span style="font-size: 11px; font-weight: 600; color: #5f6368; background: #e8eaed; border-radius: 6px; padding: 2px 7px">Not available yet</span>
+</div>
+<p style="margin: 4px 0 10px; font-size: 12px; color: #5f6368">Preview only. Needs arrival history to set the spread; until then the tool shows the rough range above.</p>
+<div style="position: relative; height: 26px; border-radius: 6px; background: linear-gradient(90deg, rgba(154,160,166,0) 0%, rgba(154,160,166,.45) 25%, rgba(95,99,104,.55) 45%, rgba(154,160,166,.45) 70%, rgba(154,160,166,0) 100%)">
+<span style="position: absolute; left: 14%; top: -4px; bottom: -4px; border-left: 2px dashed #5f6368"></span>
+<span style="position: absolute; left: 6px; top: 5px; font-size: 11px; color: #3c4043; font-family: 'IBM Plex Mono', monospace">P10</span>
+<span style="position: absolute; right: 6px; top: 5px; font-size: 11px; color: #3c4043; font-family: 'IBM Plex Mono', monospace">P90</span>
+</div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #5f6368; margin-top: 4px"><span>Thu 19</span><span style="margin-left: -30%">Prep ends</span><span>Fri 20</span><span>Sat 21</span></div>
+<div style="display: flex; align-items: flex-end; gap: 4px; margin-top: 10px; height: 54px; position: relative">
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #5f6368"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; background: #5f6368"></span><span style="width: 10px; height: 10px; border-radius: 50%; background: #5f6368"></span></span>
+<span style="width: 0; height: 54px; border-left: 2px dashed #5f6368; margin: 0 3px"></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+<span style="display: flex; flex-direction: column-reverse; gap: 3px"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #9aa0a6; box-sizing: border-box"></span></span>
+</div>
+<p style="margin: 8px 0 0; font-size: 12px; color: #3c4043"><strong style="font-weight: 600">3 of 20</strong> likely arrivals come before prep is ready.</p>
+</section>
+</div>
+
+<!-- MAP -->
+<div style="flex: 999 1 560px; min-width: 0; height: 900px; position: relative; overflow: hidden; background: #f8f9fa">
+<svg viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Map of Texas to Arkansas with the selected route from Temple, TX to North Little Rock, AR" style="position: absolute; inset: 0; width: 100%; height: 100%; display: block">
+<defs>
+<marker id="chev" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto"><path d="M3 2l4 3-4 3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<marker id="abArrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1l8 4-8 4z" fill="#5f6368"/></marker>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#3c4043" flood-opacity=".28"/></filter>
+</defs>
+<rect width="1000" height="800" fill="#f8f9fa"/>
+<!-- parks -->
+<g fill="#eef2ea">
+<ellipse cx="550" cy="269" rx="70" ry="26"/><ellipse cx="586" cy="176" rx="80" ry="22"/><ellipse cx="443" cy="613" rx="22" ry="14"/><ellipse cx="493" cy="546" rx="30" ry="14"/><ellipse cx="507" cy="622" rx="14" ry="10"/><ellipse cx="614" cy="538" rx="26" ry="14"/><ellipse cx="770" cy="520" rx="34" ry="16"/>
+</g>
+<!-- water -->
+<g fill="#aadaff">
+<path d="M285 800L300 780L330 762L372 742L420 724L470 716L520 706L548 700L585 706L630 708L680 714L725 722L770 728L815 735L850 742L866 760L872 800Z"/>
+<path d="M880 800L884 760L900 742L905 700L930 672L965 660L1000 656L1000 800Z"/>
+<path d="M440 712L455 690L470 700L462 716Z"/>
+<ellipse cx="548" cy="688" rx="6" ry="10"/><ellipse cx="814" cy="638" rx="26" ry="9"/><ellipse cx="345" cy="322" rx="18" ry="6"/><ellipse cx="457" cy="588" rx="5" ry="14"/><ellipse cx="521" cy="563" rx="12" ry="5"/>
+</g>
+<g fill="none" stroke="#aadaff" stroke-linecap="round">
+<path d="M857 0C850 60 830 120 822 170S808 230 814 260S790 330 760 360S740 410 745 450S720 520 712 560S700 600 728 622S790 640 812 660S850 700 866 745" stroke-width="3.5"/>
+<path d="M480 190C520 205 560 215 600 232S650 250 662 262S700 290 730 310S760 330 770 345" stroke-width="2.5"/>
+<path d="M100 262C150 270 200 282 250 300S320 318 360 322S420 330 470 345S520 358 535 372S560 420 580 450S640 520 690 560S705 570 712 575" stroke-width="2"/>
+<path d="M560 500L552 540L548 560" stroke-width="5"/>
+</g>
+<!-- state borders -->
+<g fill="none" stroke="#c6cacf" stroke-width="1.2" stroke-dasharray="5 4">
+<path d="M107 0L107 262M0 67L505 67M505 67L505 353M505 109L815 109M533 372L533 403L752 403M533 403L533 496C540 540 550 600 548 688M707 571L843 571C846 610 860 640 868 660M815 235L1000 235M950 235L950 650"/>
+</g>
+<!-- roads -->
+<g fill="none" stroke="#e1e4e8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M284 0L284 196L298 424M336 422L311 525L297 563L269 633L215 704L180 800M336 422L400 540L438 675L455 705M298 424L336 422L430 395L532 367L600 320L658 256M0 430L298 424M336 422L483 445L554 445L650 450L809 462L1000 440M0 690L215 704L330 690L438 675L529 648L600 640L677 637L739 617L816 659L900 670L1000 660M0 196L284 196L507 202L658 256L818 223L1000 200M554 445L600 560L677 637M818 223L812 330L809 462L800 571L780 640M438 675L470 600L500 540L515 460L532 367M284 196L394 139L520 60L560 0"/>
+</g>
+<g fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+<path d="M284 0L284 196L298 424M336 422L311 525L297 563L269 633L215 704L180 800M336 422L400 540L438 675L455 705M298 424L336 422L430 395L532 367L600 320L658 256M0 430L298 424M336 422L483 445L554 445L650 450L809 462L1000 440M0 690L215 704L330 690L438 675L529 648L600 640L677 637L739 617L816 659L900 670L1000 660M0 196L284 196L507 202L658 256L818 223L1000 200M554 445L600 560L677 637M818 223L812 330L809 462L800 571L780 640M438 675L470 600L500 540L515 460L532 367M284 196L394 139L520 60L560 0"/>
+</g>
+<!-- state labels -->
+<g font-family="Inter, sans-serif" font-size="13" letter-spacing="4" fill="#6f7378" font-weight="500">
+<text x="150" y="520">TEXAS</text><text x="200" y="130">OKLAHOMA</text><text x="610" y="160">ARKANSAS</text><text x="600" y="520">LOUISIANA</text><text x="840" y="420">MISSISSIPPI</text><text x="680" y="50">MISSOURI</text>
+</g>
+<!-- Class I lines (context) -->
+<g fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".75">
+<path d="M297 563L304 500L298 424M298 424L290 300L284 196L284 0M298 424L150 330L0 250M297 563L237 566L150 560L0 540" stroke="#d0661f"/>
+<path d="M215 704L269 633L292 607M292 607L360 640L438 675M438 675L470 590L483 445M536 371L600 318L658 256L700 200L760 120L800 0M298 424L336 422L429 432L483 445M438 675L529 648L677 637L739 617L816 659M215 704L330 700L438 675" stroke="#b8920f"/>
+<path d="M554 445L483 450L400 440L336 422M554 445L540 400L532 367L515 250L505 120L500 0M554 445L560 520L545 600L529 648M554 445L671 445L809 462L950 470" stroke="#23866a"/>
+<path d="M818 223L812 330L809 462L790 560L816 659M818 223L840 100L857 0" stroke="#c0392b"/>
+<path d="M816 659L870 560L914 457L960 380L1000 330M818 223L1000 215" stroke="#6b55b0"/>
+<path d="M816 659L900 668L964 640L1000 630" stroke="#2b6cb0"/>
+</g>
+<!-- cities -->
+<g font-family="Inter, sans-serif" font-size="12" fill="#3c4043" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">
+<text x="342" y="416">Dallas</text><text x="232" y="420">Fort Worth</text><text x="318" y="522">Waco</text><text x="226" y="648">Austin</text><text x="160" y="722">San Antonio</text><text x="446" y="672">Houston</text><text x="536" y="648">Beaumont</text><text x="562" y="440">Shreveport</text><text x="472" y="362">Texarkana</text><text x="596" y="276">Little Rock</text><text x="826" y="220">Memphis</text><text x="818" y="476">Jackson</text><text x="716" y="604">Baton Rouge</text><text x="826" y="676">New Orleans</text><text x="292" y="192">Oklahoma City</text><text x="402" y="136">Tulsa</text><text x="446" y="198">Fort Smith</text><text x="440" y="540">Lufkin</text><text x="680" y="442">Monroe</text><text x="686" y="304">Pine Bluff</text><text x="616" y="652">Lafayette</text>
+</g>
+<g fill="#5f6368">
+<circle cx="336" cy="422" r="3"/><circle cx="298" cy="424" r="3"/><circle cx="311" cy="525" r="3"/><circle cx="269" cy="633" r="3"/><circle cx="215" cy="704" r="3"/><circle cx="438" cy="675" r="3"/><circle cx="529" cy="648" r="3"/><circle cx="554" cy="445" r="3"/><circle cx="532" cy="367" r="3"/><circle cx="818" cy="223" r="3"/><circle cx="809" cy="462" r="3"/><circle cx="739" cy="617" r="3"/><circle cx="816" cy="659" r="3"/><circle cx="284" cy="196" r="3"/><circle cx="394" cy="139" r="3"/><circle cx="507" cy="202" r="3"/><circle cx="484" cy="544" r="3"/><circle cx="671" cy="445" r="3"/><circle cx="678" cy="300" r="3"/><circle cx="677" cy="637" r="3"/>
+</g>
+
+<!-- route 1: BNSF (casing + line) -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M297 563L280 552" stroke="#ffffff" stroke-width="9"/>
+<path d="M282 556L299 567L322 584L355 626L386 622L431 629L458 627L523 626L544 600L528 527L507 496L483 445L509 442L532 367L565 347L604 309L621 289L658 256L662 250" stroke="#ffffff" stroke-width="10"/>
+<path d="M297 563L280 552" stroke="{{map.r0}}" stroke-width="5"/>
+<path d="M282 556L299 567L322 584L355 626L386 622L431 629L458 627L523 626L544 600L528 527L507 496L483 445L509 442L532 367L565 347L604 309L621 289L658 256L662 250" stroke="{{map.r0}}" stroke-width="6" marker-mid="{{map.m0}}"/>
+<path d="M297 563L288.5 557.5L280 552" stroke="none" marker-mid="{{map.m0}}"/>
+</g>
+<!-- route 2: UP via Fort Worth -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M297 563L304 500L298 424L336 422L429 432L487 447L536 371L569 351L608 313L625 293L662 250" stroke="#ffffff" stroke-width="10"/>
+<path d="M297 563L304 500L298 424L336 422L429 432L487 447L536 371L569 351L608 313L625 293L662 250" stroke="{{map.r1}}" stroke-width="6" marker-mid="{{map.m1}}"/>
+</g>
+<!-- route 1 on top again when it is selected -->
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="{{map.top0}}">
+<path d="M483 445L509 442L532 367L565 347L604 309L621 289L658 256L662 250" stroke="#ffffff" stroke-width="10"/>
+<path d="M483 445L509 442L532 367L565 347L604 309L621 289L658 256L662 250" stroke="#1a73e8" stroke-width="6" marker-mid="url(#chev)"/>
+</g>
+
+<!-- A to B: car is somewhere here -->
+<path d="M292 607L296 570" fill="none" stroke="#5f6368" stroke-width="2.5" stroke-dasharray="4 4" marker-end="url(#abArrow)"/>
+<!-- U-turn ring -->
+<g opacity="{{map.ringOp}}">
+<circle cx="280" cy="552" r="15" fill="none" stroke="#ffffff" stroke-width="6"/>
+<circle cx="280" cy="552" r="15" fill="none" stroke="#b06000" stroke-width="3"/>
+<path d="M265 552L250 552" stroke="#b06000" stroke-width="2"/>
+<rect x="96" y="537" width="154" height="30" rx="15" fill="#ffffff" stroke="#b06000" stroke-width="1.5" filter="url(#sh)"/>
+<text x="173" y="557" text-anchor="middle" font-family="Inter, sans-serif" font-size="12.5" font-weight="600" fill="#b06000">Turns back here: check</text>
+</g>
+<!-- pins -->
+<circle cx="292" cy="607" r="7" fill="#ffffff" stroke="#80868b" stroke-width="3"/>
+<g font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="#3c4043" stroke="#f8f9fa" stroke-width="3" paint-order="stroke"><text x="303" y="612">A · Taylor</text><text x="320" y="566">B · Temple</text></g>
+<path d="M297 563c-5-7-9-11-9-16a9 9 0 0 1 18 0c0 5-4 9-9 16z" transform="translate(9 0)" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5"/>
+<circle cx="306" cy="547" r="3.2" fill="#ffffff"/>
+<path d="M662 250c-7-9-12-14-12-21a12 12 0 0 1 24 0c0 7-5 12-12 21z" fill="#c5221f" stroke="#ffffff" stroke-width="1.5" filter="url(#sh)"/>
+<rect x="657" y="224" width="10" height="10" rx="1.5" fill="#ffffff"/>
+<text x="680" y="236" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#202124" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">Shop · North Little Rock</text>
+
+<!-- route callouts -->
+<g filter="url(#sh)">
+<rect x="566" y="560" width="214" height="44" rx="8" fill="#ffffff" stroke="{{map.c0}}" stroke-width="{{map.cw0}}"/>
+<rect x="108" y="446" width="186" height="44" rx="8" fill="#ffffff" stroke="{{map.c1}}" stroke-width="{{map.cw1}}"/>
+</g>
+<g font-family="Inter, sans-serif">
+<text x="578" y="578" font-size="12.5" font-weight="600" fill="#202124">BNSF · <tspan font-family="IBM Plex Mono, monospace">1,046 km</tspan></text>
+<text x="578" y="595" font-size="12" font-style="italic" fill="#5f6368">about Thu 19 night – Fri 20 early</text>
+<text x="120" y="464" font-size="12.5" font-weight="600" fill="#202124">UP via Fort Worth · <tspan font-family="IBM Plex Mono, monospace">839 km</tspan></text>
+<text x="120" y="481" font-size="12" font-style="italic" fill="#5f6368">1 interchange · about Fri 20</text>
+</g>
+</svg>
+
+<!-- map: top-left chip -->
+<div style="position: absolute; top: 16px; left: 16px; display: flex; align-items: center; gap: 8px; background: #ffffff; border-radius: 18px; padding: 7px 14px 7px 10px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); font-size: 13px; color: #3c4043">
+<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="#5f6368" stroke-width="1.5"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="#5f6368" stroke-width="1.5" stroke-linecap="round"/></svg>
+Planned route from the report · not live tracking</div>
+
+<!-- map: controls top-right -->
+<div style="position: absolute; top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px">
+<button type="button" aria-label="Map layers: Map, Satellite, Real tracks" style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px; border: 0; border-radius: 8px; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); color: #3c4043; font-size: 13px; font-weight: 500; cursor: pointer">
+<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3l7 4-7 4-7-4z" fill="none" stroke="#3c4043" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 11l7 4 7-4" fill="none" stroke="#3c4043" stroke-width="1.6" stroke-linejoin="round"/></svg>Layers · Map</button>
+<div style="display: flex; flex-direction: column; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); overflow: hidden">
+<button type="button" aria-label="Zoom in" style="width: 40px; height: 40px; border: 0; background: #ffffff; color: #3c4043; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+<span style="height: 1px; background: #e8eaed; margin: 0 8px"></span>
+<button type="button" aria-label="Zoom out" style="width: 40px; height: 40px; border: 0; background: #ffffff; color: #3c4043; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+</div>
+<div style="display: flex; flex-direction: column; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); overflow: hidden">
+<button type="button" aria-label="Undo route change" disabled style="width: 40px; height: 40px; border: 0; background: #ffffff; color: #bdc1c6; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h8a4 4 0 0 1 0 8H8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+<span style="height: 1px; background: #e8eaed; margin: 0 8px"></span>
+<button type="button" aria-label="Redo route change" disabled style="width: 40px; height: 40px; border: 0; background: #ffffff; color: #bdc1c6; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M11 4l4 4-4 4M15 8H7a4 4 0 0 0 0 8h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+</div>
+<button type="button" aria-label="Fit whole route" style="width: 40px; height: 40px; border: 0; border-radius: 8px; background: #ffffff; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); color: #3c4043; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 7V3h4M11 3h4v4M15 11v4h-4M7 15H3v-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+</div>
+
+<!-- map: legend bottom-left -->
+<div style="position: absolute; left: 16px; bottom: 16px; background: #ffffff; border-radius: 10px; box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #3c4043">
+<div style="font-weight: 600; font-size: 12px">Class I railroads</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 14px; row-gap: 5px; font-family: 'IBM Plex Mono', monospace">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #d0661f"></span>BNSF</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #b8920f"></span>UP</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #2b6cb0"></span>CSXT</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #6b55b0"></span>NS</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #c0392b"></span>CN</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 16px; height: 4px; border-radius: 2px; background: #23866a"></span>CPKC</span>
+</div>
+<div style="height: 1px; background: #e8eaed"></div>
+<div style="display: flex; flex-wrap: wrap; column-gap: 14px; row-gap: 5px">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 5px; border-radius: 3px; background: #1a73e8"></span>Selected route</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 5px; border-radius: 3px; background: #9aa0a6"></span>Alternative</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 18px; height: 0; border-top: 2.5px dashed #5f6368"></span>A to B</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid #b06000; box-sizing: border-box"></span>Turn-back</span>
+</div>
+</div>
+
+<!-- map: scale bottom-right -->
+<div style="position: absolute; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; font-size: 11px; color: #3c4043; background: rgba(255,255,255,.85); border-radius: 4px; padding: 3px 8px">
+<span>Stylized map · EXAMPLE</span>
+<span style="display: flex; flex-direction: column; align-items: flex-start"><span>100 km</span><span style="width: 86px; height: 4px; border: 1.5px solid #3c4043; border-top: 0"></span></span>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var st = this.state || {};
+    var sel = st.sel || 0;
+    var open = st.open || {};
+    var self = this;
+    var RR = { BNSF: '#d0661f', UP: '#b8920f' };
+    var L = {
+      none: 'border-left: 0 solid transparent',
+      dot: 'border-left: 3px dotted #9aa0a6',
+      bnsf: 'border-left: 6px solid #d0661f',
+      up: 'border-left: 6px solid #b8920f'
+    };
+    var toggle = function (id) {
+      return function () {
+        var o = Object.assign({}, (self.state && self.state.open) || {});
+        o[id] = !o[id];
+        self.setState({ open: o });
+      };
+    };
+    var base = { km: '', day: '', lt: L.none, lb: L.none, title: '', sub: '', hasSub: false, kPassed: false, kNext: false, kWarn: false, kNote: false, kLeg: false, kChange: false, kShop: false, kText: true, tColor: '#202124', tWeight: '600', tStyle: 'normal', tSize: '14px' };
+    var r = function (o) { return Object.assign({}, base, o); };
+    var note = function (t, lt, lb) { return r({ kNote: true, title: t, tColor: '#5f6368', tWeight: '400', tStyle: 'italic', tSize: '13px', lt: lt || L.none, lb: lb || L.none }); };
+    var leg = function (id, rr, line, text, km, subs, day) {
+      return r({ kLeg: true, kText: false, rr: rr, rrColor: RR[rr], legText: text, legKm: km, subs: subs.map(function (n) { return { n: n }; }), subCount: subs.length + (subs.length === 1 ? ' subdivision' : ' subdivisions'), open: !!open[id], toggle: toggle(id), chev: open[id] ? 'rotate(90deg)' : 'rotate(0deg)', lt: line, lb: line, day: day });
+    };
+    var head = [
+      r({ kPassed: true, km: '−63', title: 'Taylor, TX', sub: 'A · last passed', hasSub: true, tWeight: '500', lb: L.dot, day: 'Tue 17 morning (report)' }),
+      r({ title: 'Car is somewhere here · 63 km', tColor: '#5f6368', tWeight: '400', tStyle: 'italic', tSize: '13px', lt: L.dot, lb: L.dot })
+    ];
+    var steps0 = head.concat([
+      r({ kNext: true, km: '0', title: 'Temple, TX', sub: 'B · next node', hasSub: true, lt: L.dot, lb: L.bnsf, day: 'Tue 17' }),
+      r({ kWarn: true, km: '0', title: 'Turns back at Temple, TX (yard track): check', tColor: '#7b1fa2', sub: 'Arrives on Lampasas Sub heading S, leaves heading N', hasSub: true, lt: L.bnsf, lb: L.bnsf }),
+      note('Yard turn-back time: not counted', L.bnsf, L.bnsf),
+      leg('r0bnsf', 'BNSF', L.bnsf, 'BNSF toward North Little Rock (heading NE)', '1,046 km', ['Lampasas Sub', 'Galveston Sub', 'Conroe Sub', 'Silsbee Sub', 'San Augustine Sub', 'Longview Sub', 'Little Rock Sub'], 'Tue 17 – Thu 19'),
+      r({ kShop: true, km: '1,046', title: 'North Little Rock, AR', sub: 'Shop · EXAMPLE shop node', hasSub: true, lt: L.bnsf, day: 'about Thu 19 night – Fri 20 early' }),
+      note('Serving yard to shop placement: not counted'),
+      note('Route 1,046 km vs straight line 631 km (1.7×)')
+    ]);
+    var steps1 = head.concat([
+      r({ kNext: true, km: '0', title: 'Temple, TX', sub: 'B · next node', hasSub: true, lt: L.dot, lb: L.bnsf, day: 'Tue 17' }),
+      leg('r1bnsf', 'BNSF', L.bnsf, 'BNSF toward Fort Worth (heading N)', '212 km', ['Fort Worth Sub'], 'Tue 17 – Wed 18'),
+      r({ kChange: true, km: '212', title: 'Change railroad BNSF → UP at Fort Worth', lt: L.bnsf, lb: L.up, day: 'Wed 18' }),
+      note('Interchange yard time: assumed, not measured', L.up, L.up),
+      leg('r1up', 'UP', L.up, 'UP toward North Little Rock (heading NE)', '627 km', ['Dallas Sub', 'Mineola Sub', 'Texarkana Sub', 'Little Rock Sub'], 'Wed 18 – Fri 20'),
+      r({ kShop: true, km: '839', title: 'North Little Rock, AR', sub: 'Shop · EXAMPLE shop node', hasSub: true, lt: L.up, day: 'about Fri 20 morning – midday' }),
+      note('Serving yard to shop placement: not counted'),
+      note('Route 839 km vs straight line 631 km (1.3×)')
+    ]);
+    var P = {
+      route: { label: 'Check route', c: '#7b1fa2', isRoute: true, isRisk: false, isTight: false, isOk: false },
+      tight: { label: 'Tight', c: '#b06000', isTight: true, isRoute: false, isRisk: false, isOk: false },
+      ok: { label: 'On time', c: '#188038', isOk: true, isRoute: false, isRisk: false, isTight: false }
+    };
+    var verdicts = [
+      { headline: 'Check the route before using this result', hColor: '#7b1fa2', pills: [P.route, P.tight], b1: 'about Thu 19 night', b2: 'about Fri 20 early', margin: '+23 h', mColor: '#b06000' },
+      { headline: 'Arrives after prep ends, with room to spare', hColor: '#188038', pills: [P.ok], b1: 'about Fri 20 morning', b2: 'about Fri 20 midday', margin: '+34 h', mColor: '#188038' }
+    ];
+    var pick = function (i) { return function () { self.setState({ sel: i }); }; };
+    var routes = [
+      { name: 'BNSF via Lampasas and Little Rock subs', when: 'about Thu 19 night – Fri 20 early', dist: '1,046 km', ic: 'no interchanges', diff: '', hasDiff: false, rrs: [{ code: 'BNSF', col: RR.BNSF }], tags: [{ t: 'Fewest interchanges' }, { t: 'Router’s pick' }], pill: { label: 'Tight', c: '#b06000', isTight: true, isOk: false }, hasAlert: true },
+      { name: 'UP via Fort Worth', when: 'about Fri 20 morning – midday', dist: '839 km', ic: '1 interchange (BNSF → UP)', diff: '−207 km, 1 more interchange, about 11 h later', hasDiff: true, rrs: [{ code: 'BNSF', col: RR.BNSF }, { code: 'UP', col: RR.UP }], tags: [{ t: 'Shortest' }, { t: 'No turn-backs' }], pill: { label: 'On time', c: '#188038', isTight: false, isOk: true }, hasAlert: false }
+    ].map(function (rt, i) {
+      return Object.assign({}, rt, {
+        pick: pick(i),
+        pressed: sel === i ? 'true' : 'false',
+        border: sel === i ? '2px solid #1a73e8' : '1px solid #dadce0',
+        lineCol: sel === i ? '#1a73e8' : '#9aa0a6'
+      });
+    });
+    var map = sel === 0
+      ? { r0: '#1a73e8', r1: '#9aa0a6', m0: 'url(#chev)', m1: 'none', top0: '1', ringOp: '1', c0: '#1a73e8', cw0: '2', c1: '#dadce0', cw1: '1' }
+      : { r0: '#9aa0a6', r1: '#1a73e8', m0: 'none', m1: 'url(#chev)', top0: '0', ringOp: '.35', c0: '#dadce0', cw0: '1', c1: '#1a73e8', cw1: '2' };
+    return {
+      v: verdicts[sel],
+      routes: routes,
+      steps: sel === 0 ? steps0 : steps1,
+      stepsTitle: sel === 0 ? 'BNSF route' : 'UP via Fort Worth',
+      map: map
+    };
+  }
+}
+</script>
+</body>
+</html>

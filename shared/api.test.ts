@@ -1,0 +1,74 @@
+import { describe, expect, it } from "vitest";
+import { routeMatcher, urlFor, type Route } from "./api.ts";
+
+/** Every route of the contract; a route added to `Api` and missing here does not compile. */
+const EVERY_ROUTE: Record<Route, true> = {
+  "GET /api/meta": true,
+  "GET /api/assumptions": true,
+  "PUT /api/assumptions": true,
+  "GET /api/import-profile": true,
+  "PUT /api/import-profile": true,
+  "GET /api/places/suggest": true,
+  "POST /api/places/resolve": true,
+  "GET /api/places/nearest": true,
+  "GET /api/shops": true,
+  "POST /api/shops": true,
+  "PUT /api/shops/:shopId": true,
+  "DELETE /api/shops/:shopId": true,
+  "POST /api/shops/import": true,
+  "GET /api/codes": true,
+  "POST /api/codes/import": true,
+  "DELETE /api/codes/:codeType": true,
+  "GET /api/batches": true,
+  "POST /api/batches": true,
+  "GET /api/batches/:batchId": true,
+  "DELETE /api/batches/:batchId": true,
+  "GET /api/batches/:batchId/cars/:row": true,
+  "PUT /api/batches/:batchId/cars/:row/fix": true,
+  "DELETE /api/batches/:batchId/cars/:row/fix": true,
+  "POST /api/check": true,
+};
+const ROUTES = Object.keys(EVERY_ROUTE) as Route[];
+
+/** Awkward values on purpose: a slash, a space, a percent sign and non-ASCII letters must survive the trip. */
+const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", batchId: "b%7", codeType: "sp lc", row: "12" };
+
+describe("urlFor / routeMatcher", () => {
+  it("urlFor fills path params (encoded) and appends the query", () => {
+    expect(urlFor("GET /api/shops")).toEqual({ method: "GET", url: "/api/shops" });
+    expect(urlFor("PUT /api/shops/:shopId", { params: { shopId: "EX/NLR 01" }, body: { name: "x", code: null, location: { kind: "text", text: "x" } } })).toEqual({
+      method: "PUT",
+      url: "/api/shops/EX%2FNLR%2001",
+    });
+    expect(urlFor("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.1, withinKm: 2.5 } }).url).toBe("/api/places/nearest?lon=-97.34&lat=31.1&withinKm=2.5");
+    expect(urlFor("GET /api/places/suggest", { query: { q: "Temple, TX & co", role: "shop" } }).url).toBe("/api/places/suggest?q=Temple%2C+TX+%26+co&role=shop");
+    expect(urlFor("GET /api/batches/:batchId/cars/:row", { params: { batchId: "b1", row: "3" } }).url).toBe("/api/batches/b1/cars/3");
+  });
+
+  it("routeMatcher(urlFor(route, request)) finds the same route and params, for every route in Api", () => {
+    const match = routeMatcher(ROUTES);
+    for (const route of ROUTES) {
+      const names = [...route.matchAll(/:(\w+)/g)].map((m) => m[1]);
+      const params = Object.fromEntries(names.map((name) => [name, PARAM_VALUES[name]]));
+      const { method, url } = urlFor(route as "GET /api/batches/:batchId/cars/:row", { params } as never);
+      const found = match(method, new URL(url, "http://127.0.0.1").pathname);
+      expect(found, route).toEqual({ route, params });
+    }
+  });
+
+  it("a literal path segment wins over a parameter in the same place", () => {
+    const match = routeMatcher(ROUTES);
+    expect(match("POST", "/api/shops/import")?.route).toBe("POST /api/shops/import");
+    expect(match("PUT", "/api/shops/import")).toEqual({ route: "PUT /api/shops/:shopId", params: { shopId: "import" } });
+  });
+
+  it("an unknown path or a known path with another method matches nothing", () => {
+    const match = routeMatcher(ROUTES);
+    expect(match("GET", "/api/nothing")).toBeNull();
+    expect(match("GET", "/api/shops/EX-1")).toBeNull();
+    expect(match("POST", "/api/meta")).toBeNull();
+    expect(match("GET", "/api/shops/")).toBeNull();
+    expect(match("GET", "/api/batches/b1/cars")).toBeNull();
+    expect(match("GET", "/api/batches/%E0%A4%A")).toBeNull();
+  });
+});

@@ -1,0 +1,12 @@
+{
+  // Solution file for `tsc -b`: the areas and nothing else. Who may import whom is each area's "references".
+  "files": [],
+  "references": [
+    { "path": "./shared" },
+    { "path": "./engine" },
+    { "path": "./server" },
+    { "path": "./web" },
+    { "path": "./scripts" },
+    { "path": "./tests" }
+  ]
+}
