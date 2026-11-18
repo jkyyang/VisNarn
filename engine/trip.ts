@@ -106,6 +106,16 @@ export function createCarRouter(network: RailNetwork): CarRouter {
     return { kind: "not-served", at, message };
   };
 
+  /**
+   * Of two points no route joins, the one on the smaller piece of the allowed network; null when both are
+   * on one piece, so direction (no turning back) blocks the route rather than the track.
+   */
+  const cutOff = (from: Point, to: Point, track: Track): "from" | "to" | null => {
+    const near = graph.piece(graph.serving(from, track).values(), track);
+    if ([...graph.serving(to, track).values()].some((node) => near.has[node])) return null;
+    return near.size < graph.piece(graph.serving(to, track).values(), track).size ? "from" : "to";
+  };
+
   return {
     route(trip, strategy) {
       const track = trackOf(trip.rules);
@@ -157,10 +167,12 @@ export function createCarRouter(network: RailNetwork): CarRouter {
           return { ok: false, noRoute: { kind: "dead-end", at: roleAt(error.point), message } };
         }
         const target = error.point > 0 ? error.point : onwardPoints.length - 1;
-        const at: At = target === onwardPoints.length - 1 ? "shop" : target - 1;
-        const from: At = target === 1 ? "b" : target - 2;
-        const message = `No route from ${roleOf(from)} to ${roleOf(at)} with the railroads allowed, without turning back outside a yard.`;
-        return { ok: false, noRoute: { kind: "no-path", at, message } };
+        const atOf = (point: number): At => (point === onwardPoints.length - 1 ? "shop" : point === 0 ? "b" : point - 1);
+        const message = `No route from ${roleOf(atOf(target - 1))} to ${roleOf(atOf(target))} with the railroads allowed, without turning back outside a yard.`;
+        // Blame the end the allowed track cuts off (Oakville, ON without passenger-owned track, 2026-11-18),
+        // not whichever end the search was heading for.
+        const cut = cutOff(onwardPoints[target - 1], onwardPoints[target], track);
+        return { ok: false, noRoute: { kind: "no-path", at: atOf(cut === "from" ? target - 1 : target), message } };
       }
 
       const aNodes = new Set<number>();

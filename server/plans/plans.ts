@@ -90,7 +90,7 @@ function waypoint(place: ResolvedPlace): Waypoint {
  */
 function problemOf(noRoute: NoRoute, trip: Trip): PlanProblem {
   const at: PlanProblem["at"] = noRoute.at === "a" || noRoute.at === "b" ? "start" : noRoute.at === "shop" ? "destination" : noRoute.at;
-  if (noRoute.kind === "no-path") return { at, message: "No track reaches here from the stop before." };
+  if (noRoute.kind === "no-path") return { at, message: "No route on the allowed track joins this place to the rest of the route." };
   if (noRoute.kind === "dead-end") return { at, message: "The route cannot go on from here without turning back." };
   const point = at === "start" ? trip.b : at === "destination" ? trip.shop : trip.stops[at];
   return { at, message: point?.railroad ? `${point.railroad} has no track here.` : "No allowed railroad has track here." };

@@ -254,6 +254,27 @@ export class RailGraph {
     return hits.filter((h) => h.km <= nearest + SERVE_SLACK_KM);
   }
 
+  /**
+   * The piece of network joined to these nodes over this track, ignoring direction and railroad changes:
+   * `has[n]` is 1 for each node in it. No route on this track joins two different pieces.
+   */
+  piece(from: Iterable<number>, track: Track): { has: Uint8Array; size: number } {
+    const has = new Uint8Array(this.nodeCount);
+    const queue = new Uint32Array(this.nodeCount);
+    let size = 0;
+    for (const node of from) if (!has[node]) has[(queue[size++] = node)] = 1;
+    for (let head = 0; head < size; head++) {
+      const node = queue[head];
+      for (let j = this.adjOffset[node]; j < this.adjOffset[node + 1]; j++) {
+        const e = this.adj[j];
+        if (!(this.edgeMask[e] & track.allowedMask) || (!track.passenger && this.edgePassenger[e])) continue;
+        const next = this.other(e, node);
+        if (!has[next]) has[(queue[size++] = next)] = 1;
+      }
+    }
+    return { has, size };
+  }
+
   /** Node mainline masks for this track: a place snaps only to mainline the route may use. */
   private mainline(track: Track): Uint8Array {
     return track.passenger ? this.mainMask : this.freightMainMask;

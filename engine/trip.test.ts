@@ -131,6 +131,10 @@ describe("createCarRouter().route", () => {
     expect(router.route(trip, "pick").ok).toBe(true);
     const off = router.route({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: false, passenger: false } } }, "pick");
     expect(off).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "shop" } });
+    // Leaving from Oakville, Oakville is still the place cut off: not the shop, not the first stop.
+    const from: Trip = { ...trip, a: trip.shop, b: trip.shop, shop: city("North Little Rock, AR"), rules: { ...rules(), include: { regional: false, shortLine: false, passenger: false } } };
+    expect(router.route(from, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "b" } });
+    expect(router.route({ ...from, stops: [city("Chicago, IL")] }, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "b" } });
   });
 
   it("honours a waypoint's railroad: a stop pinned to BNSF is not reached on UP", () => {

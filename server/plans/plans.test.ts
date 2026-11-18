@@ -5,7 +5,7 @@ import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { FraId, PlaceRef } from "../../shared/places.ts";
-import type { Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
+import type { Plan, PlannedRoute, PlanProblem, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { createDirectory } from "../places/directory.ts";
 import { startRoutePlanner, type RoutePlanner } from "../routing/planner.ts";
 import { openStore } from "../store/sqlite.ts";
@@ -100,6 +100,22 @@ describe("Plans.route", () => {
     expect(answer.routes[0].legs.at(-1)?.railroad).toBe("short line");
   });
 
+  it("no route is said at the place the allowed track cuts off, start or destination, with or without stops", async () => {
+    // Oakville, ON is reached only over GO Transit's passenger-owned track.
+    const oakville: PlaceRef = { kind: "coord", lon: -79.7195, lat: 43.4169 };
+    const include = { regional: false, shortLine: false, passenger: false };
+    const cases: [Plan, PlanProblem["at"]][] = [
+      [plan(oakville, text("Birmingham, AL")), "start"],
+      [plan(oakville, text("Birmingham, AL"), [text("Chicago, IL")]), "start"],
+      [plan(text("Chicago, IL"), oakville), "destination"],
+    ];
+    for (const [cut, at] of cases) {
+      const answer = await plans.route({ ...cut, include });
+      expect(answer).toMatchObject({ outcome: "no-route", problem: { at } });
+      if (answer.outcome === "no-route") expect(answer.problem.message).not.toContain("stop before");
+    }
+  });
+
   it("no route is said at the place it breaks, in the plan's words", async () => {
     store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["CN"] } });
     const notServed = await plans.route(TAYLOR_TO_NLR);
@@ -107,7 +123,7 @@ describe("Plans.route", () => {
 
     store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } });
     const noPath = await plans.route(plan(text("Houston, TX"), text("Pasco, WA")));
-    expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No track reaches here from the stop before." } });
+    expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
 
     // A stop on a branch the car can only leave the wrong way: the stop is at fault, not the destination.
     store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS);
