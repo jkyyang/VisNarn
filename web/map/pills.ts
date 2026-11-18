@@ -1,7 +1,8 @@
 /**
  * Where the route pills go on screen, as plain geometry: each pill takes the first of its anchors and
- * sides that keeps it on the map and clear of the pins, the legend and the pills placed before it. A
- * pill with no room is left out; its line and its row in the panel still select the route.
+ * corners that keeps it on the map and clear of the route lines, the pins, the legend and the pills
+ * placed before it. A pill with no room is left out; its line and its row in the panel still select
+ * the route.
  */
 
 /** Screen pixels from the map's top-left corner. */
@@ -12,28 +13,36 @@ export interface Box {
   bottom: number;
 }
 
-export type PillSide = "right" | "left" | "above" | "below";
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** Where a pill sits from its anchor. Its corner at the anchor is drawn sharp, like a callout's tail. */
+export type PillCorner = "above-right" | "above-left" | "below-right" | "below-left";
 
 export interface PillAsk {
   id: string;
   width: number;
   height: number;
   /** Screen points the pill may hang from, best first. */
-  anchors: { x: number; y: number }[];
+  anchors: Point[];
 }
 
 export interface PillPlace {
   id: string;
   /** Index into the ask's anchors. */
   anchor: number;
-  side: PillSide;
+  corner: PillCorner;
   box: Box;
 }
 
-/** From the anchor to the near edge of the pill: room for its pointer. */
-const OFFSET_PX = 12;
-/** Air kept between a pill and anything else. */
+/** From the anchor to the pill's near corner, across and down: the pill sits beside its line, not on it. */
+const OFFSET_PX = 8;
+/** Air kept between a pill and a pin, the legend or another pill. */
 const CLEAR_PX = 4;
+/** Air kept between a pill and a route line's centre: half the selected route's 11 px casing, and a little. */
+const LINE_CLEAR_PX = 7;
 
 /** Matches .route-pill in styles.css. */
 export const PILL_HEIGHT_PX = 26;
@@ -43,41 +52,56 @@ export function pillWidthPx(text: string, turnBacks: number): number {
   return text.length * 7 + 20 + (turnBacks > 0 ? 18 : 0);
 }
 
-function boxAt(anchor: { x: number; y: number }, side: PillSide, width: number, height: number): Box {
-  const { x, y } = anchor;
-  switch (side) {
-    case "right":
-      return { left: x + OFFSET_PX, top: y - height / 2, right: x + OFFSET_PX + width, bottom: y + height / 2 };
-    case "left":
-      return { left: x - OFFSET_PX - width, top: y - height / 2, right: x - OFFSET_PX, bottom: y + height / 2 };
-    case "above":
-      return { left: x - width / 2, top: y - OFFSET_PX - height, right: x + width / 2, bottom: y - OFFSET_PX };
-    case "below":
-      return { left: x - width / 2, top: y + OFFSET_PX, right: x + width / 2, bottom: y + OFFSET_PX + height };
-  }
+function boxAt({ x, y }: Point, corner: PillCorner, width: number, height: number): Box {
+  const left = corner.endsWith("right") ? x + OFFSET_PX : x - OFFSET_PX - width;
+  const top = corner.startsWith("above") ? y - OFFSET_PX - height : y + OFFSET_PX;
+  return { left, top, right: left + width, bottom: top + height };
 }
 
 const inside = (box: Box, view: Box) => box.left >= view.left && box.top >= view.top && box.right <= view.right && box.bottom <= view.bottom;
 const near = (a: Box, b: Box) => a.left < b.right + CLEAR_PX && b.left < a.right + CLEAR_PX && a.top < b.bottom + CLEAR_PX && b.top < a.bottom + CLEAR_PX;
 
+/** True when the stretch p–q passes within `pad` of the box (Liang–Barsky clipping). */
+function crosses(box: Box, p: Point, q: Point, pad: number): boolean {
+  const dx = q.x - p.x;
+  const dy = q.y - p.y;
+  const edges: [number, number][] = [
+    [-dx, p.x - (box.left - pad)],
+    [dx, box.right + pad - p.x],
+    [-dy, p.y - (box.top - pad)],
+    [dy, box.bottom + pad - p.y],
+  ];
+  let from = 0;
+  let to = 1;
+  for (const [step, room] of edges) {
+    if (step === 0) {
+      if (room < 0) return false;
+    } else if (step < 0) from = Math.max(from, room / step);
+    else to = Math.min(to, room / step);
+  }
+  return from <= to;
+}
+
+const onLine = (box: Box, line: Point[]) => line.some((point, i) => i > 0 && crosses(box, line[i - 1], point, LINE_CLEAR_PX));
+
 /**
- * Asks in priority order (selected first). For each anchor in order, the sides are tried with the
- * horizontal one facing away from the other pills' first anchors first, then the other horizontal one,
- * then above, below. The first box inside `view` and clear of the obstacles and of the pills already
- * placed is taken.
+ * Asks in priority order (selected first). For each anchor in order, the four corners are tried, the
+ * ones facing away from the other pills' first anchors first, above before below. The first box
+ * inside `view`, off every route line, and clear of the obstacles and of the pills already placed is
+ * taken.
  */
-export function placePills(asks: PillAsk[], obstacles: Box[], view: Box): PillPlace[] {
+export function placePills(asks: PillAsk[], obstacles: Box[], view: Box, lines: Point[][] = []): PillPlace[] {
   const placed: PillPlace[] = [];
   asks.forEach((ask, i) => {
     const others = asks.filter((_, j) => j !== i).flatMap((other) => other.anchors.slice(0, 1));
     for (const [index, anchor] of ask.anchors.entries()) {
       const middle = others.length ? others.reduce((sum, p) => sum + p.x, 0) / others.length : anchor.x;
-      const away: PillSide = middle > anchor.x ? "left" : "right";
-      const sides: PillSide[] = [away, away === "left" ? "right" : "left", "above", "below"];
-      for (const side of sides) {
-        const box = boxAt(anchor, side, ask.width, ask.height);
-        if (!inside(box, view) || obstacles.some((o) => near(box, o)) || placed.some((p) => near(box, p.box))) continue;
-        placed.push({ id: ask.id, anchor: index, side, box });
+      const [away, toward] = middle > anchor.x ? (["left", "right"] as const) : (["right", "left"] as const);
+      const corners: PillCorner[] = [`above-${away}`, `below-${away}`, `above-${toward}`, `below-${toward}`];
+      for (const corner of corners) {
+        const box = boxAt(anchor, corner, ask.width, ask.height);
+        if (!inside(box, view) || lines.some((line) => onLine(box, line)) || obstacles.some((o) => near(box, o)) || placed.some((p) => near(box, p.box))) continue;
+        placed.push({ id: ask.id, anchor: index, corner, box });
         return;
       }
     }

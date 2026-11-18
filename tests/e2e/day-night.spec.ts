@@ -23,7 +23,6 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   const layers = page.getByRole("button", { name: /^Map layers/ });
   await layers.click();
   await expect(page.getByRole("radio", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText(/^Follows the clock\. Now: (Day|Sunrise|Sunset|Night)$/)).toBeVisible();
   // The edge of night comes from the picture itself: there is no line to switch on.
   await expect(page.getByText("Day-night line")).toHaveCount(0);
 

@@ -2,17 +2,15 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
 import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
 import { usePlace } from "../../data/hooks.ts";
-import { fmtLonLat } from "../../format.ts";
 import { readFileText } from "../../ui/files.ts";
 
-/** "Found on the network · served by BNSF and UP", or the problem in words. */
+/** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
 function placeHint(resolution: PlaceResolution): { ok: boolean; text: string } {
   if (!resolution.ok) return { ok: false, text: resolution.problem.message };
   const { place } = resolution;
-  const names = place.railroads.length > 1 ? `${place.railroads.slice(0, -1).join(", ")} and ${place.railroads[place.railroads.length - 1]}` : place.railroads.join("");
-  const served = names ? ` · served by ${names}` : "";
-  if (place.match.confidence === "snapped" && place.match.snapKm >= 1) return { ok: true, text: `Nearest track is ${Math.round(place.match.snapKm)} km away${served}` };
-  return { ok: true, text: `Found on the network${served}` };
+  const lines = place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
+  if (place.match.confidence === "snapped" && place.match.snapKm >= 1) return { ok: true, text: `Nearest track ${Math.round(place.match.snapKm)} km away${lines}` };
+  return { ok: true, text: `On the network${lines}` };
 }
 
 const ShopPin = ({ size = 14 }: { size?: number }) => (
@@ -22,12 +20,7 @@ const ShopPin = ({ size = 14 }: { size?: number }) => (
   </svg>
 );
 
-function locationText(shop: ShopView): string {
-  if (shop.place.ok) return fmtLonLat(shop.place.place.lon, shop.place.place.lat);
-  return "lon" in shop.location ? fmtLonLat(shop.location.lon, shop.location.lat) : `FRA node ${shop.location.fraId}`;
-}
-
-/** Search by name or code · Add shop · the table (Shop, Shop code, Location, On lines, Edit) · the count line. */
+/** Search by name or code · Add shop · the table (Shop, Shop code, On lines, Edit) · the count line. Where a shop is, the map shows. */
 export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" | null; onEdit: (shop: ShopView) => void; onAdd: () => void }): ReactElement {
   const [query, setQuery] = useState("");
   const searchId = useId();
@@ -62,7 +55,6 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
             <tr>
               <th scope="col">Shop</th>
               <th scope="col">Shop code</th>
-              <th scope="col">Location</th>
               <th scope="col">On lines</th>
               <th scope="col">
                 <span className="visually-hidden">Edit</span>
@@ -82,16 +74,14 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
                     </span>
                   </td>
                   <td className="mono">{shop.code ?? "–"}</td>
-                  <td className="mono muted">{locationText(shop)}</td>
                   <td>
                     {shop.place.ok ? (
-                      <span className="on-lines">
-                        <span className="rr-bars" aria-hidden="true">
-                          {shop.place.place.railroads.map((railroad) => (
-                            <i key={railroad} style={{ background: `var(--rr-${railroad})` }} title={railroad} />
-                          ))}
-                        </span>
-                        <span className="mono small muted">{shop.place.place.railroads.join(", ")}</span>
+                      // The legend on the map says which colour is which railroad.
+                      <span className="rr-bars" title={shop.place.place.railroads.join(", ")}>
+                        {shop.place.place.railroads.map((railroad) => (
+                          <i key={railroad} style={{ background: `var(--rr-${railroad})` }} aria-hidden="true" />
+                        ))}
+                        <span className="visually-hidden">{shop.place.place.railroads.join(", ")}</span>
                       </span>
                     ) : (
                       <span className="hint hint--bad">Not on the network</span>
@@ -107,8 +97,8 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
             })}
             {!shown.length && (
               <tr>
-                <td colSpan={5} className="muted">
-                  {props.shops.length ? "No shop matches the search." : "No shops yet. Add one, or import a list."}
+                <td colSpan={4} className="muted">
+                  {props.shops.length ? "No match" : "No shops yet"}
                 </td>
               </tr>
             )}
@@ -117,7 +107,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
       </div>
       <div className="muted small table-foot">
         {props.shops.length} {props.shops.length === 1 ? "shop" : "shops"}
-        {examples ? ` · ${examples === props.shops.length ? "all are" : `${examples} are`} EXAMPLE rows you can delete` : ""} · “On lines” is found from the node, not typed
+        {examples ? ` · ${examples} EXAMPLE` : ""}
       </div>
     </section>
   );
@@ -131,8 +121,8 @@ function locationInput(shop: ShopView | null): { text: string; ref: PlaceRef | n
 }
 
 /**
- * Name · "Node code, or “lon, lat”" with the live hint ("Found on the network · served by BNSF and
- * UP") · location mini-map with "Pick on map" · Cancel / Save shop / Delete.
+ * Name · Shop code · Location ("lon, lat", a city or an FRA node, or "Pick on map") with the live
+ * hint ("On the network · BNSF, UP") · Cancel / Save shop / Delete.
  *
  * A self-contained input widget: it keeps its own draft and asks the server what the typed
  * location means as the person types (usePlace). Save is off until the place is on the network.
@@ -159,7 +149,7 @@ export function ShopForm(props: {
   const sectionRef = useRef<HTMLElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // On a phone the form opens below the list, out of sight: bring it into view and start at its first box.
+  // The form opens above the list, which may be scrolled far down: bring it into view and start at its first box.
   useEffect(() => {
     sectionRef.current?.scrollIntoView?.({ block: "nearest" });
     nameRef.current?.focus({ preventScroll: true });
@@ -201,7 +191,6 @@ export function ShopForm(props: {
     }
   };
 
-  const place = resolved?.ok ? resolved.place : null;
   return (
     <section className="shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
       <h2>{props.shop ? "Edit shop" : "Add shop"}</h2>
@@ -215,7 +204,7 @@ export function ShopForm(props: {
           <input id={`${ids}-code`} className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. EX-NLR-01" />
         </div>
         <div className="field">
-          <label htmlFor={`${ids}-loc`}>Node code, or “lon, lat”</label>
+          <label htmlFor={`${ids}-loc`}>Location</label>
           <input
             id={`${ids}-loc`}
             className="mono"
@@ -233,18 +222,6 @@ export function ShopForm(props: {
               {hint.text}
             </span>
           )}
-        </div>
-        <div className="field">
-          <span className="label-text">Location</span>
-          <span className="shop-location small">
-            {place ? (
-              <>
-                <span className="mono">{fmtLonLat(place.lon, place.lat)}</span> · {place.railroads.join(", ")} · <span className="muted">marked + on the map</span>
-              </>
-            ) : (
-              <span className="muted">Type a location or pick it on the map</span>
-            )}
-          </span>
           <button type="button" className="btn btn--outline" aria-pressed={props.picking} onClick={props.onTogglePick}>
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -377,8 +354,8 @@ const ImportIcon = () => (
 );
 
 /**
- * "Import shop list (CSV)": choose a file, see a preview (rows ready, and rows that match no node,
- * to fix before saving), then save. `run` is called with commit false for the preview, then true.
+ * "Import shop list (CSV)": choose a file, see a preview (how many rows are ready, and each row that
+ * will not be saved, with why), then save. `run` is called with commit false for the preview, then true.
  */
 export function ShopImportCard(props: { run: (request: ImportRequest) => Promise<ImportReport<ShopView>> }): ReactElement {
   const flow = useImport(props.run);
@@ -388,20 +365,18 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
         <ImportIcon />
         <div className="grow">
           <h2>Import shop list (CSV)</h2>
-          <div className="muted small">
-            Company shop data comes later. Columns: <span className="mono">name, node_code</span> or <span className="mono">name, lon, lat</span>. Rows that do not match a node are listed for you to fix before saving.
-          </div>
+          <div className="muted small mono">name, lon, lat</div>
         </div>
         <FileButton label={flow.busy ? "Reading…" : "Choose CSV file"} onFile={flow.choose} disabled={flow.busy} />
       </div>
       {flow.preview && (
         <div className="import-preview" role="region" aria-label="Import preview">
           <p>
-            <strong>{flow.preview.report.ready.length}</strong> {flow.preview.report.ready.length === 1 ? "shop is" : "shops are"} ready in {flow.preview.fileName}
+            {flow.preview.fileName} · <strong>{flow.preview.report.ready.length}</strong> ready
             {flow.preview.report.issues.length > 0 && (
               <>
                 {" "}
-                · <strong>{flow.preview.report.issues.length}</strong> {flow.preview.report.issues.length === 1 ? "row matches" : "rows match"} no node and will not be saved
+                · <strong>{flow.preview.report.issues.length}</strong> not saved
               </>
             )}
           </p>
@@ -440,7 +415,7 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
   );
 }
 
-/** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near that spot." */
+/** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near there". */
 export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
   return (
     <div className="map-card pick-prompt" role="status">
@@ -449,7 +424,7 @@ export function PickPrompt(props: { missed: boolean; onCancel: () => void }): Re
         <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
       </svg>
       <span>
-        {props.missed ? "No track near that spot. Zoom in and click closer to a line · " : "Click the map to set the shop · "}
+        {props.missed ? "No track near there · " : "Click the map to set the shop · "}
         <kbd>Esc</kbd> to cancel
       </span>
       <button type="button" className="btn btn--dark" onClick={props.onCancel}>

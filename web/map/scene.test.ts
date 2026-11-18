@@ -2,21 +2,19 @@ import type { Layer, PickingInfo } from "deck.gl";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, ShopView } from "../../shared/places.ts";
+import { RAILROADS } from "../../shared/railroads.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
 import { LAYER, networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { legendFor } from "./Legend.tsx";
 import { chosenRoute, pillAnchors, planScene, shopsScene, type MapScene, type SceneRoute } from "./scene.ts";
 
 const grey: RGBA = [90, 100, 110, 255];
 const colors: ThemeColors = {
-  dark: false,
   fg: [0, 0, 0, 255],
   muted: grey,
-  accent: [26, 115, 232, 255],
-  warn: [176, 96, 0, 255],
-  panel: [255, 255, 255, 255],
   route: [26, 115, 232, 255],
   alternative: [154, 160, 166, 255],
   casing: [255, 255, 255, 255],
@@ -152,6 +150,14 @@ describe("shopsScene", () => {
   });
 });
 
+describe("legend", () => {
+  it("lists the selected route's railroads; with no route, all six only while the network is drawn", () => {
+    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops }), true).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
+    expect(legendFor(null, true).railroads).toEqual(RAILROADS);
+    expect(legendFor(null, false).railroads).toEqual([]);
+  });
+});
+
 describe("layers", () => {
   let scene: MapScene;
   let layers: Layer[];
@@ -160,13 +166,14 @@ describe("layers", () => {
     layers = sceneLayers(scene, colors, 5) as Layer[];
   });
 
-  it("stacks the thin alternatives under the selected route, with pins and labels on top", () => {
+  it("stacks the thin alternatives under the selected route, with the pins on top and no text layer but the stop numbers", () => {
     const ids = layers.map((l) => l.id);
     expect(ids.indexOf(LAYER.alternatives)).toBeLessThan(ids.indexOf(LAYER.routeCasing));
     expect(ids.indexOf(LAYER.routeCasing)).toBeLessThan(ids.indexOf(LAYER.route));
     expect(ids.indexOf(LAYER.route)).toBeLessThan(ids.indexOf(LAYER.chevrons));
     expect(ids.indexOf(LAYER.chevrons)).toBeLessThan(ids.indexOf(LAYER.pins));
-    expect(ids.indexOf(LAYER.pins)).toBeLessThan(ids.indexOf(LAYER.labels));
+    expect(ids.at(-2)).toBe(LAYER.pins);
+    expect(ids.at(-1)).toBe(LAYER.pinGlyphs);
     expect(layers.filter((l) => l.props.pickable).map((l) => l.id)).toEqual([LAYER.alternatives, LAYER.route, LAYER.interchanges, LAYER.pins]);
     const widths = (id: string) => (layers.find((l) => l.id === id)!.props as unknown as { getWidth: number }).getWidth;
     expect(widths(LAYER.alternatives)).toBeLessThan(widths(LAYER.route));
@@ -177,11 +184,6 @@ describe("layers", () => {
     const getColor = (route.props as unknown as { getColor: (leg: { railroad: "BNSF" | "UP" }) => RGBA }).getColor;
     expect(getColor({ railroad: "BNSF" })).toBe(colors.rail.BNSF);
     expect(getColor({ railroad: "UP" })).toBe(colors.rail.UP);
-  });
-
-  it("labels only the start and the destination, by their short names", () => {
-    const labels = layers.find((l) => l.id === LAYER.labels)!.props as unknown as { data: { text: string }[] };
-    expect(labels.data.map((label) => label.text)).toEqual(["Temple", "North Little Rock"]);
   });
 
   it("shows fewer chevrons zoomed out than zoomed in", () => {

@@ -201,14 +201,10 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
       if (found) return found;
     }
 
-    if (/^\d+$/.test(text)) {
-      const node = /^\d{1,9}$/.test(text) ? nodeSuggestion(Number(text) as FraId) : [];
-      const fraHint = node.length ? ` If you mean FRA node ${text}, type "FRA ${text}".` : "";
-      // Named as an FRA node, for a person to pick on purpose; never among the as-you-type suggestions.
-      return problem("unknown", `No code set has the code ${text}.${fraHint}`, [...suggest(text, role, CANDIDATES), ...node].slice(0, CANDIDATES));
-    }
-    const where = role === "shop" ? "Your shops, the code sets or the city names" : "the code sets, the city names or Your shops";
-    return problem("unknown", `Nothing called "${text}" in ${where}.`, suggest(text, role, CANDIDATES));
+    // A bare number is never taken as an FRA node, but one that is a node is named, for a person to pick on purpose.
+    const node = /^\d{1,9}$/.test(text) ? nodeSuggestion(Number(text) as FraId) : [];
+    const fraHint = node.length ? ` For FRA node ${text}, type "FRA ${text}".` : "";
+    return problem("unknown", `No place called "${text}".${fraHint}`, [...suggest(text, role, CANDIDATES), ...node].slice(0, CANDIDATES));
   };
 
   const compute = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {

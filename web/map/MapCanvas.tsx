@@ -8,13 +8,12 @@ import MapGL, { AttributionControl, useMap, type ViewStateChangeEvent } from "re
 import type { LngLat } from "../../shared/geo.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { useThemeColors } from "../theme.ts";
-import { PHONE_QUERY, useMedia } from "../ui/media.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
 import { NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
-import { networkLayer, sceneLayers, sceneTarget, sceneTooltip, type LabelView } from "./layers.ts";
+import { networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import type { MapContentProps, MapFocus } from "./MapStage.tsx";
@@ -49,8 +48,6 @@ export const PICK_RADIUS_PX = 36;
 const MAX_PICK_KM = 100;
 
 const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
-/** The round buttons down the map's right edge, with their margin. */
-const MAP_BUTTONS_PX = 60;
 const INITIAL_VIEW = {
   bounds: [
     [NETWORK_BOUNDS[0], NETWORK_BOUNDS[1]],
@@ -83,13 +80,13 @@ function FlyTo({ focus }: { focus: MapFocus | undefined }) {
 }
 
 /**
- * MapLibre opens a compact attribution at first and folds it only after the first drag. On a phone
- * it would cover the legend, so it starts folded there; the (i) button opens it.
+ * MapLibre opens a compact attribution at first and folds it only after the first drag. Open, it
+ * runs under the legend, so it starts folded; the (i) button opens it.
  */
-function FoldAttribution({ fold }: { fold: boolean }) {
+function FoldAttribution() {
   const map = useMap().current;
   useEffect(() => {
-    if (!map || !fold) return;
+    if (!map) return;
     const tryFold = () => {
       const open = map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show");
       if (!open) return;
@@ -99,7 +96,7 @@ function FoldAttribution({ fold }: { fold: boolean }) {
     map.on("idle", tryFold);
     tryFold();
     return () => void map.off("idle", tryFold);
-  }, [map, fold]);
+  }, [map]);
   return null;
 }
 
@@ -130,17 +127,13 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const latest = useRef(content);
   latest.current = content;
 
-  const narrow = useMedia(PHONE_QUERY);
-  // Labels that must stay on screen need the camera; it is read again whenever the map stops moving.
-  const [view, setView] = useState<LabelView | undefined>(undefined);
   const deckLayers = useMemo(() => {
-    const drawn = scene ? sceneLayers(scene, colors, zoom, view) : [];
+    const drawn = scene ? sceneLayers(scene, colors, zoom) : [];
     // The network dims under a route (and under the shops), so that is what the eye finds.
     const dimmed = scene?.kind === "shops" || (scene?.kind === "route" && scene.selected !== null);
     return [network && networkLayer(network, layers.network, dimmed, colors), ...drawn];
-  }, [network, layers.network, scene, colors, zoom, view]);
-  const watchCamera = (map: Pick<MapLibreMap, "getContainer" | "project" | "getCenter">) => {
-    setView({ width: map.getContainer().clientWidth - MAP_BUTTONS_PX, screenX: (position) => map.project(position).x, screenY: (position) => map.project(position).y });
+  }, [network, layers.network, scene, colors, zoom]);
+  const watchCamera = (map: Pick<MapLibreMap, "getCenter">) => {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
   };
@@ -187,14 +180,14 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-right" />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
-        <FoldAttribution fold={narrow} />
+        <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} />}
         <FlyTo focus={content?.focus} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
       </MapGL>
-      <Legend {...legendFor(scene)} />
+      <Legend {...legendFor(scene, layers.network)} />
     </div>
   );
 }

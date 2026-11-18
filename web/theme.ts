@@ -3,12 +3,8 @@ import { RAILROADS, type Railroad } from "../shared/railroads.ts";
 
 export type RGBA = [number, number, number, number];
 export interface ThemeColors {
-  dark: boolean;
   fg: RGBA;
   muted: RGBA;
-  accent: RGBA;
-  warn: RGBA;
-  panel: RGBA;
   /** The accent of the selected route's pill and of the stop pins. */
   route: RGBA;
   /** Routes that are not selected. */
@@ -33,14 +29,9 @@ const RAIL_FALLBACK: Record<Railroad, string> = { BNSF: "#d0661f", UP: "#b8920f"
 function read(scope?: Element | null): ThemeColors {
   const style = getComputedStyle(scope ?? document.documentElement);
   const hex = (name: string, fallback: string) => hexOf(style, name, fallback);
-  const scheme = style.getPropertyValue("color-scheme").trim();
   return {
-    dark: scheme ? scheme === "dark" : mq().matches,
     fg: hex("--fg", "#202124"),
     muted: hex("--muted", "#5f6368"),
-    accent: hex("--accent", "#1a73e8"),
-    warn: hex("--tight", "#b06000"),
-    panel: hex("--panel", "#ffffff"),
     route: hex("--route", "#1a73e8"),
     alternative: hex("--alt-route", "#9aa0a6"),
     casing: hex("--casing", "#ffffff"),

@@ -124,28 +124,28 @@ the point), and `Reversal` now keeps the segments, headings and km that `describ
 | `data/basemap.ts` | loading the static mainline GeoJSON | |
 | `data/blackMarble.ts` | downloading NASA GIBS Black Marble tiles for the night side, with an in-memory cache (GIBS sends `no-store`); its URL and attribution | |
 | `words.ts` | the few words the planner says: `shortPlace`, `pillText`, `routeName`, `placeProblem`, `interchangesWord`, `turnBackMove`, `trackWords` | `shared/` |
-| `format.ts` | numbers, distances, subdivision names, compass points, lon/lat. No clock | `shared/` |
+| `format.ts` | distances, subdivision names, compass points. No clock | `shared/` |
 | `theme.ts` | CSS theme tokens as deck.gl colours | `shared/railroads` |
 | `map/MapStage.tsx` | the one map: `MapStageProvider`, `MapStage`, `MapContent`; layer choices | `./MapCanvas` (lazy), `./scene`, `../data/basemap` |
 | `map/MapCanvas.tsx` | MapLibre + deck.gl + controls + legend (the heavy, lazily loaded half) | `./layers`, `./DeckOverlay`, `./FitBounds`, `./RealTracks`, `./MapControls`, `./Legend`, `./basemaps`, `../theme` |
 | `map/scene.ts` | `MapScene` and its builders (`planScene`, `shopsScene`), `chosenRoute`, `pillAnchors`: what the map draws, as data | `../words`, `shared/` |
-| `map/pills.ts` | `placePills`, `pillWidthPx`: where the route pills go on screen, kept apart from each other, the pins and the legend (pure geometry) | |
+| `map/pills.ts` | `placePills`, `pillWidthPx`: where the route pills go on screen, beside the route lines and kept apart from each other, the pins and the legend (pure geometry) | |
 | `map/RouteMarks.tsx` | `RouteMarks`: the route pills and turn-back discs as MapLibre markers, laid out with `placePills` on every move | `./pills`, `./RouteMarkFaces`, `./scene` (types), `../words`, `react-map-gl` |
 | `map/RouteMarkFaces.tsx` | `PillFace`, `TurnBackMark`, `useNativeClick` (a click on a mark never reaches the map): plain DOM, so page tests draw them without a map | `./pills` (type), `./scene` (type), `../words` |
-| `map/layers.ts` | a scene as deck.gl layers (the selected route by railroad, thin alternatives, pins, shop squares); tooltips; click targets (`sceneTarget`). The only file that names deck.gl layer classes | `./scene`, `../theme`, `../words`, `../data/basemap` (type) |
+| `map/layers.ts` | a scene as deck.gl layers (the selected route by railroad, thin alternatives, pins, shop squares; no place names: the panel and the basemap have them); hover names; click targets (`sceneTarget`). The only file that names deck.gl layer classes | `./scene`, `../theme`, `../data/basemap` (type) |
 | `map/MapControls.tsx` | layers card (with the Auto / Day / Night switch), zoom, undo / redo, fit | `./MapCanvas` (type), `./daylight` |
 | `map/daylight.ts` | day and night: sun position and the subsolar point from the clock (no package), `mapLook` (Auto / Day / Night → day or night colours and the Day / Sunrise / Sunset / Night word, at the map centre) | `shared/geo` (type) |
 | `map/nightTiles.ts` | the night side of the Earth per tile: `nightFactor`, `nightShade` (Black Marble where the sun is down, a soft twilight band, clear by day; pure), the `earthnight://` tile URL and its MapLibre loader | `./daylight`, `../data/blackMarble`, `maplibre-gl` (type) |
 | `map/DayNight.tsx` | `NightLights`: the `earthnight://` raster layer under the place names, inside MapLibre (under deck.gl), its opacity per basemap and mode, redrawn every 10 minutes in Auto | `./nightTiles`, `../data/blackMarble` |
 | `map/DeckOverlay.tsx`, `FitBounds.tsx`, `RealTracks.tsx`, `basemaps.ts` | overlay control, camera fit (also when a plan first gets its route), OpenRailwayMap overlay, basemap styles | |
-| `map/Legend.tsx` | `Legend`, `legendFor`: the selected route's railroads only (all six with no route), and "↩ Turn-back" when it has one | `./scene` (type), `shared/railroads` |
+| `map/Legend.tsx` | `Legend`, `legendFor`: the selected route's railroads only (with no route, all six while the network is drawn), and "↩ Turn-back" when it has one | `./scene` (type), `shared/railroads` |
 | `screens/route/RouteWorkspace.tsx` | container for the route planner (desktop and phone): saved route from the URL, session, `usePlannedRoute`, scene, save | `./session`, `./RoutePanel`, `../../data/hooks`, `../../map/*`, `../../app/routes` |
 | `screens/route/session.ts` | the plan being worked on: start, stops, destination with undo history, ⌖ pick, the missed click; `planReducer`, `nextTarget`, `stopInsertIndex`, `usePlanSession` (click → snap → start, destination, then a stop where it adds the least km) | `../../data/hooks`, `shared/` |
 | `screens/route/RoutePanel.tsx` | the planner's panel: `PlaceField`, stop rows with `LineChips` (Any / BNSF / UP), route rows, sections, save bar, saved routes, the one hint line | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/badges`, `../../words`, `../../format`, `shared/` |
 | `screens/shops/ShopsScreen.tsx` | container: shops, the form, the shop import, picking a location | `./ShopsPage`, `../../data/hooks`, `../../map/*`, `../../app/*` |
-| `screens/shops/ShopsPage.tsx` | `ShopTable`, `ShopForm`, `ShopImportCard`, `PickPrompt` | `../../ui/*`, `../../format`, `shared/` |
+| `screens/shops/ShopsPage.tsx` | `ShopTable`, `ShopForm`, `ShopImportCard`, `PickPrompt` | `../../ui/*`, `../../data/hooks`, `shared/` |
 | `ui/badges.tsx` | `RailroadChip` | `shared/` |
-| `ui/ErrorBoundary.tsx`, `ui/files.ts`, `ui/media.ts` | kept from today | |
+| `ui/ErrorBoundary.tsx`, `ui/files.ts` | kept from today | |
 | `**/*.test.ts` | test plans next to the code; `format.test.ts` runs now | |
 
 Who may call data hooks: the two containers, `App`, and the input widgets `PlaceField` and `ShopForm`. Every other component takes props.

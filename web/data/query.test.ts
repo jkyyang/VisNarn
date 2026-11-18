@@ -83,30 +83,6 @@ describe("query cache", () => {
     stop();
   });
 
-  it("polls while pollMs returns a number and stops when it returns null or the last subscriber leaves", async () => {
-    vi.useFakeTimers();
-    const { calls, transport } = fakeTransport();
-    const cache = createQueryCache(transport);
-    const pollMs = (view: unknown) => ((view as { done: boolean }).done ? null : 400);
-    const stop = cache.subscribe("POST /api/route", { body: { plan: "b" } }, () => {}, { pollMs });
-    calls[0].resolve({ done: false });
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(400);
-    expect(calls).toHaveLength(2);
-    calls[1].resolve({ done: true });
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(calls).toHaveLength(2);
-
-    const stopAgain = cache.subscribe("POST /api/route", { body: { plan: "c" } }, () => {}, { pollMs });
-    calls[2].resolve({ done: false });
-    await vi.advanceTimersByTimeAsync(0);
-    stopAgain();
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(calls).toHaveLength(3);
-    stop();
-    vi.useRealTimers();
-  });
-
   it("an error keeps a retry that asks again", async () => {
     const { calls, transport } = fakeTransport();
     const cache = createQueryCache(transport);

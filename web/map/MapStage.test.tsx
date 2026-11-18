@@ -57,15 +57,13 @@ describe("day and night on the map", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { map, layersButton } = await openMap(KANSAS_NOON);
     await user.click(layersButton);
-    const timeOfDay = screen.getByRole("radiogroup", { name: "Time of day" });
+    expect(screen.getByRole("radiogroup", { name: "Time of day" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Auto" })).toHaveAttribute("aria-checked", "true");
-    expect(timeOfDay.parentElement).toHaveTextContent("Follows the clock. Now: Day");
 
     await user.click(screen.getByRole("radio", { name: "Night" }));
     expect(map).toHaveAttribute("data-look", "night");
     expect(layersButton).toHaveAccessibleName("Map layers: Map · Night");
     expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.queryByText(/Follows the clock/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Auto" }));
     expect(map).toHaveAttribute("data-look", "day");

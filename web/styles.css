@@ -8,7 +8,6 @@
   --muted: #5f6368;
   --line: #dadce0;
   --line2: #e8eaed;
-  --accent: #1a73e8;
   --route: #1a73e8;
   --route-dark: #174ea6;
   --route-soft: #e8f0fe;
@@ -17,18 +16,9 @@
   --casing: #ffffff;
   --risk: #c5221f;
   --risk-soft: #fce8e6;
-  --tight: #b06000;
-  --tight-soft: #fff8ec;
   --ok: #188038;
-  --ok-soft: #e6f4ea;
-  --check: #7b1fa2;
-  --check-soft: #f9f1fc;
-  --check-line: #ead7f3;
-  --check-text: #4a1063;
-  --cannot: #5f6368;
   --pin-a: #80868b;
   --shop: #c5221f;
-  --dot-rail: #9aa0a6;
   /* A turn-back: amber, with a shape (the ↩ disc) so colour is never the only cue. */
   --turn: #b06000;
   --rr-BNSF: #d0661f;
@@ -65,7 +55,6 @@
     --muted: #a0a6ad;
     --line: #3c4043;
     --line2: #303338;
-    --accent: #8ab4f8;
     --route: #8ab4f8;
     --route-dark: #aecbfa;
     --route-soft: #1f2b3e;
@@ -74,18 +63,9 @@
     --casing: #1f2125;
     --risk: #f28b82;
     --risk-soft: #3b2120;
-    --tight: #fcad70;
-    --tight-soft: #33271a;
     --ok: #81c995;
-    --ok-soft: #1c3024;
-    --check: #d7aefb;
-    --check-soft: #2c2335;
-    --check-line: #4a3a5a;
-    --check-text: #ead6fb;
-    --cannot: #a0a6ad;
     --pin-a: #a0a6ad;
     --shop: #f28b82;
-    --dot-rail: #737980;
     --turn: #e8890c;
     --rr-BNSF: #f08a45;
     --rr-UP: #e3bd3a;
@@ -119,7 +99,6 @@
   --muted: #5f6368;
   --line: #dadce0;
   --line2: #e8eaed;
-  --accent: #1a73e8;
   --route: #1a73e8;
   --route-dark: #174ea6;
   --route-soft: #e8f0fe;
@@ -128,18 +107,9 @@
   --casing: #ffffff;
   --risk: #c5221f;
   --risk-soft: #fce8e6;
-  --tight: #b06000;
-  --tight-soft: #fff8ec;
   --ok: #188038;
-  --ok-soft: #e6f4ea;
-  --check: #7b1fa2;
-  --check-soft: #f9f1fc;
-  --check-line: #ead7f3;
-  --check-text: #4a1063;
-  --cannot: #5f6368;
   --pin-a: #80868b;
   --shop: #c5221f;
-  --dot-rail: #9aa0a6;
   --turn: #b06000;
   --rr-BNSF: #d0661f;
   --rr-UP: #b8920f;
@@ -169,7 +139,6 @@
   --muted: #a0a6ad;
   --line: #3c4043;
   --line2: #303338;
-  --accent: #8ab4f8;
   --route: #8ab4f8;
   --route-dark: #aecbfa;
   --route-soft: #1f2b3e;
@@ -178,18 +147,9 @@
   --casing: #1f2125;
   --risk: #f28b82;
   --risk-soft: #3b2120;
-  --tight: #fcad70;
-  --tight-soft: #33271a;
   --ok: #81c995;
-  --ok-soft: #1c3024;
-  --check: #d7aefb;
-  --check-soft: #2c2335;
-  --check-line: #4a3a5a;
-  --check-text: #ead6fb;
-  --cannot: #a0a6ad;
   --pin-a: #a0a6ad;
   --shop: #f28b82;
-  --dot-rail: #737980;
   --turn: #e8890c;
   --rr-BNSF: #f08a45;
   --rr-UP: #e3bd3a;
@@ -576,8 +536,7 @@ input[aria-invalid="true"] {
   gap: 4px;
   min-width: 0;
 }
-.field > label,
-.label-text {
+.field > label {
   font-size: 12px;
   color: var(--muted);
 }
@@ -999,25 +958,9 @@ input[aria-invalid="true"] {
   flex-direction: column;
   gap: 14px;
 }
-/* List and form side by side, as on the canvas, so Save is in view while editing. */
-.shops-body.has-form {
-  flex-direction: row;
-  align-items: flex-start;
-}
-.shops-body.has-form .shop-list {
-  flex: 1;
-  min-width: 0;
-}
+/* The form goes above the list: the panel is one column wide. */
 .shops-body.has-form .shop-form {
-  flex: 0 0 320px;
-  position: sticky;
-  top: 8px;
-}
-.shops-body.has-form .shop-table th:nth-child(3),
-.shops-body.has-form .shop-table td:nth-child(3),
-.shops-body.has-form .shop-table th:nth-child(4),
-.shops-body.has-form .shop-table td:nth-child(4) {
-  display: none;
+  order: -1;
 }
 .shop-list,
 .shop-form,
@@ -1090,28 +1033,28 @@ input[aria-invalid="true"] {
   font-size: 12.5px;
 }
 .shop-table .example-tag {
-  flex: none;
+  display: inline-block;
+  margin-left: 6px;
 }
 .shop-table tr.is-editing td {
   background: var(--route-soft);
 }
+/* Pin, name and EXAMPLE tag as running text with a hanging indent: a long name wraps and the table still fits the panel. */
 .shop-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
+  padding-left: 22px;
 }
-.on-lines {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.shop-name svg {
+  margin: 0 8px 0 -22px;
+  vertical-align: -3px;
 }
 .rr-bars {
   display: inline-flex;
-  gap: 4px;
+  gap: 2px;
 }
 .rr-bars i {
-  width: 14px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
 }
 .shop-list .table-foot {
@@ -1334,11 +1277,6 @@ input[aria-invalid="true"] {
   font-weight: 600;
   color: var(--fg2);
 }
-.light-switch-hint {
-  margin: 0;
-  font-size: 11px;
-  color: var(--muted);
-}
 .segmented {
   display: flex;
   border: 1px solid var(--line);
@@ -1467,56 +1405,26 @@ input[aria-invalid="true"] {
   color: var(--on-fill);
   cursor: default;
 }
-/* 12 px from the anchor, with a 6 px pointer facing it. */
-.route-pill--right {
-  left: 12px;
-  top: -13px;
+/* 8 px off the anchor both ways, beside the line; the corner at the anchor is sharp, like a callout's tail. */
+.route-pill--above-right {
+  left: 8px;
+  bottom: 8px;
+  border-bottom-left-radius: 3px;
 }
-.route-pill--left {
-  right: 12px;
-  top: -13px;
+.route-pill--above-left {
+  right: 8px;
+  bottom: 8px;
+  border-bottom-right-radius: 3px;
 }
-.route-pill--above {
-  bottom: 12px;
-  left: 0;
-  transform: translateX(-50%);
+.route-pill--below-right {
+  left: 8px;
+  top: 8px;
+  border-top-left-radius: 3px;
 }
-.route-pill--below {
-  top: 12px;
-  left: 0;
-  transform: translateX(-50%);
-}
-.route-pill::after {
-  content: "";
-  position: absolute;
-  border: 6px solid transparent;
-}
-.route-pill--right::after {
-  right: 100%;
-  top: 50%;
-  margin-top: -6px;
-  border-right-color: var(--pill-edge, var(--line));
-}
-.route-pill--left::after {
-  left: 100%;
-  top: 50%;
-  margin-top: -6px;
-  border-left-color: var(--pill-edge, var(--line));
-}
-.route-pill--above::after {
-  top: 100%;
-  left: 50%;
-  margin-left: -6px;
-  border-top-color: var(--pill-edge, var(--line));
-}
-.route-pill--below::after {
-  bottom: 100%;
-  left: 50%;
-  margin-left: -6px;
-  border-bottom-color: var(--pill-edge, var(--line));
-}
-.route-pill.is-selected {
-  --pill-edge: #fff;
+.route-pill--below-left {
+  right: 8px;
+  top: 8px;
+  border-top-right-radius: 3px;
 }
 .route-pill-turn {
   display: inline-flex;
@@ -1539,6 +1447,8 @@ input[aria-invalid="true"] {
   border: 2px solid #fff;
   border-radius: 50%;
   background: var(--turn);
+  color: #fff;
+  font: 700 12px/1 var(--sans);
   box-shadow: var(--shadow-1);
   display: flex;
   align-items: center;
@@ -1564,6 +1474,10 @@ input[aria-invalid="true"] {
   line-height: 1.4;
   pointer-events: none;
 }
+.turn-pop--below {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
 .legend-turn-mark {
   width: 16px;
   height: 16px;
@@ -1579,9 +1493,6 @@ input[aria-invalid="true"] {
 }
 .legend-rr .legend-turn {
   font-family: var(--sans);
-}
-.shop-location {
-  color: var(--fg2);
 }
 
 /* ---- Phone: the map on top, the panel below it, the inputs folded ---- */
@@ -1661,19 +1572,16 @@ input[aria-invalid="true"] {
     right: 68px;
     max-width: none;
   }
-  .shops-body.has-form {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .shops-body.has-form .shop-form {
-    flex: none;
-    position: static;
-  }
   .app[data-screen="shops"] .panel {
     background: var(--bg);
   }
   .shops-screen {
     padding: 8px 12px 24px;
+  }
+  .shop-table th,
+  .shop-table td {
+    padding-left: 5px;
+    padding-right: 5px;
   }
   .import-row {
     flex-wrap: wrap;

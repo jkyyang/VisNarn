@@ -21,7 +21,7 @@ const found = (label: string): PlaceResolution => ({
     example: false,
   },
 });
-const missing: PlaceResolution = { ok: false, problem: { kind: "unknown", message: 'Nothing called "Xyz" in the city names.', candidates: [] } };
+const missing: PlaceResolution = { ok: false, problem: { kind: "unknown", message: 'No place called "Xyz".', candidates: [] } };
 
 describe("words", () => {
   it("pillText: the selected route's km; another's difference from it", () => {
@@ -41,7 +41,7 @@ describe("words", () => {
   });
 
   it("placeProblem is the problem's own line, or nothing", () => {
-    expect(placeProblem(missing)).toBe('Nothing called "Xyz" in the city names.');
+    expect(placeProblem(missing)).toBe('No place called "Xyz".');
     expect(placeProblem(found("Chicago, IL"))).toBeNull();
     expect(placeProblem(null)).toBeNull();
   });
@@ -59,8 +59,8 @@ describe("words", () => {
       turnDeg: 176,
       track: "stub-end",
     };
-    expect(turnBackMove(turnBack)).toEqual({ arrives: "on Lampasas Sub heading S", leaves: "heading N" });
-    expect(turnBackMove({ ...turnBack, leaves: { subdivision: "GALVESTON", headingDeg: 135 } }).leaves).toBe("on Galveston Sub heading SE");
+    expect(turnBackMove(turnBack)).toBe("Lampasas Sub S → N");
+    expect(turnBackMove({ ...turnBack, leaves: { subdivision: "GALVESTON", headingDeg: 135 } })).toBe("Lampasas Sub S → Galveston Sub SE");
     expect(trackWords("stub-end")).toBe("yard track (stub end)");
     expect(trackWords("yard")).toBe("yard track");
   });

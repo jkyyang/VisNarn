@@ -20,17 +20,24 @@ describe("placePills", () => {
 
   it("puts a pill on the side away from the other routes, and flips it at the edge of the map", () => {
     const [left] = placePills([ask("a", [300, 300]), ask("b", [600, 300])], [], VIEW);
-    expect(left.side).toBe("left");
+    expect(left.corner).toBe("above-left");
     const [edge] = placePills([ask("a", [60, 300]), ask("b", [600, 300])], [], VIEW);
-    expect(edge.side).toBe("right");
+    expect(edge.corner).toBe("above-right");
     expect(edge.box.left).toBeGreaterThanOrEqual(VIEW.left);
   });
 
   it("keeps clear of pins and the legend", () => {
-    const pin: Box = { left: 335, top: 280, right: 365, bottom: 320 };
+    const pin: Box = { left: 335, top: 260, right: 365, bottom: 340 };
     const [placed] = placePills([ask("a", [320, 300])], [pin], VIEW);
     expect(overlap(placed.box, pin)).toBe(false);
-    expect(placed.side).not.toBe("right");
+    expect(placed.corner).toMatch(/left$/);
+  });
+
+  it("sits beside the route lines, never on one", () => {
+    // A line running up and to the right through the anchor: only the corners off it are free.
+    const line = [{ x: 200, y: 400 }, { x: 400, y: 200 }];
+    const [placed] = placePills([ask("a", [300, 300])], [], VIEW, [line]);
+    expect(placed.corner).toBe("below-right");
   });
 
   it("moves to the next anchor when every side of the first is blocked, and leaves out a pill with no room", () => {

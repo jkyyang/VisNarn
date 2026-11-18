@@ -13,17 +13,14 @@ export const shortPlace = (near: string) => near.replace(/,\s*[A-Z]{2}$/, "");
 /** "1 interchange", "2 interchanges". */
 export const interchangesWord = (n: number) => `${n} ${n === 1 ? "interchange" : "interchanges"}`;
 
-/** "on Lampasas Sub heading S" */
-const onSub = (subdivision: string | null, headingDeg: number) =>
-  subdivision ? `on ${fmtSub(subdivision)} heading ${fmtCompass(headingDeg)}` : `heading ${fmtCompass(headingDeg)}`;
+/** "Lampasas Sub S" */
+const onSub = (subdivision: string | null, headingDeg: number) => (subdivision ? `${fmtSub(subdivision)} ${fmtCompass(headingDeg)}` : fmtCompass(headingDeg));
 
-/** "on Lampasas Sub heading S" and "heading N": how the route arrives at a turn-back and leaves it. */
-export function turnBackMove(turnBack: TurnBack): { arrives: string; leaves: string } {
-  const sameSub = turnBack.leaves.subdivision === turnBack.arrives.subdivision;
-  return {
-    arrives: onSub(turnBack.arrives.subdivision, turnBack.arrives.headingDeg),
-    leaves: sameSub ? `heading ${fmtCompass(turnBack.leaves.headingDeg)}` : onSub(turnBack.leaves.subdivision, turnBack.leaves.headingDeg),
-  };
+/** "Lampasas Sub S → N", "Lampasas Sub S → Galveston Sub SE": the line and heading a turn-back is reached on, then left on. */
+export function turnBackMove(turnBack: TurnBack): string {
+  const { arrives, leaves } = turnBack;
+  const sameSub = leaves.subdivision === arrives.subdivision;
+  return `${onSub(arrives.subdivision, arrives.headingDeg)} → ${sameSub ? fmtCompass(leaves.headingDeg) : onSub(leaves.subdivision, leaves.headingDeg)}`;
 }
 
 export const trackWords = (track: TurnBack["track"]) => (track === "stub-end" ? "yard track (stub end)" : "yard track");
@@ -43,10 +40,12 @@ export function pillText(route: RoutePath, selected: RoutePath): string {
 }
 
 const labelOf = (place: PlaceResolution | null) => (place?.ok ? shortPlace(place.place.label) : "");
+/** A clicked track point with no town of its own is named by distance ("250 km from Chicago, IL"): not a name to save under. */
+const unnamed = (label: string) => /^[\d,.]+ km from /.test(label);
 
 /** "Kansas City → Chicago via Galesburg": the name a new saved route starts with. */
 export function routeName(places: PlanPlaces): string {
-  const stops = places.stops.map(labelOf).filter(Boolean);
+  const stops = places.stops.map(labelOf).filter((label) => label && !unnamed(label));
   return `${labelOf(places.start)} → ${labelOf(places.destination)}${stops.length ? ` via ${stops.join(", ")}` : ""}`;
 }
 

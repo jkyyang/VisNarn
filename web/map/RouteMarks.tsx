@@ -1,6 +1,6 @@
 /**
- * The marks over the route that are HTML, not deck.gl: a small rounded pill per route where the routes
- * part (the selected one filled, the others saying how they differ), and an amber disc at each turn-back
+ * The marks over the route that are HTML, not deck.gl: a small rounded pill per route, beside its line
+ * where the routes part (the selected one filled, the others saying how they differ), and an amber disc at each turn-back
  * with its details on hover or tap. MapLibre positions them as markers, so they move with the map; the
  * faces themselves are in ./RouteMarkFaces.tsx, which page tests draw without a map.
  */
@@ -8,7 +8,6 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useState, type ReactElement } from "react";
 import { Marker, useMap } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
-import { shortPlace } from "../words.ts";
 import { PILL_HEIGHT_PX, pillWidthPx, placePills, type Box, type PillPlace } from "./pills.ts";
 import { PillFace, TurnBackMark } from "./RouteMarkFaces.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
@@ -17,11 +16,10 @@ type RouteScene = Extract<MapScene, { kind: "route" }>;
 
 /** Room the map's own edges take: the round buttons on the right, the attribution at the bottom. */
 const EDGE = { side: 8, right: 60, bottom: 28 };
-const LABEL_HEIGHT_PX = 19;
 
 const centred = (x: number, y: number, size: number): Box => ({ left: x - size / 2, top: y - size / 2, right: x + size / 2, bottom: y + size / 2 });
 
-/** Where each pill goes on screen now, given the pins, the turn-backs, the legend and the map buttons. */
+/** Where each pill goes on screen now, given the route lines, the pins, the turn-backs, the legend and the map buttons. */
 function layout(map: MapLibreMap, scene: RouteScene): PillPlace[] {
   const container = map.getContainer();
   const frame = container.getBoundingClientRect();
@@ -31,16 +29,8 @@ function layout(map: MapLibreMap, scene: RouteScene): PillPlace[] {
   const obstacles: Box[] = [];
   for (const pin of scene.pins) {
     const { x, y } = point(pin.position);
-    if (pin.kind === "shop") obstacles.push(centred(x, y, 14));
-    else if (pin.kind === "stop") obstacles.push(centred(x, y, 24));
-    else {
-      obstacles.push(pin.kind === "destination" ? { left: x - 14, top: y - 34, right: x + 14, bottom: y } : centred(x, y, 20));
-      // Its name beside it (layers.ts draws it 16 px off, on the pin's side).
-      const width = shortPlace(pin.label).length * 6.6 + 6;
-      const middle = pin.kind === "destination" ? y - 14 : y;
-      const left = pin.side > 0 ? x + 16 : x - 16 - width;
-      obstacles.push({ left, top: middle - LABEL_HEIGHT_PX / 2, right: left + width, bottom: middle + LABEL_HEIGHT_PX / 2 });
-    }
+    if (pin.kind === "destination") obstacles.push({ left: x - 14, top: y - 34, right: x + 14, bottom: y });
+    else obstacles.push(centred(x, y, pin.kind === "shop" ? 14 : 24));
   }
   for (const turnBack of scene.turnBacks) {
     const { x, y } = point(turnBack.position);
@@ -52,8 +42,10 @@ function layout(map: MapLibreMap, scene: RouteScene): PillPlace[] {
     if (rect.width && rect.height) obstacles.push({ left: rect.left - frame.left, top: rect.top - frame.top, right: rect.right - frame.left, bottom: rect.bottom - frame.top });
   }
 
+  const routes = scene.selected ? [scene.selected, ...scene.alternatives] : scene.alternatives;
+  const lines = routes.flatMap((route) => route.legs.map((leg) => leg.path.map(point)));
   const asks = scene.pills.map((pill) => ({ id: pill.id, width: pillWidthPx(pill.text, pill.turnBacks), height: PILL_HEIGHT_PX, anchors: pill.anchors.map(point) }));
-  return placePills(asks, obstacles, view);
+  return placePills(asks, obstacles, view, lines);
 }
 
 /** The pills and turn-back discs of a route scene, as map markers. Must be a child of the map. */
@@ -96,7 +88,7 @@ export function RouteMarks(props: { scene: RouteScene; onSelect: (target: SceneT
         return (
           <Marker key={pill.id} longitude={at[0]} latitude={at[1]} anchor="center" className={`route-mark${pill.selected ? " route-mark--selected" : ""}`}>
             <div className="route-mark-anchor">
-              <PillFace pill={pill} side={place.side} onSelect={() => props.onSelect({ kind: "option", id: pill.id })} />
+              <PillFace pill={pill} corner={place.corner} onSelect={() => props.onSelect({ kind: "option", id: pill.id })} />
             </div>
           </Marker>
         );

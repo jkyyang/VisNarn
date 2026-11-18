@@ -27,11 +27,6 @@ export type QueryState<T> =
   /** `stale`: a newer answer is on its way and `data` is the one before it. */
   | { status: "ready"; data: T; stale: boolean };
 
-export interface QueryOptions<T> {
-  /** Read again after this many ms while it returns a number (an answer the server is still working on). */
-  pollMs?: (data: T) => number | null;
-}
-
 /** One call to the server. The real one is `callApi`; tests give the cache a fake. */
 export type Transport = (route: Route, request: unknown, signal: AbortSignal) => Promise<unknown>;
 
@@ -103,8 +98,6 @@ interface Entry {
   controller: AbortController | null;
   /** Set by a write: the answer may be out of date and is fetched again on next use. */
   invalid: boolean;
-  pollMs: ((data: unknown) => number | null) | null;
-  pollTimer: ReturnType<typeof setTimeout> | null;
   dropTimer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -112,7 +105,7 @@ export interface QueryCache {
   /** The key a read is cached under. */
   keyOf(route: Route, request: unknown): string;
   /** Starts watching one read: the first watcher fetches it, the last one leaving aborts it. */
-  subscribe(route: Route, request: unknown, listener: () => void, options?: QueryOptions<unknown>): () => void;
+  subscribe(route: Route, request: unknown, listener: () => void): () => void;
   state(key: string): QueryState<unknown>;
   read(route: Route, request: unknown): Promise<unknown>;
   write(route: Route, request: unknown): Promise<unknown>;
@@ -134,14 +127,8 @@ export function createQueryCache(transport: Transport): QueryCache {
     notify(entry);
   };
 
-  const clearPoll = (entry: Entry) => {
-    if (entry.pollTimer) clearTimeout(entry.pollTimer);
-    entry.pollTimer = null;
-  };
-
   function load(entry: Entry): void {
     entry.controller?.abort();
-    clearPoll(entry);
     const controller = new AbortController();
     entry.controller = controller;
     entry.invalid = false;
@@ -154,8 +141,6 @@ export function createQueryCache(transport: Transport): QueryCache {
         if (entry.controller !== controller) return;
         entry.controller = null;
         setState(entry, { status: "ready", data, stale: false });
-        const wait = entry.pollMs?.(data) ?? null;
-        if (wait !== null && entry.listeners.size > 0) entry.pollTimer = setTimeout(() => load(entry), wait);
       },
       (error: unknown) => {
         if (entry.controller !== controller) return;
@@ -170,27 +155,21 @@ export function createQueryCache(transport: Transport): QueryCache {
 
   return {
     keyOf,
-    subscribe(route, request, listener, options) {
+    subscribe(route, request, listener) {
       const key = keyOf(route, request);
       let entry = entries.get(key);
       if (!entry) {
-        entry = { route, request, state: IDLE, listeners: new Set(), controller: null, invalid: true, pollMs: null, pollTimer: null, dropTimer: null };
+        entry = { route, request, state: IDLE, listeners: new Set(), controller: null, invalid: true, dropTimer: null };
         entries.set(key, entry);
       }
       const current = entry;
       if (current.dropTimer) clearTimeout(current.dropTimer);
       current.dropTimer = null;
-      current.pollMs = options?.pollMs ?? current.pollMs;
       current.listeners.add(listener);
       if (current.invalid && !current.controller) load(current);
-      else if (current.state.status === "ready" && !current.pollTimer && !current.controller) {
-        const wait = current.pollMs?.(current.state.data) ?? null;
-        if (wait !== null) current.pollTimer = setTimeout(() => load(current), wait);
-      }
       return () => {
         current.listeners.delete(listener);
         if (current.listeners.size > 0) return;
-        clearPoll(current);
         if (current.controller) {
           current.controller.abort();
           current.controller = null;
@@ -220,7 +199,6 @@ export function createQueryCache(transport: Transport): QueryCache {
     clear() {
       for (const entry of entries.values()) {
         entry.controller?.abort();
-        clearPoll(entry);
         if (entry.dropTimer) clearTimeout(entry.dropTimer);
       }
       entries.clear();
@@ -234,18 +212,15 @@ const cache = createQueryCache((route, request, signal) => callApi("", route, re
 export const clearQueryCache = () => cache.clear();
 
 /** Subscribes the component to one read. `request: null` asks nothing. */
-export function useQuery<R extends ReadRoute>(route: R, request: Request<R> | null, options?: QueryOptions<Res<R>>): QueryState<Res<R>> {
+export function useQuery<R extends ReadRoute>(route: R, request: Request<R> | null): QueryState<Res<R>> {
   const key = request === null ? null : cache.keyOf(route, request);
   const requestRef = useRef(request);
   requestRef.current = request;
-  const optionsRef = useRef(options);
-  optionsRef.current = options;
 
   const subscribe = useCallback(
     (listener: () => void) => {
       if (key === null) return () => {};
-      const pollMs = optionsRef.current?.pollMs;
-      return cache.subscribe(route, requestRef.current, listener, pollMs ? { pollMs: (data) => pollMs(data as Res<R>) } : undefined);
+      return cache.subscribe(route, requestRef.current, listener);
     },
     [route, key],
   );

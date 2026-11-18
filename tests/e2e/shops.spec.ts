@@ -12,11 +12,10 @@ test.describe("Shops", () => {
     const table = page.getByRole("table");
     const names = table.locator(".shop-name");
     await expect(names).toHaveCount(6);
-    await expect(page.getByText(/^6 shops · all are EXAMPLE rows you can delete/)).toBeVisible();
+    await expect(page.getByText("6 shops · 6 EXAMPLE")).toBeVisible();
     const nlr = table.getByRole("row").filter({ hasText: "EX-NLR-01" });
     await expect(nlr).toContainText("North Little Rock, AR");
     await expect(nlr).toContainText("EXAMPLE");
-    await expect(nlr).toContainText("−92.27, 34.77");
     await expect(nlr).toContainText("BNSF, UP");
     await expectMapCanvases(page);
     await keepScreenshot(page, "shops");
@@ -27,17 +26,17 @@ test.describe("Shops", () => {
     const save = form.getByRole("button", { name: "Save shop" });
     await form.getByRole("textbox", { name: "Name", exact: true }).fill("Temple test shop");
     await expect(save).toBeDisabled();
-    const location = form.getByRole("textbox", { name: "Node code, or “lon, lat”" });
+    const location = form.getByRole("textbox", { name: "Location" });
     await location.fill("-140, 70");
     await expect(form).toContainText("-140, 70 is more than 15 km from any Class I main line.");
     await expect(save).toBeDisabled();
     await location.fill("-97.34, 31.10");
-    await expect(form).toContainText(/Found on the network · served by BNSF/);
+    await expect(form).toContainText(/On the network · BNSF/);
     await expect(save).toBeEnabled();
     await save.click();
     await expect(page).toHaveURL(/\/shops$/);
     const added = table.getByRole("row").filter({ hasText: "Temple test shop" });
-    await expect(added).toContainText("−97.34, 31.10");
+    await expect(added).toContainText("BNSF");
     await expect(added).not.toContainText("EXAMPLE");
     await expect(names).toHaveCount(7);
 
@@ -75,7 +74,7 @@ test.describe("Shops", () => {
     await card.getByLabel("Choose CSV file").setInputFiles({ name: "test-shops.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
 
     const preview = card.getByRole("region", { name: "Import preview" });
-    await expect(preview).toContainText("2 shops are ready in test-shops.csv · 1 row matches no node and will not be saved");
+    await expect(preview).toContainText("test-shops.csv · 2 ready · 1 not saved");
     await expect(preview.getByRole("list", { name: "Rows to fix before saving" })).toHaveText("Line 4: -140, 10 is more than 15 km from any Class I main line.");
     // A preview saves nothing.
     await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Omaha test shop" })).toHaveCount(0);

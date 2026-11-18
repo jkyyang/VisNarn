@@ -151,33 +151,32 @@ describe("Route planner", () => {
     await user.click(within(screen.getByRole("form", { name: "Save route" })).getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("button", { name: "Saved" }, { timeout: ROUTING_MS })).toBeDisabled();
     const [saved] = await api("GET /api/saved-routes");
-    expect(saved).toMatchObject({ name: "Taylor → North Little Rock", plan: { start: { kind: "text", text: "Taylor, TX" } } });
+    expect(saved).toMatchObject({ name: "Taylor → North Little Rock", plan: { stops: [] } });
     expect(window.location.pathname).toBe(`/route/saved/${saved.id}`);
     await api("DELETE /api/saved-routes/:routeId", { params: { routeId: saved.id } });
   });
 });
 
 describe("Shops", () => {
-  it("lists each shop with its code, location and the railroads found from its node", async () => {
+  it("lists each shop with its code and the railroads found from its node", async () => {
     openPage("/shops");
     const table = await screen.findByRole("table");
     const shops = await api("GET /api/shops");
     for (const shop of shops) {
       const row = within(table).getByText(shop.name).closest("tr")!;
       if (shop.code) expect(row).toHaveTextContent(shop.code);
-      expect(row).toHaveTextContent(/[−\d.]+, [−\d.]+/);
       if (shop.place.ok) expect(row).toHaveTextContent(shop.place.place.railroads.join(", "));
     }
   });
 
-  it("the import preview lists rows that match no node, to fix before saving", async () => {
+  it("the import preview lists the rows that will not be saved, with why", async () => {
     const user = userEvent.setup();
     openPage("/shops");
     const card = await screen.findByRole("region", { name: "Import shop list" });
     const csv = "name,lon,lat\nOmaha shop,-95.94,41.26\nShop in the ocean,-140,10\n";
     await user.upload(within(card).getByLabelText("Choose CSV file"), new File([csv], "shops.csv", { type: "text/csv" }));
     const preview = await within(card).findByRole("region", { name: "Import preview" }, { timeout: ROUTING_MS });
-    expect(preview).toHaveTextContent(/1 shop is ready in shops.csv · 1 row matches no node/);
+    expect(preview).toHaveTextContent("shops.csv · 1 ready · 1 not saved");
     expect(within(preview).getByRole("list", { name: "Rows to fix before saving" })).toHaveTextContent(/Line 3/);
     expect((await api("GET /api/shops")).map((s) => s.name)).not.toContain("Omaha shop");
   });

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "description": "Shop Arrival Check: route a railcar to a repair shop over the Class I network, estimate arrival, and check preprocessing finishes first.",
+  "description": "Shop Arrival Check, stage 1: plan and save routes between shops and stations over the Class I rail network.",
   "engines": {
     "node": ">=23.6"
   },

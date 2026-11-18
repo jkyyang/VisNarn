@@ -1,4 +1,4 @@
-/** Numbers, distances, names and compass points as text. Display only: the browser's locale is applied here and nowhere else. */
+/** Distances, subdivision names and compass points as text. Display only: the browser's locale is applied here and nowhere else. */
 
 /** Numbers stay English whatever the browser's language: the rest of the page is English. */
 const LOCALE = "en-US";
@@ -32,7 +32,3 @@ export function fmtCompass(headingDeg: number): string {
   const normal = ((headingDeg % 360) + 360) % 360;
   return COMPASS[Math.round(normal / 45) % 8];
 }
-
-/** "−92.27, 34.77". */
-export const fmtLonLat = (lon: number, lat: number) => `${fmtSigned(lon)}, ${fmtSigned(lat)}`;
-const fmtSigned = (n: number) => (n < 0 ? `−${Math.abs(n).toFixed(2)}` : n.toFixed(2));

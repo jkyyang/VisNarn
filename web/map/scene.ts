@@ -17,8 +17,6 @@ export interface ScenePin {
   glyph: string;
   label: string;
   position: LngLat;
-  /** Which side the label goes on, so neighbouring labels point away from each other. */
-  side: -1 | 1;
   /** A shop square: clicking it puts that shop in the plan. */
   shopId: ShopId | null;
 }
@@ -212,20 +210,19 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   const lastLeg = chosen ? [...chosen.legs].reverse().find((leg) => leg.path.length) : undefined;
   const startAt = firstLeg?.path[0] ?? (start ? at(start) : null);
   const destinationAt = lastLeg?.path[lastLeg.path.length - 1] ?? (destination ? at(destination) : null);
-  const startSide: -1 | 1 = startAt && destinationAt && startAt[0] > destinationAt[0] ? 1 : -1;
 
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     const place = placed(shop.place);
     if (!place || isEnd(place, [start, destination])) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), side: 1, shopId: shop.id });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id });
   }
-  if (start && startAt) pins.push({ kind: "start", glyph: "", label: start.label, position: startAt, side: startSide, shopId: null });
+  if (start && startAt) pins.push({ kind: "start", glyph: "", label: start.label, position: startAt, shopId: null });
   (planned?.places.stops ?? []).forEach((resolution, i) => {
     const stop = placed(resolution);
-    if (stop) pins.push({ kind: "stop", glyph: String(i + 1), label: stop.label, position: at(stop), side: 1, shopId: null });
+    if (stop) pins.push({ kind: "stop", glyph: String(i + 1), label: stop.label, position: at(stop), shopId: null });
   });
-  if (destination && destinationAt) pins.push({ kind: "destination", glyph: "", label: destination.label, position: destinationAt, side: startSide === -1 ? 1 : -1, shopId: null });
+  if (destination && destinationAt) pins.push({ kind: "destination", glyph: "", label: destination.label, position: destinationAt, shopId: null });
 
   if (!routes || !chosen) return { kind: "route", selected: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
 
@@ -264,9 +261,9 @@ export function shopsScene(shops: ShopView[], editing: Pick<ResolvedPlace, "labe
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     if (!shop.place.ok) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), side: 1, shopId: shop.id });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id });
   }
-  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: [editing.lon, editing.lat], side: 1, shopId: null });
+  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: [editing.lon, editing.lat], shopId: null });
   const bounds = new BoundsBuilder();
   bounds.addAll(pins.map((pin) => pin.position));
   return { kind: "shops", pins, bounds: bounds.done() };

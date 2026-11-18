@@ -126,7 +126,7 @@ test.describe("Route planner", () => {
     await expect(mark).toBeVisible();
     await mark.hover();
     await expect(page.getByRole("tooltip")).toContainText(/yard track/);
-    await expect(page.getByRole("tooltip")).toContainText(/arrives .* · leaves /);
+    await expect(page.getByRole("tooltip")).toContainText(/ (N|NE|E|SE|S|SW|W|NW) → /);
     await expect(legend(page).last()).toHaveText("↩Turn-back");
     await request.delete(`/api/saved-routes/${saved.id}`);
   });

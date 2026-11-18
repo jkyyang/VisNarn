@@ -247,7 +247,7 @@ describe("Shops / Codes", () => {
     expect(report.ready.map((s) => s.name)).toEqual(["EXAMPLE ok"]);
     expect(report.issues.map((i) => [i.line, i.message])).toEqual([
       [3, expect.stringMatching(/more than 15 km/)],
-      [4, expect.stringMatching(/Nothing called "NO-SUCH-CODE"/)],
+      [4, expect.stringMatching(/No place called "NO-SUCH-CODE"/)],
       [5, expect.stringMatching(/repeats the code EX-1 from line 2/)],
     ]);
     expect(store.shops.all().map((s) => s.name)).toEqual(["EXAMPLE ok"]);

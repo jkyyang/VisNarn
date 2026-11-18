@@ -1,10 +1,8 @@
 /** deck.gl layers for a scene: the Class I network underneath, the scene on top. The only file that knows deck.gl layer classes. */
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
-import type { LngLat } from "../../shared/geo.ts";
 import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
-import { shortPlace } from "../words.ts";
 import type { MapScene, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
 export const LAYER = {
@@ -17,7 +15,6 @@ export const LAYER = {
   interchanges: "interchanges",
   pins: "pins",
   pinGlyphs: "pin-glyphs",
-  labels: "labels",
 } as const;
 
 const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -42,47 +39,6 @@ const PIN_ICONS = {
 } satisfies Record<ScenePin["kind"], { url: string; width: number; height: number; anchorY: number }>;
 
 const CHEVRON = { url: svgUrl(12, 12, '<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'), width: 12, height: 12, anchorY: 6 };
-
-/** How the layers can see the screen, for labels that must stay on it. Without it they take their default side. */
-export interface LabelView {
-  /** The map's width, less the column of round buttons at its right edge. */
-  width: number;
-  /** Screen x of a place, in CSS pixels from the map's left edge. */
-  screenX: (position: LngLat) => number;
-  /** Screen y of a place, in CSS pixels from the map's top edge. Without it labels are not thinned out. */
-  screenY?: (position: LngLat) => number;
-}
-
-interface Label {
-  position: LngLat;
-  text: string;
-  anchor: "start" | "middle" | "end";
-  offset: [number, number];
-}
-
-/** Inter at 12.5 px, semibold: close enough to keep a label on screen. */
-const textWidthPx = (text: string, size: number) => text.length * size * 0.53;
-
-/**
- * Labels that would overlap one already placed are left out (their pins stay), in list order.
- * Boxes are estimated from the text length, which is close enough to keep labels apart.
- */
-function thinLabels(labels: Label[], view: LabelView | undefined, size = 12.5): Label[] {
-  const screenY = view?.screenY;
-  if (!view || !screenY) return labels;
-  const placed: [number, number, number, number][] = [];
-  const height = size + 6;
-  return labels.filter((label) => {
-    const width = textWidthPx(label.text, size) + 6;
-    const x = view.screenX(label.position) + label.offset[0];
-    const y = screenY(label.position) + label.offset[1];
-    const left = label.anchor === "start" ? x : label.anchor === "end" ? x - width : x - width / 2;
-    const box: [number, number, number, number] = [left, y - height / 2, left + width, y + height / 2];
-    if (placed.some((p) => box[0] < p[2] && p[0] < box[2] && box[1] < p[3] && p[1] < box[3])) return false;
-    placed.push(box);
-    return true;
-  });
-}
 
 /** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
 const angleOf = (bearingDeg: number) => 90 - bearingDeg;
@@ -153,44 +109,8 @@ function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: numbe
   ];
 }
 
-function textLayer(id: string, data: Label[], colors: ThemeColors, size = 12.5) {
-  return new TextLayer<Label>({
-    id,
-    data,
-    getPosition: (label) => label.position,
-    getText: (label) => label.text,
-    getTextAnchor: (label) => label.anchor,
-    getAlignmentBaseline: "center",
-    getPixelOffset: (label) => label.offset,
-    getSize: size,
-    getColor: colors.fg,
-    fontFamily: FONT,
-    fontWeight: 600,
-    characterSet: "auto",
-    outlineWidth: 4,
-    outlineColor: fade(colors.casing, 230),
-    fontSettings: { sdf: true },
-    updateTriggers: { getColor: colors },
-  });
-}
-
-/**
- * Pins, and labels for the pins `labelled` picks. A label goes on its pin's side unless it would leave
- * the screen there; one that would overlap another is left out (its pin stays).
- */
-function pinLayers(pins: ScenePin[], colors: ThemeColors, view: LabelView | undefined, labelled: (pin: ScenePin) => string | null): LayersList {
-  const labels: Label[] = pins.flatMap((pin): Label[] => {
-    const text = labelled(pin);
-    if (text === null) return [];
-    const x = view?.screenX(pin.position) ?? null;
-    const room = textWidthPx(text, 12.5) + 16 + 8;
-    let side = pin.side;
-    if (x !== null && view) {
-      if (side > 0 && x + room > view.width && x - room >= 0) side = -1;
-      else if (side < 0 && x - room < 0 && x + room <= view.width) side = 1;
-    }
-    return [{ position: pin.position, text, anchor: side > 0 ? "start" : "end", offset: [side * 16, pin.kind === "destination" ? -14 : 0] }];
-  });
+/** Pins, and the number in each stop's ring. No names: the panel has them, and the map's own place names are under the pins. */
+function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
   return [
     new IconLayer<ScenePin>({
       id: LAYER.pins,
@@ -212,19 +132,18 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors, view: LabelView | unde
       fontWeight: 700,
       updateTriggers: { getColor: colors },
     }),
-    textLayer(LAYER.labels, thinLabels(labels, view), colors),
   ];
 }
 
 /**
  * Bottom to top, by scene kind:
  *   route  alternatives (thin, grey) · selected casing · selected route by railroad · chevrons ·
- *          interchange rings · pins · start and destination names
- *   shops  shop squares · their names
+ *          interchange rings · pins
+ *   shops  shop squares
  * The route pills and the turn-back markers are DOM, over all of these (./RouteMarks.tsx).
  */
-export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number, view?: LabelView): LayersList {
-  if (scene.kind === "shops") return pinLayers(scene.pins, colors, view, (pin) => (pin.kind === "shop" || pin.glyph === "+" ? pin.label : null));
+export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number): LayersList {
+  if (scene.kind === "shops") return pinLayers(scene.pins, colors);
 
   const alternatives: AltLeg[] = scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id })));
   return [
@@ -250,7 +169,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number, 
       updateTriggers: { getColor: colors },
     }),
     ...(scene.selected ? selectedRouteLayers(scene.selected, colors, zoom) : []),
-    ...pinLayers(scene.pins, colors, view, (pin) => (pin.kind === "start" || pin.kind === "destination" ? shortPlace(pin.label) : null)),
+    ...pinLayers(scene.pins, colors),
   ];
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtCompass, fmtKmShort, fmtLonLat, fmtSub, fmtSubdivision, titleCase } from "./format.ts";
+import { fmtCompass, fmtKmShort, fmtSub, fmtSubdivision, titleCase } from "./format.ts";
 
 describe("format", () => {
   it("title-cases accented names without breaking words", () => {
@@ -12,9 +12,8 @@ describe("format", () => {
     expect(fmtSub("LAMPASAS")).toBe("Lampasas Sub");
     expect(fmtSub("GALVESTON (BNSF)")).toBe("Galveston Sub (BNSF)");
   });
-  it("writes km with thousands and lon, lat with a real minus", () => {
+  it("writes km with thousands", () => {
     expect(fmtKmShort(1045.6)).toBe("1,046 km");
-    expect(fmtLonLat(-92.27, 34.77)).toBe("−92.27, 34.77");
   });
 });
 

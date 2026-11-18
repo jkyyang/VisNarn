@@ -124,7 +124,7 @@ describe("Route planner", () => {
     await user.hover(mark);
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("Temple, TX · yard track (stub end)");
-    expect(tooltip).toHaveTextContent("arrives on Lampasas Sub heading S · leaves heading N");
+    expect(tooltip).toHaveTextContent("Lampasas Sub S → N");
     expect(mark).toHaveAccessibleDescription(/Temple, TX · yard track/);
     await user.unhover(mark);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
@@ -147,6 +147,8 @@ describe("Route planner", () => {
     expect(field("Start")).toHaveAttribute("aria-invalid", "true");
     expect(field("Destination")).not.toHaveAttribute("aria-invalid");
     expect(screen.queryByRole("region", { name: "Routes" })).not.toBeInTheDocument();
+    // With no route there is no stop to add: the field's own line says what is wrong.
+    expect(hint()).toBeEmptyDOMElement();
   });
 
   it("saves a route, lists it, saves a change, reopens it from the list and deletes it after a confirm", async () => {
@@ -185,7 +187,7 @@ describe("Route planner", () => {
     await waitFor(() => expect(currentPath()).toBe("/route"));
   });
 
-  it("Enter takes the text as typed; only a suggestion reached with the arrow keys is taken on Enter", async () => {
+  it("Enter takes the highlighted suggestion, else the first one, else the text as typed", async () => {
     const user = userEvent.setup();
     openPage("/route");
     const start = field("Start");
@@ -193,15 +195,12 @@ describe("Route planner", () => {
     await screen.findByRole("option", { name: /Kansas City, MO.*Your shop · EX-KCY-01/ });
     expect(start).not.toHaveAttribute("aria-activedescendant");
     await user.keyboard("{Enter}");
-    expect(start).toHaveValue("kansas");
-    await waitFor(() => expect(fake.state.lastPlan?.start).toEqual({ kind: "text", text: "kansas" }));
-
-    await user.clear(start);
-    await user.type(start, "kansas");
-    await screen.findByRole("option", { name: /Kansas City, MO.*Your shop · EX-KCY-01/ });
-    await user.keyboard("{ArrowDown}{Enter}");
     await waitFor(() => expect(fake.state.lastPlan?.start).toEqual({ kind: "shop", shopId: "shop-ex-2" }));
     expect(start).toHaveValue("Kansas City, MO");
+
+    const destination = field("Destination");
+    await user.type(destination, "Nowhere Junction{Enter}");
+    await waitFor(() => expect(fake.state.lastPlan?.destination).toEqual({ kind: "text", text: "Nowhere Junction" }));
   });
 
   it("⌖ sends the next click to its field, and Esc turns it off", async () => {

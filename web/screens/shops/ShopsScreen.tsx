@@ -37,7 +37,6 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     <BackHeader
       back={HOME}
       title="Your shops"
-      sub="Shops you can put on a route. You add and edit them; nothing is built in."
       exampleOnly={meta.status === "ready" && meta.data.exampleOnly}
     />
   );

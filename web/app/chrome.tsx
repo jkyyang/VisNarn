@@ -60,8 +60,8 @@ export function ModeTabs(props: { current: Screen["name"] }): ReactElement {
   );
 }
 
-/** Back arrow, title and subtitle, for Shops. */
-export function BackHeader(props: { back: Screen; title: string; sub: string; exampleOnly?: boolean }): ReactElement {
+/** Back arrow and title, for Shops. */
+export function BackHeader(props: { back: Screen; title: string; exampleOnly?: boolean }): ReactElement {
   return (
     <header className="back-header">
       <a className="icon-btn" {...linkTo(props.back)} aria-label={props.back.name === "route" ? "Back to route" : "Back"}>
@@ -71,7 +71,6 @@ export function BackHeader(props: { back: Screen; title: string; sub: string; ex
       </a>
       <div className="back-title">
         <h1>{props.title}</h1>
-        <div className="muted small">{props.sub}</div>
       </div>
       {props.exampleOnly && <ExampleBadge />}
     </header>

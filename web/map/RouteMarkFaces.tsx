@@ -1,8 +1,8 @@
 /** The faces of the route marks: a route's pill and a turn-back's disc. Plain DOM, no map library. */
-import { useEffect, useId, useRef, useState, type ReactElement, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import type { TurnBack } from "../../shared/route.ts";
 import { trackWords, turnBackMove } from "../words.ts";
-import type { PillSide } from "./pills.ts";
+import type { PillCorner } from "./pills.ts";
 import type { ScenePill } from "./scene.ts";
 
 /**
@@ -34,8 +34,8 @@ export function useNativeClick(ref: RefObject<HTMLElement | null>, handler: () =
   }, [ref]);
 }
 
-/** One route's pill. `side`: where it hangs from its anchor (its pointer faces the anchor); null where nothing placed it. */
-export function PillFace(props: { pill: ScenePill; side: PillSide | null; onSelect: () => void }): ReactElement {
+/** One route's pill. `corner`: where it sits from its anchor; null where nothing placed it. */
+export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; onSelect: () => void }): ReactElement {
   const { pill } = props;
   const ref = useRef<HTMLButtonElement>(null);
   useNativeClick(ref, () => {
@@ -45,7 +45,7 @@ export function PillFace(props: { pill: ScenePill; side: PillSide | null; onSele
     <button
       ref={ref}
       type="button"
-      className={`route-pill route-pill--${props.side ?? "right"}${pill.selected ? " is-selected" : ""}`}
+      className={`route-pill route-pill--${props.corner ?? "above-right"}${pill.selected ? " is-selected" : ""}`}
       aria-pressed={pill.selected}
       aria-label={pill.selected ? `Route ${pill.text}, selected` : `Route ${pill.text}`}
     >
@@ -59,13 +59,7 @@ export function PillFace(props: { pill: ScenePill; side: PillSide | null; onSele
   );
 }
 
-const UTurn = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-    <path d="M4 12V6a3 3 0 0 1 6 0v6M7.6 9.6L10 12l2.4-2.4" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-/** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and how the route arrives and leaves. */
+/** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. */
 export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
   const { turnBack } = props;
   // Three reasons to show the details; a tap (or click) pins them, so they stay once the pointer has gone.
@@ -76,7 +70,25 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
   const ref = useRef<HTMLButtonElement>(null);
   const id = useId();
   useNativeClick(ref, () => setPinned((on) => !on));
-  const move = turnBackMove(turnBack);
+  // A tap anywhere else lets go of it (a phone has no hover to end).
+  useEffect(() => {
+    if (!pinned) return;
+    const away = (event: PointerEvent) => {
+      if (!(event.target instanceof Node && ref.current?.contains(event.target))) setPinned(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [pinned]);
+  // Near an edge of the map the details slide sideways, or go below the disc, instead of being cut off.
+  const pop = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const details = pop.current;
+    const frame = details?.closest(".map-canvas")?.getBoundingClientRect();
+    if (!details || !frame) return;
+    const box = details.getBoundingClientRect();
+    details.style.marginLeft = `${Math.max(frame.left + 8 - box.left, 0) + Math.min(frame.right - 8 - box.right, 0)}px`;
+    details.classList.toggle("turn-pop--below", box.top < frame.top + 8);
+  }, [open]);
   return (
     <span className="turn-mark-wrap">
       <button
@@ -99,16 +111,15 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
           setFocused(false);
         }}
       >
-        <UTurn />
+        {/* The same ↩ as the legend, the pills and the route rows. */}
+        <span aria-hidden="true">↩</span>
       </button>
       {open && (
-        <span role="tooltip" id={id} className="turn-pop">
+        <span role="tooltip" id={id} className="turn-pop" ref={pop}>
           <span className="turn-pop-line strong">
             {turnBack.at.near} · {trackWords(turnBack.track)}
           </span>
-          <span className="turn-pop-line">
-            arrives {move.arrives} · leaves {move.leaves}
-          </span>
+          <span className="turn-pop-line">{turnBackMove(turnBack)}</span>
         </span>
       )}
     </span>

@@ -51,10 +51,10 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
             </button>
           ) : null,
         )}
-      {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} side={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
+      {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} corner={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
       {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => <TurnBackMark key={i} turnBack={turnBack.turnBack} />)}
       <MapControls layers={layers} onLayers={onLayers} look={look} onZoom={() => {}} onFit={() => {}} history={content?.history ?? null} />
-      <Legend {...legendFor(scene)} />
+      <Legend {...legendFor(scene, layers.network)} />
     </div>
   );
 }

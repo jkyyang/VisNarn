@@ -6,7 +6,7 @@ import type { MapLayerChoice } from "./MapCanvas.tsx";
 export interface MapControlsProps {
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
-  /** What Auto shows now, for the button and the hint under the switch. */
+  /** What Auto shows now, for the button. */
   look: MapLook;
   onZoom: (step: 1 | -1) => void;
   onFit: () => void;
@@ -84,7 +84,6 @@ export function MapControls(props: MapControlsProps): ReactElement {
                 </button>
               ))}
             </div>
-            {layers.light === "auto" && <p className="light-switch-hint">Follows the clock. Now: {lightWord}</p>}
           </div>
         </div>
       )}

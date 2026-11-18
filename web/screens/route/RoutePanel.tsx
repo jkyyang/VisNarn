@@ -76,7 +76,7 @@ const FoundMark = () => (
   </svg>
 );
 
-/** The one line that says what a click does next, or what went wrong. */
+/** The one line that says what a click does next, or what went wrong; empty when a field's own line already says it. */
 function HintLine(props: { text: string; children?: ReactNode }): ReactElement {
   return (
     <div className="hint-row">
@@ -110,8 +110,8 @@ const spotKey = (ref: PlaceRef) => (ref.kind === "node" ? `node:${ref.fraId}` : 
 
 /**
  * One place input with autocomplete, a pick-on-map button, and the one line under it when the place
- * did not resolve. The typed text is its own while focused: Enter takes it as typed, a suggestion
- * takes its reference, and leaving the box puts back what is set.
+ * did not resolve. The typed text is its own while focused: Enter takes the highlighted suggestion,
+ * else the first one, else the text as typed; leaving the box puts back what is set.
  *
  * A self-contained input widget: it asks the server for suggestions itself (usePlaceSuggestions).
  */
@@ -129,8 +129,7 @@ export function PlaceField(props: {
   const listId = useId();
   const problemId = useId();
   const [draft, setDraft] = useState<string | null>(null);
-  // -1: nothing highlighted, so Enter takes the text as typed. A suggestion is only taken on Enter
-  // after the person moved to it with the arrow keys.
+  // -1: nothing highlighted yet.
   const [active, setActive] = useState(-1);
   const typing = draft !== null;
   const suggestions = usePlaceSuggestions(draft ?? "", props.role);
@@ -150,11 +149,11 @@ export function PlaceField(props: {
       setActive((i) => (i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + step + list.length) % list.length));
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (open && active >= 0 && active < list.length) done(list[active].ref);
-      else if (typing) {
-        const text = (draft ?? "").trim();
-        done(text ? { kind: "text", text } : null);
-      }
+      if (!typing) return;
+      // The highlighted suggestion, else the first one listed, else the text as typed.
+      const suggestion = list[Math.max(active, 0)];
+      const text = (draft ?? "").trim();
+      done(suggestion ? suggestion.ref : text ? { kind: "text", text } : null);
     } else if (event.key === "Escape") {
       setDraft(null);
       setActive(-1);
@@ -320,7 +319,7 @@ function Sections(props: { route: RoutePath; start: string; destination: string 
           mark: <span className="section-bar" style={{ background: `var(--rr-${leg.railroad})` }} />,
           text: (
             <>
-              <span className="strong">{leg.railroad}</span> <span className="mono">{fmtKmShort(leg.km)}</span>
+              <span className="strong">{leg.railroad}</span> {fmtKmShort(leg.km)}
             </>
           ),
           kind: "leg",
@@ -498,6 +497,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
     );
   };
 
+  const routes = result?.outcome === "routed" ? result.routes : null;
   const hint =
     props.error ??
     (session.missed
@@ -510,9 +510,10 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
             ? "Click the start on the map, or type it."
             : plan.destination === null
               ? "Click the destination."
-              : "Click the map to add a stop.");
+              : routes
+                ? "Click the map to add a stop."
+                : "");
 
-  const routes = result?.outcome === "routed" ? result.routes : null;
   const chosen = routes ? chosenRoute(routes, props.selected) : null;
   const start = resolvedOf(result?.places.start);
   const destination = resolvedOf(result?.places.destination);
