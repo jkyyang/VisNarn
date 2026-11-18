@@ -1645,6 +1645,13 @@ input[aria-invalid="true"] {
   justify-content: center;
   cursor: pointer;
 }
+/* Beside a pin it would otherwise cover (see turnBackShift): smaller, so the pin's number shows. */
+.route-mark--badge .turn-mark {
+  width: 16px;
+  height: 16px;
+  border-width: 1.5px;
+  font-size: 10px;
+}
 .turn-pop {
   position: absolute;
   left: 50%;

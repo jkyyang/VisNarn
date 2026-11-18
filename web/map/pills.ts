@@ -2,8 +2,9 @@
  * Where the route pills go on screen, as plain geometry: each pill takes the first of its anchors and
  * corners that keeps it on the map and clear of the route lines, the pins, the legend and the pills
  * placed before it. A pill with no room is left out; its line and its row in the panel still select
- * the route.
+ * the route. Also where a turn-back disc steps off a pin it would hide.
  */
+import type { PinKind } from "./scene.ts";
 
 /** Screen pixels from the map's top-left corner. */
 export interface Box {
@@ -107,4 +108,34 @@ export function placePills(asks: PillAsk[], obstacles: Box[], view: Box, lines: 
     }
   });
   return placed;
+}
+
+/** Each pin's round head as layers.ts draws it: its centre from the pin's map point, and its radius. */
+const PIN_HEAD: Record<PinKind, { dy: number; r: number }> = {
+  start: { dy: 0, r: 9 },
+  stop: { dy: 0, r: 11 },
+  destination: { dy: -21, r: 13 },
+  shop: { dy: 0, r: 7.5 },
+};
+/** Half of .turn-mark in styles.css. */
+const TURN_RADIUS_PX = 11;
+
+/**
+ * A turn-back is often flagged exactly at a via stop, and its disc (an HTML marker, always above the
+ * canvas) would hide the stop's numbered ring. So a turn-back that would touch a pin moves to that
+ * pin's upper-right, just outside its head, as a small badge: the pin and its number stay in sight.
+ * Returns the shift in px from the turn-back's own point, or null when no pin is in the way.
+ */
+export function turnBackShift(turn: Point, pins: readonly (Point & { kind: PinKind })[]): Point | null {
+  let best: { head: Point; r: number; gap: number } | null = null;
+  for (const pin of pins) {
+    const { dy, r } = PIN_HEAD[pin.kind];
+    const head = { x: pin.x, y: pin.y + dy };
+    const gap = Math.hypot(turn.x - head.x, turn.y - head.y);
+    if (gap < r + TURN_RADIUS_PX && (!best || gap < best.gap)) best = { head, r, gap };
+  }
+  if (!best) return null;
+  // On the 45° diagonal, a little past the head's edge.
+  const k = best.r * Math.SQRT1_2 + 4;
+  return { x: best.head.x + k - turn.x, y: best.head.y - k - turn.y };
 }

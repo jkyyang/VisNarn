@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pillWidthPx, placePills, type Box, type PillAsk } from "./pills.ts";
+import { pillWidthPx, placePills, turnBackShift, type Box, type PillAsk } from "./pills.ts";
 
 const VIEW: Box = { left: 8, top: 8, right: 1000, bottom: 700 };
 const ask = (id: string, ...anchors: [number, number][]): PillAsk => ({ id, width: 100, height: 26, anchors: anchors.map(([x, y]) => ({ x, y })) });
@@ -50,5 +50,36 @@ describe("placePills", () => {
   it("estimates a pill's width from its text and its ↩ badge", () => {
     expect(pillWidthPx("828 km", 0)).toBe(62);
     expect(pillWidthPx("828 km", 1)).toBe(80);
+  });
+});
+
+describe("turnBackShift", () => {
+  // Matches the stop ring in layers.ts (22 px) and the badge in styles.css (16 px).
+  const STOP_R = 11;
+  const BADGE_R = 8;
+
+  it("moves a turn-back flagged at a via stop off the stop's ring, leaving its number in sight", () => {
+    const stop = { kind: "stop" as const, x: 400, y: 300 };
+    const shift = turnBackShift({ x: 400, y: 300 }, [stop]);
+    expect(shift).not.toBeNull();
+    if (!shift) return;
+    // Up and to the right, and the badge clears the middle of the ring where the number is drawn.
+    expect(shift.x).toBeGreaterThan(0);
+    expect(shift.y).toBeLessThan(0);
+    expect(Math.hypot(shift.x, shift.y) - BADGE_R).toBeGreaterThan(STOP_R / 2);
+  });
+
+  it("sits by the destination drop's head, not its tip", () => {
+    const shift = turnBackShift({ x: 400, y: 300 }, [{ kind: "destination", x: 400, y: 300 }]);
+    expect(shift?.y).toBeLessThan(-21);
+  });
+
+  it("leaves a turn-back alone when no pin is under it, and picks the nearest pin when several are", () => {
+    expect(turnBackShift({ x: 400, y: 300 }, [{ kind: "stop", x: 460, y: 300 }])).toBeNull();
+    const shift = turnBackShift({ x: 400, y: 300 }, [
+      { kind: "shop", x: 412, y: 300 },
+      { kind: "stop", x: 402, y: 300 },
+    ]);
+    expect(shift && shift.x + 400).toBeCloseTo(402 + STOP_R * Math.SQRT1_2 + 4);
   });
 });
