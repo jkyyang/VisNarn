@@ -1,6 +1,6 @@
 /**
  * Real tracks in a real browser: ticked, the routes are drawn along the surveyed track and, zoomed in,
- * the OpenStreetMap lines replace the Class I network layer; unticked, both are node to node again.
+ * the OpenStreetMap lines replace the network layers; unticked, both are node to node again.
  */
 import type { Page } from "@playwright/test";
 import type { LngLat } from "../../shared/geo.ts";

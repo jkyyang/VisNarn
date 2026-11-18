@@ -3,7 +3,7 @@ import { OPENFREEMAP_TILES } from "./basemaps.ts";
 
 const SOURCE = "real-tracks";
 
-/** The tiles carry rail from this zoom. From here in the real lines replace the Class I network layer; further out it shows the main lines. */
+/** The tiles carry rail from this zoom. From here in the real lines replace the network layers; further out it shows the main lines. */
 export const REAL_TRACKS_MIN_ZOOM = 8;
 
 /**

@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
 import type { PlaceSuggestion } from "../../shared/places.ts";
+import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { usePlace } from "../data/hooks.ts";
 import { useTrackPaths } from "../data/hooks.ts";
@@ -18,7 +19,7 @@ import { NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
 import { FoundPin } from "./FoundPin.tsx";
-import { networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
@@ -152,13 +153,15 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const found = chosen && resolution.status === "ready" && !resolution.stale ? resolution.data : null;
   const [fitNonce, setFitNonce] = useState(0);
   const given = content?.scene ?? null;
-  // With Real tracks on, the routes follow the surveyed track and the real lines replace the Class I
+  // With Real tracks on, the routes follow the surveyed track and the real lines replace the
   // network where the tiles have them; with it off, both are drawn node to node, like the network layer.
   const asked = useMemo(() => (layers.tracks && given ? routePaths(given) : []), [layers.tracks, given]);
   const onTrack = useTrackPaths(asked.length ? asked : null);
   const trackPaths = layers.tracks && onTrack.status === "ready" && !onTrack.stale ? onTrack.data : null;
   const scene = useMemo(() => (given && trackPaths ? withRoutePaths(given, trackPaths) : given), [given, trackPaths]);
   const networkShown = layers.network && !(layers.tracks && zoom >= REAL_TRACKS_MIN_ZOOM);
+  const include = content?.include ?? DEFAULT_INCLUDE;
+  const networkClasses = useMemo(() => (networkShown ? drawnClasses(include) : []), [networkShown, include]);
   const picking = !!content?.onPick;
   const latest = useRef(content);
   latest.current = content;
@@ -167,8 +170,8 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     const drawn = scene ? sceneLayers(scene, colors, zoom) : [];
     // The network dims under a route (and under the shops), so that is what the eye finds.
     const dimmed = scene?.kind === "shops" || (scene?.kind === "route" && scene.selected !== null);
-    return [network && networkLayer(network, networkShown, dimmed, colors), ...drawn];
-  }, [network, networkShown, scene, colors, zoom]);
+    return [...(network ? networkLayers(network, networkClasses, dimmed, colors) : []), ...drawn];
+  }, [network, networkClasses, scene, colors, zoom]);
   const watchCamera = (map: Pick<MapLibreMap, "getCenter">) => {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
@@ -181,7 +184,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
 
   return (
-    <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"}>
+    <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"} data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}>
       <MapGL
         initialViewState={INITIAL_VIEW}
         maxBounds={PAN_BOUNDS}
@@ -216,7 +219,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           }}
         />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
-        <CornerLegend {...legendFor(scene, networkShown)} />
+        <CornerLegend {...legendFor(scene, networkClasses)} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}

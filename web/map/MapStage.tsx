@@ -3,7 +3,7 @@
  * while the user moves between screens; a screen says what the map should show by rendering
  * <MapContent> anywhere in its tree.
  *
- * Layer choices (Map / Satellite, Class I network, Real tracks, Auto / Day / Night) are view state
+ * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night) are view state
  * owned here. The day or night look is set on the whole map section, so the cards over the map
  * change with it.
  */
@@ -23,6 +23,7 @@ import {
 import { createPortal } from "react-dom";
 import type { LngLat } from "../../shared/geo.ts";
 import type { ResolvedPlace } from "../../shared/places.ts";
+import type { TrackIncluded } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { mapLook, sunPosition } from "./daylight.ts";
@@ -38,6 +39,8 @@ export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: numb
 export interface MapContentProps {
   scene: MapScene | null;
   focus: MapFocus;
+  /** The track the plan may use: the network shows the same classes. No plan: DEFAULT_INCLUDE. */
+  include?: TrackIncluded;
   /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here. */
   onPick?: (lon: number, lat: number, toleranceKm: number) => void;
   onSelect?: (target: SceneTarget) => void;

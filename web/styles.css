@@ -624,6 +624,10 @@ input[aria-invalid="true"] {
   position: relative;
   min-width: 0;
 }
+/* The shop form's Location input sits in a plain block, not the .field flex column, so it needs its own width to fill the card. */
+.shop-form .place-field > input {
+  width: 100%;
+}
 .place-box {
   display: flex;
   align-items: center;

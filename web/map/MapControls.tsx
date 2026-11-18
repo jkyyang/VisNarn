@@ -28,7 +28,7 @@ const LIGHTS: [LightMode, string][] = [
 const Thumb = ({ kind }: { kind: BasemapKind | "tracks" }) => <span className={`layer-thumb layer-thumb--${kind}`} aria-hidden="true" />;
 
 /**
- * Top-right of the map: "Layers · Map · Day" (Map / Satellite / Real tracks, Class I network, Auto /
+ * Top-right of the map: "Layers · Map · Day" (Map / Satellite / Real tracks, Rail network, Auto /
  * Day / Night), zoom, undo / redo, fit whole route.
  */
 export function MapControls(props: MapControlsProps): ReactElement {
@@ -71,7 +71,7 @@ export function MapControls(props: MapControlsProps): ReactElement {
           </div>
           <label className="check small">
             <input type="checkbox" checked={layers.network} onChange={(e) => onLayers({ ...layers, network: e.target.checked })} />
-            Class I network
+            Rail network
           </label>
           <div className="light-switch">
             <span className="light-switch-label" id={lightLabel}>
