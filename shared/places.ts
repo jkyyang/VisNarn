@@ -35,6 +35,8 @@ export interface Waypoint {
   fraId: FraId | null;
   /** Only this railroad may serve the waypoint. */
   railroad: Railroad | null;
+  /** A shop wired to the track joins the network only at these nodes, each over `km` of its own track; `fraId` is then null. */
+  links?: Pick<NetworkNode, "fraId" | "km">[];
 }
 
 export interface PlaceMatch {
@@ -47,6 +49,8 @@ export interface PlaceMatch {
 
 export interface ResolvedPlace extends Waypoint {
   ref: PlaceRef;
+  /** The nodes a linked shop joins, in the shop's order. */
+  links?: NetworkNode[];
   /** Railroads with track here: "served by BNSF and UP". Found from the network, never typed. */
   railroads: Railroad[];
   match: PlaceMatch;
@@ -87,9 +91,12 @@ export interface NetworkNode {
   near: string;
   railroads: Railroad[];
   yard: boolean;
-  /** Distance from the clicked point. */
+  /** Distance from the clicked point, or from the shop it is a link of. */
   km: number;
 }
+
+/** Which nodes a map click may snap to: any with track, or only those on a railroad's mainline, where a shop's link joins. */
+export type NodesOn = "track" | "mainline";
 
 /** Where a saved thing sits on the network. Only stable keys. */
 export type NodeLocation = { fraId: FraId; railroad: Railroad | null } | { lon: number; lat: number };
@@ -106,6 +113,12 @@ export function locationOf(place: ResolvedPlace): NodeLocation {
   return place.fraId !== null ? { fraId: place.fraId, railroad: place.railroad } : { lon: round5(place.lon), lat: round5(place.lat) };
 }
 
+/** A shop has at most this many links: one is a stub the car backs out of, two make the shop a through track. */
+export const SHOP_LINKS_MAX = 2;
+
+/** A shop's own track reaches the network within this distance: the longest link, how far the suggestion looks, and how far from a click a link's node may be. */
+export const SHOP_LINK_MAX_KM = 5;
+
 /** A destination the user defined. Nothing about any shop is built in. */
 export interface Shop {
   id: ShopId;
@@ -113,6 +126,11 @@ export interface Shop {
   /** The user's own code for it, e.g. "NLR-01". A typed place may name the shop by this or by name. */
   code: string | null;
   location: NodeLocation;
+  /**
+   * The nodes the shop's own track joins the network at, wired by a person like a resistor's leads, in order.
+   * Each link runs straight from the location to its node. Empty: the location snaps as any place does.
+   */
+  links: FraId[];
 }
 
 /**
@@ -135,6 +153,7 @@ export interface ShopDraft {
   name: string;
   code: string | null;
   location: PlaceRef;
+  links: FraId[];
 }
 
 /** A shop with what the network says about its location: "Found on the network · served by BNSF and UP", or why not. */

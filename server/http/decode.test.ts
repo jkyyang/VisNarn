@@ -67,23 +67,38 @@ describe("decodeBody", () => {
     const source = { kind: "csv", fileName: "EXAMPLE shops.csv", text: "name\n1" };
     expect(decodeBody["POST /api/shops/import"]({ source, commit: false })).toEqual({ source, commit: false });
     expect(refusal(() => decodeBody["POST /api/shops/import"]({ source: { ...source, kind: "xlsx" }, commit: true }))).toMatch(/^invalid source\.kind: /);
-    expect(decodeBody["POST /api/shops"]({ name: "EXAMPLE shop", code: null, location: { kind: "text", text: "" } })).toEqual({
+    expect(decodeBody["POST /api/shops"]({ name: "EXAMPLE shop", code: null, location: { kind: "text", text: "" }, links: [] })).toEqual({
       name: "EXAMPLE shop",
       code: null,
       location: { kind: "text", text: "" },
+      links: [],
     });
     // A NUL-leading name or code would be saved as "": a shop listed without its name.
-    const shop = { name: "EXAMPLE shop", code: "EX-1", location: { kind: "coord", lon: -96.5, lat: 39.1 } };
+    const shop = { name: "EXAMPLE shop", code: "EX-1", location: { kind: "coord", lon: -96.5, lat: 39.1 }, links: [] };
     for (const bad of ["\u0000hidden", "A\u0000x", "a\tb", "a\nb", "a\u202eb", "a\u200bb"]) {
       expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, name: bad }))).toMatch(/^invalid name: .*invisible/);
       expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, code: bad }))).toMatch(/^invalid code: .*invisible/);
     }
   });
+
+  it("reads a shop's links: at most two FRA node ids", () => {
+    const shop = { name: "EXAMPLE shop", code: null, location: { kind: "coord", lon: -82.3376, lat: 42.9596 } };
+    expect(decodeBody["POST /api/shops"]({ ...shop, links: [628925, 628886] }).links).toEqual([628925, 628886]);
+    expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, links: [628925, 628886, 628912] }))).toMatch(/^invalid links: links has more than 2 items/);
+    expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, links: [-1] }))).toMatch(/^invalid links\[0\]: /);
+    expect(refusal(() => decodeBody["POST /api/shops"](shop))).toMatch(/^invalid links: /);
+  });
+
+  it("reads the way-in query: a longitude and a latitude", () => {
+    expect(decodeQuery["GET /api/places/way-in"](new URLSearchParams("lon=-82.3376&lat=42.9596"))).toEqual({ lon: -82.3376, lat: 42.9596 });
+    expect(refusal(() => decodeQuery["GET /api/places/way-in"](new URLSearchParams("lon=-82.3376")))).toMatch(/^invalid lat: /);
+  });
 });
 
 describe("decodeQuery and path params", () => {
   it("reads numbers and roles from the query string, naming a missing or bad one", () => {
-    expect(decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2"))).toEqual({ lon: -97.34, lat: 31.1, withinKm: 2 });
+    expect(decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2&on=mainline"))).toEqual({ lon: -97.34, lat: 31.1, withinKm: 2, on: "mainline" });
+    expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2")))).toMatch(/^invalid on: /);
     expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&withinKm=2")))).toMatch(/^invalid lat: /);
     expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=abc&lat=1&withinKm=2")))).toMatch(/^invalid lon: /);
     expect(decodeQuery["GET /api/places/suggest"](new URLSearchParams("q=temp&role=shop"))).toEqual({ q: "temp", role: "shop" });

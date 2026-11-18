@@ -21,7 +21,8 @@ export type Handlers = { [R in Route]: (request: Request<R>, context: HandlerCon
 export const handlers: Handlers = {
   "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, SUGGESTIONS_SHOWN),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
-  "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm),
+  "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm, query.on),
+  "GET /api/places/way-in": ({ query }, { app }) => app.places.wayIn(query.lon, query.lat),
 
   "GET /api/shops": (_request, { app }) => app.shops.list(),
   "POST /api/shops": ({ body }, { app }) => app.shops.save(body, null),

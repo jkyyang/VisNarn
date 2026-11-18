@@ -4,8 +4,8 @@
  * Behind `plan` are the worker threads that own the routers (a search blocks its thread for up to
  * ~0.3 s, so it never runs on the thread that answers HTTP), a queue, and the cache. Callers see none of it.
  *
- * The cache is keyed by tripKey (network version, waypoints, track included, turning at stops) and strategy. A new
- * network file or a moved shop asks under a new key. It lives in memory: after a restart
+ * The cache is keyed by tripKey (network version, waypoints with a shop's links, track included, turning at stops)
+ * and strategy. A new network file, a moved shop or a shop wired anew asks under a new key. It lives in memory: after a restart
  * routes are computed again.
  */
 import { Worker } from "node:worker_threads";

@@ -172,7 +172,7 @@ describe("serve: the API envelope", () => {
     expect(crash.body).not.toMatch(/exploded/);
 
     const secret = "EXAMPLE-CAR-CONFIDENTIAL-104233";
-    const failed = await raw(port, "PUT", "/api/shops/s1", json(), JSON.stringify({ name: secret, code: null, location: { kind: "text", text: secret } }));
+    const failed = await raw(port, "PUT", "/api/shops/s1", json(), JSON.stringify({ name: secret, code: null, location: { kind: "text", text: secret }, links: [] }));
     expect(failed.status).toBe(500);
     expect(logged.join("\n")).toMatch(/DELETE \/api\/shops\/:shopId failed/);
     expect(logged.join("\n")).toMatch(/save failed/);

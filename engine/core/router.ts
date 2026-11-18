@@ -16,16 +16,19 @@
  *   `interchangeKm` so the router prefers single-line routes.
  * Because state includes the direction of travel, a route keeps its direction through a via point,
  * unless `turnAtStops` lets it leave a via point either way, as it may leave the start.
+ * A linked point (a shop wired to the track) is reached and left only over its links, its own track: one link is
+ * a stub the car backs out of, two make the shop a through track. Either way the car goes on in any direction.
  */
 import { LINES, type Line } from "../../shared/railroads.ts";
 import { MAX_INTERCHANGES, MAX_TURN_DEG, PASSENGER_TRACK_COST, SNAP_KM } from "../rules.ts";
-import type { Point, RailGraph, Track } from "./graph.ts";
+import type { Entry, Point, RailGraph, Track } from "./graph.ts";
 
 export interface Leg {
   railroad: Line;
+  /** Network track only: a linked point's own track is not in it. */
   km: number;
   nodes: number[];
-  /** The segment between each pair of nodes: edges[i] runs from nodes[i] to nodes[i + 1]. */
+  /** The segment between each pair of nodes: edges[i] runs from nodes[i] to nodes[i + 1], or is SPUR. */
   edges: number[];
   path: [number, number][];
   subdivisions: string[];
@@ -81,6 +84,9 @@ export class RouteError extends Error {
 
 const NR = LINES.length;
 
+/** In a leg's `edges`: the car leaves the network at one node for a linked via point, and comes back at the next node over the point's own track. */
+export const SPUR = -2;
+
 /** Absolute difference between two headings, 0..180. */
 export function turnDeg(fromHeading: number, toHeading: number): number {
   return Math.abs((((toHeading - fromHeading) % 360) + 540) % 360 - 180);
@@ -135,7 +141,7 @@ class MinHeap {
   }
 }
 
-/** One decoded search state: the car arrived at `node` over `edge` (or edge -1 = not moved yet). */
+/** One decoded search state: the car arrived at `node` over `edge` (edge -1: not moved yet; SPUR: back from a linked via point). */
 interface Step {
   edge: number;
   node: number;
@@ -214,13 +220,13 @@ export class Router {
    * Dijkstra from all starts to the goal nodes. Returns the cheapest hit, or with `collectSlackKm` every goal
    * arrival (each direction / railroad) up to that much costlier than the cheapest, for use as via-point starts.
    */
-  private search(starts: Start[], goals: Map<number, number>, opt: RouteOptions, collectSlackKm: number | null): Hit[] {
+  private search(starts: Start[], goals: Entry[], opt: RouteOptions, collectSlackKm: number | null): Hit[] {
     const g = this.graph;
     const { dist, prev } = this;
     dist.fill(Infinity);
     prev.fill(-1);
     const goalMask = new Map<number, number>();
-    for (const [rr, n] of goals) goalMask.set(n, (goalMask.get(n) ?? 0) | (1 << rr));
+    for (const { line, node } of goals) goalMask.set(node, (goalMask.get(node) ?? 0) | (1 << line));
     const heap = new MinHeap();
     // States reached straight from a start remember which start, so the path can be rebuilt.
     const startOf = new Map<number, Start>();
@@ -309,7 +315,21 @@ export class Router {
 
   /** The first point, facing either way, on every line that serves it. */
   private firstStarts(p: Point, opt: RouteOptions): Start[] {
-    return [...this.graph.serving(p, opt)].map(([rr, node]) => ({ node, rr, heading: null, edge: -1, cost: 0, prefix: [{ edge: -1, node, rr }] }));
+    return this.graph.serving(p, opt).map(({ line, node, km }) => ({ node, rr: line, heading: null, edge: -1, cost: km, prefix: [{ edge: -1, node, rr: line }] }));
+  }
+
+  /**
+   * Where the car goes on from a via point it reached with `hit`: on the same railroad, keeping its direction
+   * unless it may turn at stops. A linked point it leaves over a link, facing either way on the network: on over
+   * the other link (through track), or back over the one it came in by (a stub, or when it may turn at stops).
+   */
+  private goOn(via: Point, hit: Hit, opt: RouteOptions): Start[] {
+    const end = hit.steps[hit.steps.length - 1];
+    if (!via.links) return [{ node: end.node, rr: end.rr, edge: end.edge, heading: opt.turnAtStops ? null : hit.heading, cost: hit.cost, prefix: hit.steps }];
+    const outs = via.links.length === 1 || opt.turnAtStops ? via.links : via.links.filter((link) => link.node !== end.node);
+    return outs.map((out) => ({
+      node: out.node, rr: end.rr, edge: -1, heading: null, cost: hit.cost + out.km, prefix: [...hit.steps, { edge: SPUR, node: out.node, rr: end.rr }],
+    }));
   }
 
   /**
@@ -325,11 +345,16 @@ export class Router {
       const from = points[i], to = points[i + 1];
       const last = i === points.length - 2;
       const goals = this.graph.serving(to, opt);
-      if (!goals.size) throw new RouteError(`No allowed mainline within ${SNAP_KM} km of ${to.label}.`, i + 1);
+      if (!goals.length) throw new RouteError(`No allowed mainline within ${SNAP_KM} km of ${to.label}.`, i + 1);
+      // A linked point is reached over its own track: an arrival costs that much more, and a dearer arrival at a shorter link may win.
+      const ownKm = new Map(goals.map((goal) => [goal.node, goal.km]));
+      const spread = Math.max(...ownKm.values()) - Math.min(...ownKm.values());
       const already: Hit[] = frontier
-        .filter((st) => goals.get(st.rr) === st.node && opt.allowedMask & (1 << st.rr))
+        .filter((st) => goals.some((goal) => goal.line === st.rr && goal.node === st.node) && opt.allowedMask & (1 << st.rr))
         .map((st) => ({ cost: st.cost, steps: st.prefix, heading: st.heading }));
-      const hits = [...already, ...this.search(frontier, goals, opt, last ? null : VIA_SLACK_KM)].sort((x, y) => x.cost - y.cost);
+      const hits = [...already, ...this.search(frontier, goals, opt, last ? spread || null : VIA_SLACK_KM)]
+        .map((hit) => ({ ...hit, cost: hit.cost + ownKm.get(hit.steps[hit.steps.length - 1].node)! }))
+        .sort((x, y) => x.cost - y.cost);
       if (!hits.length) {
         // The car keeps its direction through a via point. If the next point is reachable from the via
         // point facing either way, the via point is what blocks (a node on a dead-end branch, 2026-11-17).
@@ -342,10 +367,7 @@ export class Router {
         );
       }
       if (last) return this.describe(hits[0].steps);
-      frontier = hits.map((h) => {
-        const end = h.steps[h.steps.length - 1];
-        return { node: end.node, rr: end.rr, edge: end.edge, heading: opt.turnAtStops ? null : h.heading, cost: h.cost, prefix: h.steps };
-      });
+      frontier = hits.flatMap((hit) => this.goOn(to, hit, opt));
     }
     throw new RouteError("unreachable");
   }
@@ -359,13 +381,20 @@ export class Router {
     let km = 0;
     for (let i = 1; i < steps.length; i++) {
       const a = steps[i - 1], b = steps[i];
-      if (a.node === b.node && a.edge === b.edge) {
+      if (a.node === b.node && a.edge === b.edge && b.edge !== SPUR) {
         cur = null; // interchange: same place, another railroad
         continue;
       }
       if (!cur || cur.rr !== b.rr) {
         cur = { rr: b.rr, railroad: LINES[b.rr], km: 0, nodes: [a.node], edges: [], subdivisions: [] };
         legs.push(cur);
+      }
+      if (b.edge === SPUR) {
+        // Out over a linked point's own track and back: no turn-back, and the car may go on either way.
+        cur.nodes.push(b.node);
+        cur.edges.push(SPUR);
+        heading = null;
+        continue;
       }
       if (heading !== null && this.isSharp(heading, b.edge, a.edge, a.node)) {
         reversals.push({

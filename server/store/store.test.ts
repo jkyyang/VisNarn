@@ -27,6 +27,7 @@ const shop = (over: Partial<Shop> = {}): Shop => ({
   name: "North Little Rock, AR",
   code: "EX-NLR-01",
   location: { lon: -92.27, lat: 34.77 },
+  links: [],
   ...over,
 });
 const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedRoute => ({
@@ -39,8 +40,8 @@ const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedR
 });
 
 /**
- * A database file as an older copy of the app left it at schema `version` (1 to 4): one shop with the
- * EXAMPLE flag set, and before schema 4 the car tables with rows.
+ * A database file as an older copy of the app left it at schema `version` (1 to 6): one shop and no shop_link
+ * table, before schema 5 the EXAMPLE flag set, and before schema 4 the car tables with rows.
  */
 function olderFile(version: number, shape: (raw: { exec(sql: string): void }) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
@@ -51,9 +52,9 @@ function olderFile(version: number, shape: (raw: { exec(sql: string): void }) =>
   current.close();
   const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
   const raw = new DatabaseSync(file);
-  raw.exec(`ALTER TABLE shops ADD COLUMN example INTEGER NOT NULL DEFAULT 0;
-    UPDATE shops SET example = 1;
+  raw.exec(`DROP TABLE shop_link;
     UPDATE meta SET value = '${version}' WHERE key = 'schema_version';`);
+  if (version < 5) raw.exec("ALTER TABLE shops ADD COLUMN example INTEGER NOT NULL DEFAULT 0; UPDATE shops SET example = 1;");
   if (version < 4) {
     raw.exec(`PRAGMA foreign_keys = ON;
     CREATE TABLE settings (key TEXT PRIMARY KEY, json TEXT NOT NULL);
@@ -74,12 +75,13 @@ function olderFile(version: number, shape: (raw: { exec(sql: string): void }) =>
   return file;
 }
 
-/** The file is at the newest schema and holds no table but meta, shops and saved routes. */
+/** The file is at the newest schema and holds no table but meta, shops, their links and saved routes. */
 function expectCurrentSchema(file: string): void {
   const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
   const check = new DatabaseSync(file);
-  expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "5" });
-  expect(check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).toEqual([{ name: "meta" }, { name: "saved_routes" }, { name: "shops" }]);
+  expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "7" });
+  expect(check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).toEqual([{ name: "meta" }, { name: "saved_routes" }, { name: "shop_link" }, { name: "shops" }]);
+  expect((check.prepare("PRAGMA table_info(shops)").all() as { name: string }[]).map((column) => column.name)).toEqual(["id", "name", "code", "location_json", "updated_at"]);
   check.close();
 }
 
@@ -106,6 +108,12 @@ describe("Store", () => {
     store.shops.save(shop());
     store.shops.save(shop({ id: "s2" as ShopId, name: "Kansas City, MO", code: null, location: { fraId: 358070 as FraId, railroad: "UP" } }));
     expect(store.shops.get("s1" as ShopId)).toEqual(shop());
+    const wired = shop({ links: [628925 as FraId, 628886 as FraId] });
+    store.shops.save(wired);
+    expect(store.shops.get("s1" as ShopId)).toEqual(wired);
+    store.shops.save(shop({ links: [628886 as FraId] }));
+    expect(store.shops.get("s1" as ShopId)?.links).toEqual([628886]);
+    store.shops.save(shop());
     expect(store.shops.all().map((s) => s.name)).toEqual(["Kansas City, MO", "North Little Rock, AR"]);
     expect(store.shops.named("ex-nlr-01")).toEqual([shop()]);
     expect(store.shops.named("  kansas city, mo ")).toHaveLength(1);
@@ -181,16 +189,49 @@ describe("Store", () => {
     expect(migrated.shops.all()).toEqual([shop()]);
     expect(migrated.savedRoutes.all()).toEqual([route("r1", "KC → Chicago")]);
     expectCurrentSchema(file);
-    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
-    const check = new DatabaseSync(file);
-    expect((check.prepare("PRAGMA table_info(shops)").all() as { name: string }[]).map((column) => column.name)).toEqual(["id", "name", "code", "location_json", "updated_at"]);
-    check.close();
+  });
+
+  it("opens a schema 5 file: adds shop_link, and every shop has no links", () => {
+    const file = olderFile(5, () => {});
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.shops.all()).toEqual([shop()]);
+    expectCurrentSchema(file);
+  });
+
+  it("opens a schema 6 file with the route_answers experiment: drops it, adds shop_link, shops stay", () => {
+    const file = olderFile(6, (raw) =>
+      raw.exec(`CREATE TABLE route_answers (key TEXT PRIMARY KEY, network_version TEXT NOT NULL, answer_json TEXT NOT NULL,
+          bytes INTEGER NOT NULL, hits INTEGER NOT NULL DEFAULT 0, used_at INTEGER NOT NULL);
+        CREATE INDEX route_answers_by_use ON route_answers (used_at);
+        INSERT INTO route_answers VALUES ('k', 'v', '{}', 2, 0, 0);`),
+    );
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.shops.all()).toEqual([shop()]);
+    expectCurrentSchema(file);
+  });
+
+  it("opens a schema 6 file with the links_json experiment: moves each shop's links into shop_link in order", () => {
+    const file = olderFile(6, (raw) =>
+      raw.exec(`ALTER TABLE shops ADD COLUMN links_json TEXT NOT NULL DEFAULT '[]';
+        UPDATE shops SET links_json = '[628925,628886]';
+        INSERT INTO shops (id, name, code, location_json, updated_at) VALUES ('s2', 'Kansas City, MO', NULL, '{"lon":-94.6,"lat":39.1}', 't');`),
+    );
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.shops.all()).toEqual([
+      shop({ id: "s2" as ShopId, name: "Kansas City, MO", code: null, location: { lon: -94.6, lat: 39.1 } }),
+      shop({ links: [628925 as FraId, 628886 as FraId] }),
+    ]);
+    expectCurrentSchema(file);
   });
 
   it("revision goes up on every write and on no read", () => {
     const store = memory();
     const steps: [string, () => unknown][] = [
-      ["save shop", () => store.shops.save(shop())],
+      // A shop with links: removing it removes its links too.
+      ["save shop", () => store.shops.save(shop({ links: [628925 as FraId] }))],
       ["save route", () => store.savedRoutes.save(route("r1", "KC → Chicago"))],
       ["remove route", () => store.savedRoutes.remove("r1" as SavedRouteId)],
       ["remove shop", () => store.shops.remove("s1" as ShopId)],

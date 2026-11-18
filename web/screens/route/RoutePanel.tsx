@@ -13,13 +13,13 @@ import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { chosenRoute } from "../../map/scene.ts";
 import { lineColor } from "../../theme.ts";
-import { RailroadChips, TurnBadge } from "../../ui/badges.tsx";
+import { PlacePin, RailroadChips, TurnBadge } from "../../ui/badges.tsx";
 import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { Cross, Crosshair } from "../../ui/icons.tsx";
 import { useReorder } from "../../ui/reorder.ts";
 import type { DistanceUnit } from "../../units.ts";
-import { clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
+import { BACK_OUT, clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
 import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
 export interface RoutePanelProps {
@@ -45,33 +45,6 @@ const MIN_SECTION_KM = 0.5;
 
 // ---- small marks ----
 
-/** A place's mark, the same in the rows, the sections and on the map: a ring, a numbered stop, a drop. */
-function PlacePin({ kind, n }: { kind: PlaceKind; n: number }): ReactElement {
-  switch (kind) {
-    case "start":
-      return (
-        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-          <circle cx="8" cy="8" r="5.5" fill="var(--panel)" stroke="var(--pin-a)" strokeWidth="2.5" />
-        </svg>
-      );
-    case "stop":
-      return (
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="9" cy="9" r="7" fill="var(--panel)" stroke="var(--route)" strokeWidth="2.2" />
-          <text x="9" y="12.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--route)">
-            {n}
-          </text>
-        </svg>
-      );
-    case "destination":
-      return (
-        <svg width="16" height="20" viewBox="0 0 18 22" aria-hidden="true">
-          <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--shop)" />
-          <circle cx="9" cy="9" r="2.8" fill="var(--panel)" />
-        </svg>
-      );
-  }
-}
 const Grip = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
     <path d="M2 4.5h10M2 7h10M2 9.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -369,7 +342,7 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
   );
 }
 
-type SectionRow = { key: string; mark: ReactNode; text: ReactNode; kind: "place" | "leg" | "interchange" | "turn-back" };
+type SectionRow = { key: string; mark: ReactNode; text: ReactNode; kind: "place" | "leg" | "interchange" | "turn-back" | "back-out" };
 
 /** "· you chose" or "· router's pick". */
 function JunctionWord({ junction }: { junction: RouteString["junctions"][number] }): ReactElement {
@@ -383,7 +356,7 @@ function JunctionWord({ junction }: { junction: RouteString["junctions"][number]
 
 /**
  * The chosen route read top to bottom: start, each railroad's stretch with its km, railroad changes,
- * stops, turn-backs, destination. `rows` are the place rows the route runs through, so a stop shows its row's number.
+ * stops (and backing out of a shop's own track), turn-backs, destination. `rows` are the place rows the route runs through, so a stop shows its row's number.
  */
 function Sections(props: { route: RoutePath; string: RouteString; places: ResolvedPlace[]; rows: number[]; unit: DistanceUnit }): ReactElement {
   const { route, places } = props;
@@ -430,6 +403,9 @@ function Sections(props: { route: RoutePath; string: RouteString; places: Resolv
         rows.push({ key, mark: <TurnBadge />, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back", kind: "turn-back" });
         return;
       }
+      case "back-out":
+        rows.push({ key, mark: <span className="section-ring" />, text: BACK_OUT, kind: "back-out" });
+        return;
       case "destination":
         rows.push({ key, mark: <PlacePin kind="destination" n={0} />, text: shortPlace(places.at(-1)?.label ?? ""), kind: "place" });
         return;

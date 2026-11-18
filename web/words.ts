@@ -2,7 +2,7 @@
  * The few words the planner says, built from domain values. The server sends facts (km, railroads,
  * places); the words for them are chosen here, in one file, so the panel and the map cannot drift apart.
  */
-import type { PlaceResolution, PlaceSuggestion } from "../shared/places.ts";
+import type { NetworkNode, PlaceResolution, PlaceSuggestion } from "../shared/places.ts";
 import type { PlanPlaces } from "../shared/plans.ts";
 import { isClassI } from "../shared/railroads.ts";
 import type { RoutePath, TurnBack } from "../shared/route.ts";
@@ -32,6 +32,19 @@ export const errorText = (error: unknown, fallback: string) => (error instanceof
 /** "Click the map to set the start", "… set stop 2". Each caller adds its own end punctuation. */
 export const clickToSet = (what: string) => `Click the map to set ${what}`;
 export const NO_TRACK_NEAR = "No track near there";
+
+/** "Sarnia · FRA 628925": the node a shop's link joins. */
+export const linkText = (node: NetworkNode) => `${shortPlace(node.near)} · FRA ${node.fraId}`;
+
+/** Under a shop's links: how a car uses the shop, wired as it is. */
+export function linksReadout(links: number, atNode: boolean): string {
+  if (links === 1) return "One link: cars leave the way they came in.";
+  if (links > 1) return "Two links: cars can pass through.";
+  return atNode ? "No links: on the network at its node." : "No links: joins the nearest mainline.";
+}
+
+/** A step of a route: out of a shop's own track the way the car went in. */
+export const BACK_OUT = "Backs out of the spur";
 
 /** What a suggestion is: "Shop", "City". */
 export const PLACE_SOURCE_WORDS: Record<PlaceSuggestion["source"], string> = { shop: "Shop", city: "City", yard: "Yard", junction: "Junction", node: "Node" };
@@ -73,11 +86,11 @@ export function routeName(places: PlanPlaces): string {
 /** A typed spot this far or farther from the track it snapped to says how far. */
 const SHOW_SNAP_KM = 1;
 
-/** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
-export function placeHint(resolution: PlaceResolution, unit: DistanceUnit): { ok: boolean; text: string } {
+/** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF" (without the railroads when `withLines` is false), or the problem in words. */
+export function placeHint(resolution: PlaceResolution, unit: DistanceUnit, withLines = true): { ok: boolean; text: string } {
   if (!resolution.ok) return { ok: false, text: resolution.problem.message };
   const { place } = resolution;
-  const lines = place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
+  const lines = withLines && place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
   if (place.match.confidence === "snapped" && place.match.snapKm >= SHOW_SNAP_KM) return { ok: true, text: `Nearest track ${fmtDistance(place.match.snapKm, unit)} away${lines}` };
   return { ok: true, text: `On the network${lines}` };
 }

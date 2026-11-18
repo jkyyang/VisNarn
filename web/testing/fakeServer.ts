@@ -5,7 +5,10 @@
  * (names resolve per role, a plan's places resolve before it is routed, a route is derived on every read).
  */
 import { haversineKm, pathKm, round5, roundLngLat, type LngLat } from "../../shared/geo.ts";
-import type { ImportReport, NetworkNode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ResolvedPlace, RowIssue, ShopDraft, ShopId, ShopView } from "../../shared/places.ts";
+import {
+  SHOP_LINK_MAX_KM, type ImportReport, type NetworkNode, type PlaceRef, type PlaceResolution, type PlaceRole, type PlaceSuggestion, type ResolvedPlace, type RowIssue,
+  type ShopDraft, type ShopId, type ShopView,
+} from "../../shared/places.ts";
 import { placeKind, type Plan, type PlannedRoute, type PlanPlaces, type SavedRoute, type SavedRouteDraft, type SavedRouteId } from "../../shared/plans.ts";
 import type { Railroad } from "../../shared/railroads.ts";
 import type { Leg, Milestone, RoutePath } from "../../shared/route.ts";
@@ -197,11 +200,26 @@ function parseCsv(text: string): string[][] {
     .map((line) => [...line.matchAll(/\s*(?:"((?:[^"]|"")*)"|([^,]*))\s*(?:,|$)/g)].slice(0, -1).map((m) => (m[1] !== undefined ? m[1].replaceAll('""', '"') : (m[2] ?? "").trim())));
 }
 
-function shopView(state: FakeState, id: string, draft: ShopDraft): ShopView | { error: string } {
+function shopView(state: FakeState, id: string, draft: ShopDraft): ShopView | { error: string; field?: string } {
   const place = resolve(state, draft.location, "shop");
   if (!place.ok) return { error: place.problem.message };
   const location = place.place.fraId !== null ? { fraId: place.place.fraId, railroad: place.place.railroad } : { lon: place.place.lon, lat: place.place.lat };
-  return { id: id as ShopId, name: draft.name, code: draft.code, location, place: { ok: true, place: { ...place.place, label: draft.name, match: { ...place.place.match, method: "shop" } } } };
+  // As the server: a linked shop stays where it is and joins the network at its links' nodes.
+  const links: NetworkNode[] = [];
+  for (const [i, fraId] of draft.links.entries()) {
+    const node = NODES.find((n) => n.fraId === fraId);
+    if (!node) return { error: `The shop ${draft.name}: link ${i + 1} is gone from this network.`, field: "links" };
+    links.push({ ...node, km: haversineKm(place.place.lon, place.place.lat, node.lon, node.lat) });
+  }
+  const wired = links.length ? { fraId: null, railroad: null, railroads: [...new Set(links.flatMap((link) => link.railroads))], links } : {};
+  return {
+    id: id as ShopId,
+    name: draft.name,
+    code: draft.code,
+    location,
+    links: draft.links,
+    place: { ok: true, place: { ...place.place, ...wired, label: draft.name, match: { ...place.place.match, method: "shop" } } },
+  };
 }
 
 function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
@@ -213,7 +231,7 @@ function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
     const name = cells[h("name")] ?? "";
     const code = h("code") >= 0 ? (cells[h("code")] ?? "") : "";
     const location: PlaceRef = { kind: "coord", lon: Number(cells[h("lon")]), lat: Number(cells[h("lat")]) };
-    const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location });
+    const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location, links: [] });
     if ("error" in view) issues.push({ row, line: row + 2, message: view.error });
     else ready.push(view);
   });
@@ -240,7 +258,7 @@ export function createFakeState(options: { seed?: "example" | "empty" } = {}): F
   const state: FakeState = { shops: [], savedRoutes: [], lastPlan: null, down: false, nextId: 1 };
   if (options.seed === "empty") return state;
   for (const [i, shop] of EXAMPLE_SHOPS.entries()) {
-    const view = shopView(state, `shop-ex-${i + 1}`, { name: shop.name, code: shop.code, location: { kind: "coord", lon: shop.at[0], lat: shop.at[1] } });
+    const view = shopView(state, `shop-ex-${i + 1}`, { name: shop.name, code: shop.code, location: { kind: "coord", lon: shop.at[0], lat: shop.at[1] }, links: [] });
     if (!("error" in view)) state.shops.push(view);
   }
   return state;
@@ -259,6 +277,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
   if (route === "GET /api/places/suggest") return suggest(state, q.get("q") ?? "", (q.get("role") ?? "position") as PlaceRole);
   if (route === "POST /api/places/resolve") return resolve(state, anyBody.ref as PlaceRef, anyBody.role as PlaceRole);
   if (route === "GET /api/places/nearest") return nearestNode(Number(q.get("lon")), Number(q.get("lat")), Number(q.get("withinKm")));
+  if (route === "GET /api/places/way-in") return nearestNode(Number(q.get("lon")), Number(q.get("lat")), SHOP_LINK_MAX_KM);
 
   if (route === "GET /api/shops") return state.shops;
   if (route === "POST /api/shops/import") {
@@ -277,7 +296,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     const holder = draft.code ? state.shops.find((s) => s.code === draft.code && s.id !== id) : undefined;
     if (holder) throw new HttpError(409, "conflict", `The shop "${holder.name}" already has the code ${draft.code}. Give each shop its own code.`, "code");
     const view = shopView(state, id, draft);
-    if ("error" in view) throw new HttpError(400, "invalid", view.error, "location");
+    if ("error" in view) throw new HttpError(400, "invalid", view.error, view.field ?? "location");
     state.shops = existing ? state.shops.map((s) => (s.id === id ? view : s)) : [...state.shops, view];
     return view;
   }

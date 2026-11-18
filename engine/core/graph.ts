@@ -48,6 +48,15 @@ export interface Point {
   node?: number;
   /** Railroad index: only this railroad may serve the point ("Which line?" at a place where several meet). */
   only?: number;
+  /** A shop wired to the track: it joins the network only at these nodes, each over `km` of its own track. */
+  links?: { node: number; km: number }[];
+}
+
+/** Where a point meets the network: on line `line` at `node`, after `km` of the point's own track (0 unless it is linked). */
+export interface Entry {
+  line: number;
+  node: number;
+  km: number;
 }
 
 export class RailGraph {
@@ -200,21 +209,23 @@ export class RailGraph {
     return bd < NEAR_CITY_KM ? best : `${Math.round(bd)} km from ${best}`;
   }
 
-  /** Allowed lines serving a point → their entry node. Exact nodes use the lines present there. */
-  serving(p: Point, track: Track, maxKm = SNAP_KM): Map<number, number> {
-    const out = new Map<number, number>();
-    if (p.node !== undefined) {
-      for (let c = 0; c < LINES.length; c++) {
-        if (p.only !== undefined && p.only !== c) continue;
-        if (this.atMask[p.node] & track.allowedMask & (1 << c)) out.set(c, p.node);
-      }
-      return out;
-    }
+  /** Where a point meets the network on the allowed lines: at its links, at its own node, or where its coordinates snap. */
+  serving(p: Point, track: Track, maxKm = SNAP_KM): Entry[] {
+    if (p.links) return p.links.flatMap(({ node, km }) => this.linesAt(node, p.only, track).map((line) => ({ line, node, km })));
+    if (p.node !== undefined) return this.linesAt(p.node, p.only, track).map((line) => ({ line, node: p.node!, km: 0 }));
     // "Which line?" names the railroad on purpose, so it keeps the plain distance limit.
-    const near = p.only !== undefined ? this.nearestNode(p.lon, p.lat, 1 << p.only, maxKm, this.mainline(track)) : null;
-    if (p.only !== undefined) return near ? new Map([[p.only, near.node]]) : out;
-    for (const hit of this.servingNear(p.lon, p.lat, track, maxKm)) out.set(hit.line, hit.node);
-    return out;
+    if (p.only !== undefined) {
+      const near = this.nearestNode(p.lon, p.lat, 1 << p.only, maxKm, this.mainline(track));
+      return near ? [{ line: p.only, node: near.node, km: 0 }] : [];
+    }
+    return this.servingNear(p.lon, p.lat, track, maxKm).map(({ line, node }) => ({ line, node, km: 0 }));
+  }
+
+  /** The allowed lines with track at a node, or only line `only`. */
+  private linesAt(node: number, only: number | undefined, track: Track): number[] {
+    const lines: number[] = [];
+    for (let c = 0; c < LINES.length; c++) if ((only === undefined || only === c) && this.atMask[node] & track.allowedMask & (1 << c)) lines.push(c);
+    return lines;
   }
 
   /** Each allowed line whose mainline is within `maxKm` and within SERVE_SLACK_KM of the nearest allowed one. */
@@ -227,6 +238,34 @@ export class RailGraph {
     }
     const nearest = Math.min(...hits.map((h) => h.km));
     return hits.filter((h) => h.km <= nearest + SERVE_SLACK_KM);
+  }
+
+  /**
+   * Out of a yard along its own track: the nearest node, over yard segments of the `mask` lines within `maxKm`, that
+   * also touches a line's own track (a plant's lead where it meets the main line). A node on such track is its own exit.
+   */
+  yardExit(from: number, mask: number, maxKm: number): number | null {
+    const km = new Map([[from, 0]]);
+    const open = [from];
+    while (open.length) {
+      open.sort((x, y) => km.get(y)! - km.get(x)!);
+      const node = open.pop()!;
+      const yard: number[] = [];
+      for (let j = this.adjOffset[node]; j < this.adjOffset[node + 1]; j++) {
+        const e = this.adj[j];
+        if (!(this.edgeMask[e] & mask)) continue;
+        if (!this.edgeYard[e]) return node;
+        yard.push(e);
+      }
+      for (const e of yard) {
+        const next = this.other(e, node), d = km.get(node)! + this.edgeKm[e];
+        if (d <= maxKm && d < (km.get(next) ?? Infinity)) {
+          km.set(next, d);
+          open.push(next);
+        }
+      }
+    }
+    return null;
   }
 
   /**

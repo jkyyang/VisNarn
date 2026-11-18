@@ -36,7 +36,7 @@ describe("parseCsv (through the intake door)", () => {
 describe("readShops", () => {
   it("accepts name, code, lon, lat", () => {
     const byCoords = readShops(csv("name,code,lon,lat\nEXAMPLE North,EX-N,−92.27,34.77\nEXAMPLE bad,EX-B,abc,34\n,EX-C,-90,30\n"));
-    expect(byCoords.items[0]).toEqual({ name: "EXAMPLE North", code: "EX-N", location: { kind: "coord", lon: -92.27, lat: 34.77 } });
+    expect(byCoords.items[0]).toEqual({ name: "EXAMPLE North", code: "EX-N", location: { kind: "coord", lon: -92.27, lat: 34.77 }, links: [] });
     expect(byCoords.issues.map((i) => [i.row, i.line])).toEqual([
       [1, 3],
       [2, 4],

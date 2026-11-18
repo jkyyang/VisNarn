@@ -409,7 +409,8 @@ input[aria-invalid="true"] {
   gap: 4px;
   min-width: 0;
 }
-.field > label {
+.field > label,
+.field-label {
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -962,6 +963,38 @@ input[aria-invalid="true"] {
 /* The Location input sits in a plain block, so it sets its own width to fill the form. */
 .shop-form .place-field > input {
   width: 100%;
+}
+/* A shop's track links: a row per link, numbered as its pin on the map; the suggestion offered to a shop with none is faint. */
+.link-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--row);
+}
+.link-row.is-offer > :not(button) {
+  opacity: 0.6;
+}
+.link-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+.link-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+}
+.link-sub,
+.link-tag {
+  font-size: var(--text-sm);
+  color: var(--muted);
 }
 .actions {
   display: flex;

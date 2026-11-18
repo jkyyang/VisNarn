@@ -4,7 +4,7 @@
  * from ./query.ts or shared/api.ts.
  */
 import type { LngLat } from "../../shared/geo.ts";
-import type { ImportRequest, NetworkNode, PlaceRef, PlaceRole, ShopDraft, ShopId } from "../../shared/places.ts";
+import type { ImportRequest, NetworkNode, NodesOn, PlaceRef, PlaceRole, ShopDraft, ShopId } from "../../shared/places.ts";
 import type { Plan, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { read, useQuery, write } from "./query.ts";
 
@@ -26,13 +26,16 @@ export const usePlace = (ref: PlaceRef | null, role: PlaceRole) =>
 /** The routes for a plan, as far as its places resolve. Null asks nothing. */
 export const usePlannedRoute = (plan: Plan | null) => useQuery("POST /api/route", plan ? { body: plan } : null);
 
+/** Where a shop at this point most likely joins the network. Null asks nothing. */
+export const useWayIn = (point: LngLat | null) => useQuery("GET /api/places/way-in", point ? { query: { lon: point[0], lat: point[1] } } : null);
+
 /** The same paths drawn along the real track, in the same order. Null asks nothing. */
 export const useTrackPaths = (paths: LngLat[][] | null) => useQuery("POST /api/track", paths ? { body: { paths } } : null);
 
 // ---- one-off reads ----
 /** The node a map click snaps to, or null when no track is that close. */
-export const snapToNetwork = (lon: number, lat: number, withinKm: number): Promise<NetworkNode | null> =>
-  read("GET /api/places/nearest", { query: { lon, lat, withinKm } });
+export const snapToNetwork = (lon: number, lat: number, withinKm: number, on: NodesOn): Promise<NetworkNode | null> =>
+  read("GET /api/places/nearest", { query: { lon, lat, withinKm, on } });
 
 // ---- changes ----
 export const saveShop = (draft: ShopDraft, id: ShopId | null) =>

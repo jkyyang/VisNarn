@@ -38,9 +38,8 @@ export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, 
 /** A place found with the search box is shown this close: its yard and the lines through it. */
 export const FOUND_ZOOM = 12;
 
-/** On Shops: a spot just picked on the map, and the shop being edited. */
-export const SHOP_PICKED_ZOOM = 11;
-export const SHOP_EDITING_ZOOM = 9;
+/** On Shops: the shop being edited, close enough for its own track, which the Real tracks tiles carry from zoom 14. */
+export const SHOP_ZOOM = 15;
 
 /**
  * In Auto, the dark street map only from this zoom in. Further out the screen spans the twilight band,

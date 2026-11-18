@@ -176,6 +176,25 @@ describe("shopsScene", () => {
   it("pins only the shops that are on the network", () => {
     const scene = shopsScene(shops, null);
     expect(scene.kind === "shops" && scene.pins.map((p) => p.label)).toEqual(shops.map((s) => s.name));
+    expect(scene.kind === "shops" && scene.links).toEqual([]);
+  });
+
+  it("draws the edited shop's links only, numbered as in the form, a suggestion faint", () => {
+    const at: LngLat = [-82.3376, 42.9596];
+    const east: LngLat = [-82.33578, 42.95513], west: LngLat = [-82.3456, 42.9612];
+    const scene = shopsScene(shops, { label: "Sarnia", at, links: [{ at: east, suggested: false }, { at: west, suggested: true }] });
+    if (scene.kind !== "shops") throw new Error(`a ${scene.kind} scene`);
+    expect(scene.links).toEqual([
+      { path: [at, east], suggested: false },
+      { path: [at, west], suggested: true },
+    ]);
+    expect(scene.pins.filter((pin) => pin.kind === "stop").map((pin) => [pin.glyph, pin.position])).toEqual([
+      ["1", east],
+      ["2", west],
+      ["+", at],
+    ]);
+    const layer = sceneLayers(scene, colors, 15).find((l) => l && typeof l === "object" && "id" in l && l.id === LAYER.links);
+    expect(layer).toBeDefined();
   });
 });
 

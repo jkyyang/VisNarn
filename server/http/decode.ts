@@ -10,7 +10,9 @@
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { LngLat } from "../../shared/geo.ts";
-import { NEAREST_MAX_KM, SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
+import {
+  NEAREST_MAX_KM, SHOP_LINKS_MAX, SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource,
+} from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
@@ -167,6 +169,7 @@ const shopDraft: Decoder<ShopDraft> = (value, path) => ({
   name: field(value, path, "name", visible(text(SHOP_TEXT_MAX))),
   code: field(value, path, "code", nullable(visible(text(SHOP_TEXT_MAX)))),
   location: field(value, path, "location", placeRef),
+  links: field(value, path, "links", list(wholeNumber, SHOP_LINKS_MAX)) as FraId[],
 });
 
 /** CSV text can be large; the HTTP layer already caps the whole body. */
@@ -215,7 +218,9 @@ export const decodeQuery: { [R in RoutesWith<"query">]: (query: URLSearchParams)
     lon: queryNumber(query, "lon", -180, 180),
     lat: queryNumber(query, "lat", -90, 90),
     withinKm: queryNumber(query, "withinKm", 0, NEAREST_MAX_KM),
+    on: oneOf(["track", "mainline"] as const)(query.get("on"), "on"),
   }),
+  "GET /api/places/way-in": (query) => ({ lon: queryNumber(query, "lon", -180, 180), lat: queryNumber(query, "lat", -90, 90) }),
 };
 
 // Path parameters arrive as text. These turn them into the ids and numbers handlers work with.

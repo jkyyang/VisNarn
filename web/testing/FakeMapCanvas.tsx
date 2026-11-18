@@ -25,7 +25,8 @@ function describe(scene: MapScene | null | undefined): string {
     const places = scene.pins.filter((pin) => pin.kind !== "shop").length;
     return `Map: route ${scene.selected?.id ?? "none"}, ${scene.alternatives.length} grey, ${places} pins, ${scene.pills.length} pills`;
   }
-  return `Map: ${scene.pins.length} shops`;
+  const links = scene.links.map((link, i) => `link ${i + 1}${link.suggested ? " suggested" : ""}`);
+  return `Map: ${scene.pins.filter((pin) => pin.kind === "shop").length} shops${links.length ? `, ${links.join(", ")}` : ""}`;
 }
 
 export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCanvasProps): ReactElement {
@@ -45,7 +46,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
             Grey route {route.id}
           </button>
         ))}
-      {scene?.kind === "route" &&
+      {scene &&
         scene.pins.map((pin) =>
           pin.shopId ? (
             <button key={pin.shopId} type="button" onClick={() => pin.shopId && select?.({ kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position })}>

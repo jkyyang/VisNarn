@@ -4,10 +4,10 @@
  */
 import { round5, roundLngLat, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
-import { LINES, RAILROADS, type TrackIncluded } from "../shared/railroads.ts";
+import { LINES, RAILROADS, type Line, type TrackIncluded } from "../shared/railroads.ts";
 import type { Leg, Milestone, RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
 import { ALL_RAILROADS_MASK, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
-import { RouteError, Router, turnDeg, type Route, type RouteOptions } from "./core/router.ts";
+import { RouteError, Router, SPUR, turnDeg, type Route, type RouteOptions } from "./core/router.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 import { INTERCHANGE_PENALTY_KM, NEAR_DUPLICATE_SHARE, REVERSE_KM, SNAP_KM } from "./rules.ts";
 
@@ -16,7 +16,7 @@ export interface Trip {
   points: Waypoint[];
   /** Track beyond the Class I railroads the route may use. */
   include: TrackIncluded;
-  /** The route may leave a stop in either direction. */
+  /** The route may leave a stop in either direction. A shop with one link is always left that way, back out of its track. */
   turnAtStops: boolean;
 }
 
@@ -79,18 +79,26 @@ export function createCarRouter(network: RailNetwork): CarRouter {
   const graph = coreOf(network);
   const router = new Router(graph);
 
+  /** Null when the network has no node for the waypoint's FRA id or one of its links'. */
   const pointOf = (w: Waypoint): Point | null => {
-    const only = w.railroad ? RAILROADS.indexOf(w.railroad) : undefined;
-    if (w.fraId === null) return { label: w.label, lon: w.lon, lat: w.lat, only };
+    const point: Point = { label: w.label, lon: w.lon, lat: w.lat, only: w.railroad ? RAILROADS.indexOf(w.railroad) : undefined };
+    if (w.links?.length) {
+      const links = w.links.map(({ fraId, km }) => ({ node: graph.indexOf(fraId), km }));
+      return links.every((link) => link.node >= 0) ? { ...point, links } : null;
+    }
+    if (w.fraId === null) return point;
     const node = graph.indexOf(w.fraId);
-    return node < 0 ? null : { label: w.label, lon: w.lon, lat: w.lat, node, only };
+    return node < 0 ? null : { ...point, node };
   };
 
   /** Why no allowed railroad can serve this waypoint, or null when one can. */
   const notServed = (w: Waypoint, p: Point | null, at: number, track: Track): NoRoute | null => {
-    if (!p) return { kind: "not-served", at, message: `${nameOf(at)} (FRA node ${w.fraId}) is not in this network` };
-    if (graph.serving(p, track).size) return null;
-    const where = p.node !== undefined ? `track at ${nameOf(at)} (FRA node ${w.fraId})` : `mainline within ${SNAP_KM} km of ${nameOf(at)}`;
+    if (!p) {
+      const lost = w.links?.find((link) => graph.indexOf(link.fraId) < 0)?.fraId ?? w.fraId;
+      return { kind: "not-served", at, message: `${nameOf(at)} (FRA node ${lost}) is not in this network` };
+    }
+    if (graph.serving(p, track).length) return null;
+    const where = p.links ? `track at the links of ${nameOf(at)}` : p.node !== undefined ? `track at ${nameOf(at)} (FRA node ${w.fraId})` : `mainline within ${SNAP_KM} km of ${nameOf(at)}`;
     return { kind: "not-served", at, message: w.railroad ? `${w.railroad} has no ${where}` : `no allowed railroad has ${where}` };
   };
 
@@ -99,9 +107,10 @@ export function createCarRouter(network: RailNetwork): CarRouter {
    * on one piece, so direction (no turning back) blocks the route rather than the track.
    */
   const cutOff = (from: Point, to: Point, track: Track): "from" | "to" | null => {
-    const near = graph.piece(graph.serving(from, track).values(), track);
-    if ([...graph.serving(to, track).values()].some((node) => near.has[node])) return null;
-    return near.size < graph.piece(graph.serving(to, track).values(), track).size ? "from" : "to";
+    const nodes = (p: Point) => graph.serving(p, track).map((entry) => entry.node);
+    const near = graph.piece(nodes(from), track);
+    if (nodes(to).some((node) => near.has[node])) return null;
+    return near.size < graph.piece(nodes(to), track).size ? "from" : "to";
   };
 
   return {
@@ -132,7 +141,7 @@ export function createCarRouter(network: RailNetwork): CarRouter {
         const cut = cutOff(points[target - 1], points[target], track);
         return { ok: false, noRoute: { kind: "no-path", at: cut === "from" ? target - 1 : target, message } };
       }
-      return { ok: true, path: describe(graph, route, strategy, points.slice(1, -1), track) };
+      return { ok: true, path: describe(graph, route, strategy, points, track) };
     },
   };
 }
@@ -148,13 +157,14 @@ function bearingDeg(lon1: number, lat1: number, lon2: number, lat2: number): num
 
 /**
  * The core route as a RoutePath: indexes become FRA ids and coordinates here, once. Legs are split at
- * turn-backs so each has one direction, and the steps are read off in travel order.
+ * turn-backs and where the car backs out of a shop, so each has one direction, and the steps are read off
+ * in travel order. A linked point's own track is added here: the core route is network track only.
  */
 function describe(
   graph: RailGraph,
   route: Route,
   strategy: RouteStrategy,
-  stops: Point[],
+  points: Point[],
   track: Track,
 ): RoutePath {
   const subdivision = (edge: number) => (edge >= 0 ? graph.meta.subdivs[graph.edgeSubdiv[edge]] || null : null);
@@ -167,33 +177,52 @@ function describe(
     // Off yard track the rules allow a reversal only at a stop the plan lets the route turn at.
     track: !(graph.edgeYard[r.arrivedOn] && graph.edgeYard[r.leftOn]) ? "stop" : r.arrivedOn === r.leftOn ? "stub-end" : "yard",
   }));
+  const [start, destination] = [points[0], points[points.length - 1]];
+  const stops = points.slice(1, -1);
   const stopNodes = stops.map((p) => graph.serving(p, track));
   // A stop pinned to a railroad is reached on that railroad. Any other stop is reached at any line's entry node:
   // the router may arrive on one line and change railroad right there, at another line's entry node (2026-11-18).
+  // A linked stop is reached at the end of its own track, where the route leaves the network for it.
   const reaches = (stop: number, node: number, rr: number) =>
-    stops[stop].only !== undefined ? stopNodes[stop].get(rr) === node : [...stopNodes[stop].values()].includes(node);
+    !stops[stop].links && stopNodes[stop].some((entry) => entry.node === node && (stops[stop].only === undefined || entry.line === rr));
+  /** The point's own track to a node it is linked at. */
+  const ownKm = (p: Point, node: number) => p.links!.find((link) => link.node === node)!.km;
+  const at = (node: number): [number, number] => [graph.lon[node], graph.lat[node]];
 
-  const legs: (Leg & { nodes: number[] })[] = [];
+  const legs: (Omit<Leg, "path"> & { points: [number, number][] })[] = [];
   const steps: Milestone[] = [];
   let km = 0;
   let nextStop = 0;
   let nextTurnBack = 0;
+  let piece: (typeof legs)[number] | null = null;
   const visit = (node: number, rr: number) => {
     while (nextStop < stops.length && reaches(nextStop, node, rr)) {
       steps.push({ kind: "stop", kmFromStart: km, stop: nextStop, label: stops[nextStop].label });
       nextStop++;
     }
   };
+  const open = (railroad: Line, from: [number, number]) => {
+    const opened = { railroad, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], points: [from] };
+    steps.push({ kind: "leg", kmFromStart: km, leg: legs.length });
+    legs.push(opened);
+    return opened;
+  };
+  /** The car moves `length` km to a point: along the current piece of the route. */
+  const move = (to: [number, number], length: number) => {
+    piece!.points.push(to);
+    piece!.km += length;
+    km += length;
+  };
 
   for (const [legIndex, coreLeg] of route.legs.entries()) {
     const rr = LINES.indexOf(coreLeg.railroad);
     const railroad = coreLeg.railroad;
+    piece = null;
     // Each core leg is one line, so every leg after the first starts with an interchange.
     if (legIndex > 0) {
       steps.push({ kind: "interchange", kmFromStart: km, from: route.legs[legIndex - 1].railroad, to: railroad, at: graph.nearestPlace(graph.lon[coreLeg.nodes[0]], graph.lat[coreLeg.nodes[0]]) });
     }
     visit(coreLeg.nodes[0], rr);
-    let piece: (typeof legs)[number] | null = null;
     for (const [j, edge] of coreLeg.edges.entries()) {
       const u = coreLeg.nodes[j], v = coreLeg.nodes[j + 1];
       const reversal = route.reversals[nextTurnBack];
@@ -202,31 +231,44 @@ function describe(
         piece = null;
       }
       if (!piece) {
-        piece = { railroad, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], path: [], nodes: [u] };
-        steps.push({ kind: "leg", kmFromStart: km, leg: legs.length });
-        legs.push(piece);
+        // A linked start: the route begins on its own track.
+        const first = start.links && !legs.length;
+        piece = open(railroad, first ? [start.lon, start.lat] : at(u));
+        if (first) move(at(u), ownKm(start, u));
       }
-      piece.km += graph.edgeKm[edge];
-      piece.nodes.push(v);
-      const name = subdivision(edge);
-      if (name && piece.subdivisions[piece.subdivisions.length - 1] !== name) piece.subdivisions.push(name);
-      km += graph.edgeKm[edge];
+      if (edge === SPUR) {
+        // Into the next stop's own track and out again: back the same way at a stub, on at the other link of a through shop.
+        const stop = stops[nextStop];
+        move([stop.lon, stop.lat], ownKm(stop, u));
+        steps.push({ kind: "stop", kmFromStart: km, stop: nextStop, label: stop.label });
+        if (u === v) {
+          steps.push({ kind: "back-out", kmFromStart: km, stop: nextStop });
+          piece = open(railroad, [stop.lon, stop.lat]);
+        }
+        nextStop++;
+        move(at(v), ownKm(stop, v));
+      } else {
+        move(at(v), graph.edgeKm[edge]);
+        const name = subdivision(edge);
+        if (name && piece!.subdivisions[piece!.subdivisions.length - 1] !== name) piece!.subdivisions.push(name);
+      }
       visit(v, rr);
     }
   }
+  // The route ends on the destination's own track.
+  if (destination.links && piece) move([destination.lon, destination.lat], ownKm(destination, route.legs.at(-1)!.nodes.at(-1)!));
   for (; nextStop < stops.length; nextStop++) steps.push({ kind: "stop", kmFromStart: km, stop: nextStop, label: stops[nextStop].label });
   steps.push({ kind: "destination", kmFromStart: km });
   steps.sort((x, y) => x.kmFromStart - y.kmFromStart);
 
-  const outLegs: Leg[] = legs.map(({ nodes, ...leg }) => {
-    const x0 = graph.lon[nodes[0]], y0 = graph.lat[nodes[0]];
-    const x1 = graph.lon[nodes[nodes.length - 1]], y1 = graph.lat[nodes[nodes.length - 1]];
+  const outLegs: Leg[] = legs.map(({ points: path, ...leg }) => {
+    const [x0, y0] = path[0], [x1, y1] = path[path.length - 1];
     return {
       ...leg,
       from: graph.nearestPlace(x0, y0),
       to: graph.nearestPlace(x1, y1),
       headingDeg: Math.round(bearingDeg(x0, y0, x1, y1)),
-      path: nodes.map((n) => roundLngLat(graph.lon[n], graph.lat[n])),
+      path: path.map(([x, y]) => roundLngLat(x, y)),
     };
   });
 
@@ -292,11 +334,13 @@ function pointsOf(path: RoutePath): LngLat[] {
 
 /**
  * Identity of a trip for caching: equal keys route alike. Built from the network version, each
- * waypoint's FRA id (or rounded coordinates) and railroad, the track included and turning at stops. Labels are not in it.
+ * waypoint's FRA id (or rounded coordinates), railroad and links, the track included and turning at stops. Labels are not in it.
  */
 export function tripKey(networkVersion: string, trip: Trip): string {
-  const place = (w: Waypoint): (number | string | null)[] =>
-    w.fraId !== null ? [w.fraId as FraId, w.railroad] : [round5(w.lon), round5(w.lat), w.railroad];
+  const place = (w: Waypoint): unknown[] => {
+    const at = w.fraId !== null ? [w.fraId as FraId, w.railroad] : [round5(w.lon), round5(w.lat), w.railroad];
+    return w.links?.length ? [...at, w.links.map((link) => [link.fraId, link.km])] : at;
+  };
   const { allowedMask, passenger } = trackOf(trip.include);
   return JSON.stringify([networkVersion, trip.points.map(place), allowedMask, passenger, trip.turnAtStops]);
 }

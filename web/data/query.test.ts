@@ -126,7 +126,7 @@ describe("callApi", () => {
   it("a non-2xx answer becomes the AppError the server raised; no answer becomes 'internal'", async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ error: { kind: "conflict", message: "Another shop already has the code X.", field: "code" } }), { status: 409 })) as typeof fetch;
-    const error = await callApi("", "POST /api/shops", { body: { name: "n", code: "X", location: { kind: "text", text: "t" } } }).catch((e: unknown) => e);
+    const error = await callApi("", "POST /api/shops", { body: { name: "n", code: "X", location: { kind: "text", text: "t" }, links: [] } }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({ kind: "conflict", field: "code", message: "Another shop already has the code X." });
 

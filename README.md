@@ -49,4 +49,4 @@ OpenFreeMap vector styles (OpenStreetMap data) for the map and the Real tracks o
 satellite, NASA Black Marble for night lights.
 
 ## Routing
-Routes follow track distance and the carriers you choose. A typed coordinate snaps to nearby mainline.
+Routes follow track distance and the carriers you choose. A typed coordinate snaps to nearby mainline; a shop with track links joins the network at its links.

@@ -341,3 +341,92 @@ describe("combine / tripKey", () => {
   });
 });
 
+
+describe("a shop wired to the track", () => {
+  // Procor's Sarnia plant: its lead joins the CN main line at 628925 (east), and track runs off west to 628886.
+  const EAST = 628925 as FraId, WEST = 628886 as FraId, IN_PLANT = 628915 as FraId;
+  const at = (label: string, lon: number, lat: number): Waypoint => ({ label, lon, lat, fraId: null, railroad: null });
+  const sarnia = () => at("Sarnia plant", -82.3376, 42.9596);
+  const oakville = () => at("Oakville plant", -79.7195, 43.4169);
+  const west = () => at("West of Sarnia", -82.4249, 42.9709);
+  const wired = (w: Waypoint, ...links: FraId[]): Waypoint => ({
+    ...w,
+    links: links.map((fraId) => {
+      const node = network.node(fraId)!;
+      return { fraId, km: haversineKm(w.lon, w.lat, node.lon, node.lat) };
+    }),
+  });
+  const stub = () => wired(sarnia(), EAST);
+  const through = () => wired(sarnia(), EAST, WEST);
+  const pathOf = (path: RoutePath) => path.legs.flatMap((leg) => leg.path);
+  const nodeAt = (fraId: FraId): LngLat => [network.node(fraId)!.lon, network.node(fraId)!.lat];
+  const indexIn = (path: RoutePath, fraId: FraId) => pathOf(path).findIndex(([x, y]) => x === nodeAt(fraId)[0] && y === nodeAt(fraId)[1]);
+
+  it("arrives over its link: the route ends at the shop right after the node it joins", () => {
+    const { path } = routed(trip(oakville(), stub()));
+    expect(path.km).toBeCloseTo(237.02, 1);
+    expect(path.railroads).toEqual(["CN"]);
+    expect(path.turnBacks).toEqual([]);
+    expect(pathOf(path).slice(-2)).toEqual([nodeAt(EAST), [-82.3376, 42.9596]]);
+  });
+
+  it("one link is a stub: the car backs out the way it came in, with no turn-back, under every strategy", () => {
+    for (const turnAtStops of [false, true]) {
+      for (const strategy of ROUTE_STRATEGIES) {
+        const { path } = routed({ ...trip(oakville(), oakville(), [stub()]), turnAtStops }, strategy);
+        expect(path.km, strategy).toBeCloseTo(474.03, 1);
+        expect(path.turnBacks, strategy).toEqual([]);
+        const [stop, out] = path.steps.filter((step) => step.kind === "stop" || step.kind === "back-out");
+        expect(stop).toMatchObject({ kind: "stop", stop: 0 });
+        expect(stop.kmFromStart).toBeCloseTo(237.02, 1);
+        expect(out).toMatchObject({ kind: "back-out", stop: 0, kmFromStart: stop.kmFromStart });
+      }
+    }
+  });
+
+  it("two links make a through track: in at one, out at the other, the same either way", () => {
+    const { path } = routed(trip(oakville(), west(), [through()]));
+    expect(path.km).toBeCloseTo(243.95, 1);
+    expect(indexIn(path, EAST)).toBeGreaterThan(0);
+    expect(indexIn(path, WEST)).toBeGreaterThan(indexIn(path, EAST));
+    expect(path.steps.some((step) => step.kind === "back-out")).toBe(false);
+    expect(routed(trip(west(), oakville(), [through()])).path.km).toBeCloseTo(path.km, 1);
+  });
+
+  it("a through shop is left back the way the car came only at a stop the route may turn at", () => {
+    expect(routed(trip(oakville(), oakville(), [through()])).path.km).toBeCloseTo(475.07, 1);
+    const turning = routed({ ...trip(oakville(), oakville(), [through()]), turnAtStops: true }).path;
+    expect(turning.km).toBeCloseTo(474.03, 1);
+    expect(turning.steps.some((step) => step.kind === "back-out")).toBe(true);
+  });
+
+  it("a link inside the plant reaches the shop only by turning back in the yard: why the suggestion walks to the exit", () => {
+    const { path } = routed(trip(oakville(), wired(sarnia(), IN_PLANT)));
+    expect(path.turnBacks.map((turnBack) => turnBack.at.fraId)).toEqual([628898]);
+  });
+
+  it("has its links only in the legs that start or end at it: an earlier leg and a later trip route as without it", () => {
+    const plain = routed(trip(oakville(), west())).path;
+    const before = routed(trip(oakville(), through(), [west()])).path;
+    expect(before.steps.find((step) => step.kind === "stop")?.kmFromStart).toBeCloseTo(plain.km, 3);
+    expect(routed(trip(oakville(), west())).path).toEqual(plain);
+  });
+
+  it("the same shop twice is an empty route, and as two stops in a row it is backed out of twice on one railroad", () => {
+    expect(routed(trip(stub(), stub())).path.legs).toEqual([]);
+    const { path } = routed(trip(oakville(), oakville(), [stub(), stub()]));
+    expect(path.interchanges).toBe(0);
+    expect(path.steps.filter((step) => step.kind === "stop" || step.kind === "back-out").map((step) => step.kind)).toEqual(["stop", "back-out", "stop", "back-out"]);
+  });
+
+  it("a link to a node this network lacks is not served, by its FRA id", () => {
+    const lost = { ...sarnia(), links: [{ fraId: 1 as FraId, km: 1 }] };
+    expect(router.route(trip(oakville(), lost), "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: 1, message: expect.stringContaining("FRA node 1") } });
+  });
+
+  it("tripKey: the same for a shop without links, another for other links or another link length", () => {
+    const key = (w: Waypoint) => tripKey("v1", trip(oakville(), w));
+    expect(key({ ...sarnia(), links: [] })).toBe(key(sarnia()));
+    expect(new Set([key(sarnia()), key(stub()), key(through()), key({ ...stub(), links: [{ ...stub().links![0], km: 2 }] })]).size).toBe(4);
+  });
+});

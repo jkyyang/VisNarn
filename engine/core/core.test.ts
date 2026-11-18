@@ -27,11 +27,11 @@ describe("RailGraph", () => {
   it("lets a point be served by one chosen railroad only", () => {
     const hit = graph.nearestNode(-97.34, 31.1)!;
     const all = graph.serving(nodePoint(graph, hit.node), { allowedMask: ALL_RAILROADS_MASK, passenger: true });
-    const [first] = [...all.keys()];
-    expect([...graph.serving({ ...nodePoint(graph, hit.node), only: first }, { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()]).toEqual([first]);
+    const [first] = all.map((entry) => entry.line);
+    expect(graph.serving({ ...nodePoint(graph, hit.node), only: first }, { allowedMask: ALL_RAILROADS_MASK, passenger: true }).map((entry) => entry.line)).toEqual([first]);
   });
   it("finds who serves Austin", () => {
-    expect([...graph.serving(at("Austin, TX"), { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()].map((i) => RAILROADS[i])).toEqual(["UP"]);
+    expect(graph.serving(at("Austin, TX"), { allowedMask: ALL_RAILROADS_MASK, passenger: true }).map((entry) => RAILROADS[entry.line])).toEqual(["UP"]);
   });
 });
 

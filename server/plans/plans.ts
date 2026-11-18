@@ -72,7 +72,8 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
 }
 
 function waypoint(place: ResolvedPlace): Waypoint {
-  return { label: place.label, lon: place.lon, lat: place.lat, fraId: place.fraId, railroad: place.railroad };
+  const links = place.links?.map(({ fraId, km }) => ({ fraId, km }));
+  return { label: place.label, lon: place.lon, lat: place.lat, fraId: place.fraId, railroad: place.railroad, ...(links && { links }) };
 }
 
 /** Where the plan breaks, in one short line about that place. */

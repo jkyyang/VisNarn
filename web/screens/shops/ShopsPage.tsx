@@ -1,15 +1,21 @@
 /** The Shops screen's parts. Views only. */
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
-import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceSuggestion, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
+import type { LngLat } from "../../../shared/geo.ts";
+import {
+  SHOP_LINKS_MAX, type ImportReport, type ImportRequest, type NetworkNode, type PlaceRef, type PlaceSuggestion, type ResolvedPlace, type RowIssue, type ShopDraft,
+  type ShopView,
+} from "../../../shared/places.ts";
 import { fresh, usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
+import { fmtDistance } from "../../format.ts";
+import { PlacePin, RailroadChips } from "../../ui/badges.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { readFileText } from "../../ui/files.ts";
 import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
-import { Crosshair, Search } from "../../ui/icons.tsx";
+import { Cross, Crosshair, Search } from "../../ui/icons.tsx";
 import { lineColor } from "../../theme.ts";
 import { PHONE_QUERY } from "../../map/config.ts";
 import type { DistanceUnit } from "../../units.ts";
-import { clickToSet, errorText, NO_TRACK_NEAR, placeHint, plural } from "../../words.ts";
+import { clickToSet, errorText, linksReadout, linkText, NO_TRACK_NEAR, placeHint, plural } from "../../words.ts";
 
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
@@ -114,21 +120,27 @@ function locationInput(shop: ShopView | null): { text: string; ref: PlaceRef | n
 
 /**
  * Name · Shop code · Location ("lon, lat", a city or an FRA node, or "Pick on map") with the live
- * hint ("On the network · BNSF, UP") · Cancel / Save shop / Delete.
+ * hint ("On the network · BNSF, UP") · the track links (`children`) · Cancel / Save shop / Delete.
  *
  * A self-contained input widget: it keeps its own draft and asks the server what the typed
- * location means as the person types (usePlace). Save is off until the place is on the network.
+ * location means as the person types (usePlace), and says where that is (`onPlace`). Save is off
+ * until the place is on the network.
  */
 export function ShopForm(props: {
   shop: ShopView | null;
   unit: DistanceUnit;
-  /** A node just picked on the map, to take over as the location. */
-  picked: NetworkNode | null;
+  /** A spot just picked on the map, to take over as the location. */
+  picked: LngLat | null;
   picking: boolean;
+  /** The shop joins the network at its links: they name their railroads, so the location's hint does not. */
+  linked: boolean;
   onTogglePick: () => void;
-  onSave: (draft: ShopDraft) => Promise<unknown>;
+  /** Where the location resolves, each time it does. */
+  onPlace: (place: ResolvedPlace | null) => void;
+  onSave: (draft: Omit<ShopDraft, "links">) => Promise<unknown>;
   onDelete: (() => Promise<unknown>) | null;
   onCancel: () => void;
+  children?: ReactNode;
 }): ReactElement {
   const initial = locationInput(props.shop);
   const [name, setName] = useState(props.shop?.name ?? "");
@@ -155,8 +167,9 @@ export function ShopForm(props: {
 
   useEffect(() => {
     if (!props.picked) return;
-    setLocText(`${props.picked.near} · FRA node ${props.picked.fraId}`);
-    setLocRef({ kind: "node", fraId: props.picked.fraId, railroad: null });
+    const [lon, lat] = props.picked;
+    setLocText(`${lon}, ${lat}`);
+    setLocRef({ kind: "coord", lon, lat });
   }, [props.picked]);
 
   // The server reads the text as "lon, lat", a city or "FRA 358070".
@@ -189,7 +202,10 @@ export function ShopForm(props: {
     }
   };
   const resolved = fresh(resolution);
-  const hint = resolution.status === "ready" ? placeHint(resolution.data, props.unit) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
+  useEffect(() => {
+    if (resolved) props.onPlace(resolved.ok ? resolved.place : null);
+  }, [resolved]);
+  const hint = resolution.status === "ready" ? placeHint(resolution.data, props.unit, !props.linked) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
   const canSave = !!name.trim() && !!resolved?.ok && !busy;
 
   const submit = async (event: FormEvent) => {
@@ -263,6 +279,7 @@ export function ShopForm(props: {
             {props.picking ? "Click the map…" : "Pick on map"}
           </button>
         </div>
+        {props.children}
         {error && (
           <p className="error" role="alert">
             {error}
@@ -427,8 +444,86 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
   );
 }
 
-/** Over the map while picking a shop's location: "Click the map to set the shop", or "No track near there", and Cancel (Esc does the same). */
-export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
+/**
+ * Track links: a row per link (its number as on the map, the node it joins, how far, the railroads there,
+ * ⌖ to move it, × to remove it), the suggestion offered to a shop with none, what the wiring means for a
+ * car, and Add link.
+ */
+export function ShopLinks(props: {
+  /** The nodes the shop joins, each `km` from it. */
+  links: NetworkNode[];
+  /** The suggestion for a shop with no links, shown faint: Use makes it link 1. */
+  offer: NetworkNode | null;
+  atNode: boolean;
+  unit: DistanceUnit;
+  /** The link being set on the map. */
+  picking: number | null;
+  onPick: (link: number) => void;
+  onUse: () => void;
+  onRemove: (link: number) => void;
+}): ReactElement {
+  const id = useId();
+  const row = (node: NetworkNode, n: number, buttons: ReactNode, offered = false) => (
+    <li key={n} className={`link-row${offered ? " is-offer" : ""}`}>
+      <PlacePin kind="stop" n={n} />
+      <span className="link-text">
+        {linkText(node)}
+        <span className="link-sub">
+          {fmtDistance(node.km, props.unit, 1)}
+          <RailroadChips railroads={node.railroads} />
+        </span>
+      </span>
+      {buttons}
+    </li>
+  );
+  return (
+    <div className="field" role="group" aria-labelledby={id}>
+      <span id={id} className="field-label">
+        Track links
+      </span>
+      {(props.links.length > 0 || props.offer) && (
+        <ul className="link-rows">
+          {props.links.map((node, i) =>
+            row(
+              node,
+              i + 1,
+              <>
+                <button type="button" className="icon-btn pick-btn" aria-label={`Move link ${i + 1}`} aria-pressed={props.picking === i} onClick={() => props.onPick(i)}>
+                  <Crosshair />
+                </button>
+                <button type="button" className="icon-btn" aria-label={`Remove link ${i + 1}`} onClick={() => props.onRemove(i)}>
+                  <Cross />
+                </button>
+              </>,
+            ),
+          )}
+          {props.offer &&
+            row(
+              props.offer,
+              1,
+              <>
+                <span className="link-tag">Suggested</span>
+                <button type="button" className="link-btn" onClick={props.onUse}>
+                  Use
+                </button>
+              </>,
+              true,
+            )}
+        </ul>
+      )}
+      <span className="hint">{linksReadout(props.links.length, props.atNode)}</span>
+      {props.links.length < SHOP_LINKS_MAX && (
+        <button type="button" className="btn" aria-pressed={props.picking === props.links.length} onClick={() => props.onPick(props.links.length)}>
+          <Crosshair />
+          {props.picking === props.links.length ? "Click the map…" : "Add link"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Over the map while picking: "Click the map to set the shop" or "… link 2", or "No track near there", and Cancel (Esc does the same). */
+export function PickPrompt(props: { what: string; missed: boolean; onCancel: () => void }): ReactElement {
   // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be clicked.
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -436,7 +531,7 @@ export function PickPrompt(props: { missed: boolean; onCancel: () => void }): Re
   return (
     <div className="glass map-card pick-prompt" role="status">
       <Crosshair />
-      <span>{props.missed ? NO_TRACK_NEAR : clickToSet("the shop")}</span>
+      <span>{props.missed ? NO_TRACK_NEAR : clickToSet(props.what)}</span>
       <button type="button" className="link-btn" onClick={props.onCancel}>
         Cancel
       </button>

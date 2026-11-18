@@ -1,7 +1,7 @@
 /** The EXAMPLE shops the API, screen and browser tests start from (codes EX-NLR-01 …), each located by coordinates. */
 import type { ShopDraft } from "../shared/places.ts";
 
-const shop = (name: string, code: string, lon: number, lat: number): ShopDraft => ({ name, code, location: { kind: "coord", lon, lat } });
+const shop = (name: string, code: string, lon: number, lat: number): ShopDraft => ({ name, code, location: { kind: "coord", lon, lat }, links: [] });
 
 export const EXAMPLE_SHOPS: ShopDraft[] = [
   shop("North Little Rock, AR", "EX-NLR-01", -92.27, 34.77),

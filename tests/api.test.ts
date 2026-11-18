@@ -102,14 +102,15 @@ describe("server", () => {
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/places/suggest": () => s.api("GET /api/places/suggest", { query: { q: "temple", role: "position" } }),
         "POST /api/places/resolve": () => s.api("POST /api/places/resolve", { body: { ref: text("Temple, TX"), role: "position" } }),
-        "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } }),
+        "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5, on: "track" } }),
+        "GET /api/places/way-in": () => s.api("GET /api/places/way-in", { query: { lon: -97.34, lat: 31.09 } }),
         "GET /api/shops": () => s.api("GET /api/shops"),
         "POST /api/shops": async () => {
-          const shop = await s.api("POST /api/shops", { body: { name: "EXAMPLE smoke", code: "EX-SMOKE", location: text("Temple, TX") } });
+          const shop = await s.api("POST /api/shops", { body: { name: "EXAMPLE smoke", code: "EX-SMOKE", location: text("Temple, TX"), links: [] } });
           shopId = shop.id;
           return shop;
         },
-        "PUT /api/shops/:shopId": () => s.api("PUT /api/shops/:shopId", { params: { shopId }, body: { name: "EXAMPLE smoke 2", code: "EX-SMOKE", location: text("Waco, TX") } }),
+        "PUT /api/shops/:shopId": () => s.api("PUT /api/shops/:shopId", { params: { shopId }, body: { name: "EXAMPLE smoke 2", code: "EX-SMOKE", location: text("Waco, TX"), links: [] } }),
         "DELETE /api/shops/:shopId": () => s.api("DELETE /api/shops/:shopId", { params: { shopId } }),
         "POST /api/shops/import": () => s.api("POST /api/shops/import", { body: { source: { kind: "csv", fileName: "EXAMPLE shops.csv", text: "name,lon,lat\nEXAMPLE x,-97.34,31.09\n" }, commit: false } }),
         "POST /api/route": () => s.api("POST /api/route", { body: draft.plan }),
@@ -187,9 +188,9 @@ describe("Route screen: plan a route", () => {
     const fra = await t.api("POST /api/places/resolve", { body: { ref: text("FRA 358070"), role: "position" } });
     expect(fra).toMatchObject({ ok: true, place: { fraId: 358070, label: "Temple, TX" } });
 
-    expect(await t.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } })).toMatchObject({ fraId: 358070, near: "Temple, TX", railroads: ["BNSF", "UP"] });
-    expect(await t.api("GET /api/places/nearest", { query: { lon: -90, lat: 25, withinKm: 5 } })).toBeNull();
-    await expect(t.api("GET /api/places/nearest", { query: { lon: -90, lat: 95, withinKm: 5 } })).rejects.toMatchObject({ kind: "invalid", field: "lat" });
+    expect(await t.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5, on: "track" } })).toMatchObject({ fraId: 358070, near: "Temple, TX", railroads: ["BNSF", "UP"] });
+    expect(await t.api("GET /api/places/nearest", { query: { lon: -90, lat: 25, withinKm: 5, on: "track" } })).toBeNull();
+    await expect(t.api("GET /api/places/nearest", { query: { lon: -90, lat: 95, withinKm: 5, on: "track" } })).rejects.toMatchObject({ kind: "invalid", field: "lat" });
   });
 });
 
@@ -221,10 +222,10 @@ describe("Shops screen", () => {
   });
 
   it("POST, PUT, DELETE /api/shops; 'On lines' comes from the network", async () => {
-    const created = await s.api("POST /api/shops", { body: { name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { kind: "text", text: "FRA 358070" } } });
-    expect(created).toMatchObject({ name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { fraId: 358070, railroad: null } });
+    const created = await s.api("POST /api/shops", { body: { name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { kind: "text", text: "FRA 358070" }, links: [] } });
+    expect(created).toMatchObject({ name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { fraId: 358070, railroad: null }, links: [] });
     expect(created.place).toMatchObject({ ok: true, place: { railroads: ["BNSF", "UP"] } });
-    const moved = await s.api("PUT /api/shops/:shopId", { params: { shopId: created.id }, body: { name: "EXAMPLE Waco shop", code: "EX-TPL-01", location: { kind: "text", text: "Waco, TX" } } });
+    const moved = await s.api("PUT /api/shops/:shopId", { params: { shopId: created.id }, body: { name: "EXAMPLE Waco shop", code: "EX-TPL-01", location: { kind: "text", text: "Waco, TX" }, links: [] } });
     expect(moved).toMatchObject({ id: created.id, name: "EXAMPLE Waco shop", location: { lon: expect.any(Number), lat: expect.any(Number) } });
     expect((await s.api("GET /api/shops")).find((shop) => shop.id === created.id)?.name).toBe("EXAMPLE Waco shop");
     expect(await s.api("DELETE /api/shops/:shopId", { params: { shopId: created.id } })).toBeNull();
@@ -233,13 +234,13 @@ describe("Shops screen", () => {
   });
 
   it("a shop off the network is refused with the field at fault; a duplicate code is a conflict", async () => {
-    await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE at sea", code: null, location: { kind: "coord", lon: -90, lat: 25 } } })).rejects.toMatchObject({
+    await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE at sea", code: null, location: { kind: "coord", lon: -90, lat: 25 }, links: [] } })).rejects.toMatchObject({
       kind: "invalid",
       field: "location",
       message: "No track near -90, 25.",
     });
-    await expect(s.api("POST /api/shops", { body: { name: "", code: null, location: { kind: "text", text: "Waco, TX" } } })).rejects.toMatchObject({ kind: "invalid", field: "name" });
-    await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE copy", code: "ex-nlr-01", location: { kind: "text", text: "Waco, TX" } } })).rejects.toMatchObject({
+    await expect(s.api("POST /api/shops", { body: { name: "", code: null, location: { kind: "text", text: "Waco, TX" }, links: [] } })).rejects.toMatchObject({ kind: "invalid", field: "name" });
+    await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE copy", code: "ex-nlr-01", location: { kind: "text", text: "Waco, TX" }, links: [] } })).rejects.toMatchObject({
       kind: "conflict",
       field: "code",
     });
@@ -263,16 +264,45 @@ describe("Shops screen", () => {
   it("adding the missing shop turns an incomplete plan into a routed one", async () => {
     const missing = await s.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NEW-01")) });
     expect(missing).toMatchObject({ outcome: "incomplete", places: [{ ok: true }, { ok: false }] });
-    await s.api("POST /api/shops", { body: { name: "EXAMPLE new shop", code: "EX-NEW-01", location: text("Dallas, TX") } });
+    await s.api("POST /api/shops", { body: { name: "EXAMPLE new shop", code: "EX-NEW-01", location: text("Dallas, TX"), links: [] } });
     const found = routed(await s.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NEW-01")) }));
     expect(found.places[1]).toMatchObject({ ok: true, place: { label: "EXAMPLE new shop" } });
+  });
+});
+
+describe("Shops screen: a shop wired to the track", () => {
+  let s: TestApp;
+  beforeAll(async () => {
+    s = await startTestApp({ shops: [] });
+  });
+  afterAll(async () => {
+    await s.close();
+  });
+
+  it("way-in names where the plant's track meets the main line; a route to the shop arrives over its link, and moves with it", async () => {
+    const sarnia = { kind: "coord", lon: -82.3376, lat: 42.9596 } as const;
+    expect(await s.api("GET /api/places/way-in", { query: { lon: sarnia.lon, lat: sarnia.lat } })).toMatchObject({ fraId: 628925, railroads: ["CN", "CPKC"] });
+    // A click beside the yard picks the main line's own node there for a link, where a plain click takes the yard track's.
+    const click = { lon: -82.3452, lat: 42.9556, withinKm: 5 };
+    expect(await s.api("GET /api/places/nearest", { query: { ...click, on: "mainline" } })).toMatchObject({ fraId: 628886, railroads: ["CN", "CPKC"] });
+    expect(await s.api("GET /api/places/nearest", { query: { ...click, on: "track" } })).toMatchObject({ fraId: 628887, yard: true });
+    const body = { name: "EXAMPLE Sarnia plant", code: "EX-SAR", location: sarnia, links: [628925 as FraId] };
+    const shop = await s.api("POST /api/shops", { body });
+    const toShop = plan({ kind: "coord", lon: -79.7195, lat: 43.4169 }, { kind: "shop", shopId: shop.id });
+    const east = routed(await s.api("POST /api/route", { body: toShop })).routes[0];
+    expect(east.km).toBeCloseTo(237.02, 1);
+    expect(east.legs.at(-1)!.path.slice(-2)).toEqual([[-82.33578, 42.95513], [sarnia.lon, sarnia.lat]]);
+    await s.api("PUT /api/shops/:shopId", { params: { shopId: shop.id }, body: { ...body, links: [628886 as FraId] } });
+    const west = routed(await s.api("POST /api/route", { body: toShop })).routes[0];
+    expect(west.km).not.toBeCloseTo(east.km, 1);
+    expect(west.legs.at(-1)!.path.at(-1)).toEqual([sarnia.lon, sarnia.lat]);
   });
 });
 
 describe("restart", () => {
   it("a new server on the same data folder has the shops and the saved routes; routes are worked out again", async () => {
     const first = await startTestApp({ shops: [] });
-    const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
+    const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070"), links: [] } });
     const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { places: [text("Taylor, TX"), { kind: "shop", shopId: shop.id }], include: DEFAULT_INCLUDE, turnAtStops: false }, option: null, routeString: "BNSF" } });
     await first.close({ keepData: true });
 

@@ -3,7 +3,10 @@
  * and deleted here, and imported from a CSV whose bad rows are listed instead of saved.
  * The EXAMPLE shops are left as they were added (./app.ts), for the other screens' tests.
  */
-import { expectMapCanvases, keepScreenshot, test, expect } from "./app.ts";
+import type { Page } from "@playwright/test";
+import type { ShopView } from "../../shared/places.ts";
+import { SHOP_ZOOM } from "../../web/map/config.ts";
+import { expectMapCanvases, freeMapCentre, keepScreenshot, planRoute, test, expect } from "./app.ts";
 import { EXAMPLE_SHOPS } from "../fixtures.ts";
 
 const EXAMPLES = EXAMPLE_SHOPS.length;
@@ -33,7 +36,8 @@ test.describe("Shops", () => {
     await expect(form).toContainText("No track near -140, 70.");
     await expect(save).toBeDisabled();
     await location.fill("-97.34, 31.10");
-    await expect(form).toContainText(/On the network · BNSF/);
+    await expect(form).toContainText("On the network");
+    await expect(form.getByRole("group", { name: "Track links" })).toContainText("One link: cars leave the way they came in.");
     await expect(save).toBeEnabled();
     await save.click();
     await expect(page).toHaveURL(/\/shops$/);
@@ -98,4 +102,50 @@ test.describe("Shops", () => {
     }
     await expect(table.locator(".shop-name")).toHaveCount(before);
   });
+
+  test("a shop wired to its own track: Sarnia's suggestion follows the plant's lead to the main line, a route arrives over it, a second link makes it through", async ({ page }) => {
+    // Procor's Sarnia plant: its yard fans out north of the CN main line and joins it at the east end (FRA 628925).
+    const at = { lon: -82.3376, lat: 42.9596 };
+    const made = await page.request.post("/api/shops", { data: { name: "Sarnia test plant", code: "TEST-SAR", location: { kind: "coord", ...at }, links: [] } });
+    const shop = (await made.json()) as ShopView;
+    await page.goto(`/shops/${shop.id}`);
+    const links = page.getByRole("group", { name: "Track links" });
+    await expect(links).toContainText("Sarnia · FRA 628925");
+    await expect(links).toContainText("0.5 km");
+    await expect(links).toContainText("Suggested");
+    await expect(links).toContainText("No links: joins the nearest mainline.");
+    await links.getByRole("button", { name: "Use" }).click();
+    await expect(links).toContainText("One link: cars leave the way they came in.");
+    await page.getByRole("region", { name: "Edit shop" }).getByRole("button", { name: "Save shop" }).click();
+    await expect(page).toHaveURL(/\/shops$/);
+
+    await page.getByRole("navigation", { name: "Mode" }).getByRole("link", { name: "Route" }).click();
+    const planned = await planRoute(page, "-79.7195, 43.4169", "TEST-SAR");
+    expect(planned.outcome).toBe("routed");
+    const end = planned.outcome === "routed" ? planned.routes[0].legs.at(-1)!.path.slice(-2) : [];
+    expect(end).toEqual([[-82.33578, 42.95513], [at.lon, at.lat]]);
+
+    // The west link: track also runs off the plant's west side. A click beside it there takes the main line's node, FRA 628886.
+    await page.goto(`/shops/${shop.id}`);
+    await links.getByRole("button", { name: "Add link" }).click();
+    const west = await mapPoint(page, at, { lon: -82.3445, lat: 42.9562 });
+    await page.mouse.click(west.x, west.y);
+    await expect(links).toContainText("Two links: cars can pass through.");
+    await expect(links).toContainText("Sarnia · FRA 628886");
+    await expect(links).toContainText("0.8 km");
+    await keepScreenshot(page, "shop-links");
+    await page.getByRole("region", { name: "Edit shop" }).getByRole("button", { name: "Save shop" }).click();
+    await expect(page).toHaveURL(/\/shops$/);
+    const saved = ((await (await page.request.get("/api/shops")).json()) as ShopView[]).find((s) => s.id === shop.id)!;
+    expect(saved.links).toEqual([628925, 628886]);
+    expect((await page.request.delete(`/api/shops/${shop.id}`)).ok()).toBe(true);
+  });
 });
+
+/** Where a point is on screen while the shop at `centre` is being edited: the camera holds it in the free map's middle at SHOP_ZOOM. */
+async function mapPoint(page: Page, centre: { lon: number; lat: number }, point: { lon: number; lat: number }): Promise<{ x: number; y: number }> {
+  const middle = await freeMapCentre(page);
+  const world = 512 * 2 ** SHOP_ZOOM;
+  const mercator = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  return { x: middle.x + ((point.lon - centre.lon) * world) / 360, y: middle.y - ((mercator(point.lat) - mercator(centre.lat)) * world) / (2 * Math.PI) };
+}

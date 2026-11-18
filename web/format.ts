@@ -4,13 +4,13 @@ import type { DistanceUnit } from "./units.ts";
 /** Numbers stay English whatever the browser's language: the rest of the page is English. */
 const LOCALE = "en-US";
 
-const grouped = (n: number) => Math.round(n).toLocaleString(LOCALE);
+const grouped = (n: number, digits: number) => n.toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
 const KM_PER_MI = 1.609344;
 const KM_PER_UNIT: Record<DistanceUnit, number> = { km: 1, mi: KM_PER_MI };
 
-/** "1,046 km", "650 mi": every distance the page shows. Distances are km everywhere else. */
-export const fmtDistance = (km: number, unit: DistanceUnit) => `${grouped(km / KM_PER_UNIT[unit])} ${unit}`;
+/** "1,046 km", "650 mi", with `digits` "0.5 km": every distance the page shows. Distances are km everywhere else. */
+export const fmtDistance = (km: number, unit: DistanceUnit, digits = 0) => `${grouped(km / KM_PER_UNIT[unit], digits)} ${unit}`;
 
 /** Unicode-aware: "QUÉRETARO" → "Quéretaro" (a plain \b\w gives "QuéRetaro"). */
 export const titleCase = (s: string) =>

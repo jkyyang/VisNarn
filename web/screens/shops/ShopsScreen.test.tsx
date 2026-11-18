@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resolvedOf, type FraId } from "../../../shared/places.ts";
 import { clearQueryCache } from "../../data/query.ts";
 import { installFakeServer, type FakeServer } from "../../testing/fakeServer.ts";
 import { setNextMapClick } from "../../testing/FakeMapCanvas.tsx";
@@ -63,11 +64,14 @@ describe("Shops screen", () => {
     const location = within(form).getByRole("combobox", { name: "Location" });
     await user.clear(location);
     await user.type(location, "-97.34, 31.10");
-    expect(await within(form).findByText("On the network · BNSF, UP")).toBeInTheDocument();
+    // A location just given is wired at once to where its track most likely joins the network.
+    expect(await within(form).findByText("One link: cars leave the way they came in.")).toBeInTheDocument();
+    expect(within(form).getByText("On the network")).toBeInTheDocument();
     await waitFor(() => expect(save).toBeEnabled());
     await user.click(save);
 
     expect(await screen.findByText("Temple yard shop")).toBeInTheDocument();
+    expect(fake.calls.filter((call) => call.method === "POST" && call.path === "/api/shops").at(-1)?.body).toMatchObject({ links: [600001] });
     expect(currentPath()).toBe("/shops");
     expect(fake.state.shops.map((s) => s.name)).toContain("Temple yard shop");
     expect(screen.queryByRole("region", { name: "Add shop" })).not.toBeInTheDocument();
@@ -142,9 +146,103 @@ describe("Shops screen", () => {
     await user.click(within(form).getByRole("button", { name: "Pick on map" }));
     setNextMapClick(-97.362, 31.121);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    expect(await within(form).findByDisplayValue("TEMPLE, TX wye · FRA node 358070")).toBeInTheDocument();
-    expect(await within(form).findByText("On the network · BNSF, UP")).toBeInTheDocument();
+    // The shop sits where it was clicked, and its track is linked to the nearest node.
+    expect(await within(form).findByDisplayValue("-97.362, 31.121")).toBeInTheDocument();
+    expect(await within(form).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
+    expect(screen.getByText("Map: 6 shops, link 1")).toBeInTheDocument();
     expect(screen.getByTestId("map")).toHaveAttribute("data-focus", "place");
+  });
+
+  describe("track links", () => {
+    const links = () => screen.getByRole("group", { name: "Track links" });
+    const lastSent = () => fake.calls.filter((call) => call.method === "PUT").at(-1)?.body as { links: unknown[] } | undefined;
+
+    it("an unlinked shop offers the suggestion faint; Save keeps the shop as it was, Use then Save wires it", async () => {
+      const user = userEvent.setup();
+      openPage("/shops/shop-ex-1");
+      const form = await screen.findByRole("region", { name: "Edit shop" });
+      expect(await within(links()).findByText("North Little Rock · FRA 600002")).toBeInTheDocument();
+      expect(within(links()).getByText("Suggested")).toBeInTheDocument();
+      expect(within(links()).getByText("No links: joins the nearest mainline.")).toBeInTheDocument();
+      expect(screen.getByText("Map: 6 shops, link 1 suggested")).toBeInTheDocument();
+      await user.click(within(form).getByRole("button", { name: "Save shop" }));
+      await waitFor(() => expect(lastSent()).toMatchObject({ links: [] }));
+
+      await user.click(await screen.findByRole("button", { name: "Edit North Little Rock, AR" }));
+      await user.click(await within(links()).findByRole("button", { name: "Use" }));
+      expect(within(links()).getByText("One link: cars leave the way they came in.")).toBeInTheDocument();
+      expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
+      await user.click(within(screen.getByRole("region", { name: "Edit shop" })).getByRole("button", { name: "Save shop" }));
+      await waitFor(() => expect(lastSent()).toMatchObject({ links: [600002] }));
+      expect(fake.state.shops[0].links).toEqual([600002]);
+    });
+
+    it("a shop moved on the map takes the suggestion there as link 1 while it has none, and keeps a link a person set", async () => {
+      const user = userEvent.setup();
+      openPage("/shops/shop-ex-1");
+      const form = await screen.findByRole("region", { name: "Edit shop" });
+      const pickAt = async (button: string, lon: number, lat: number) => {
+        await user.click(within(form).getByRole("button", { name: button }));
+        setNextMapClick(lon, lat);
+        await user.click(screen.getByRole("button", { name: "Click the map" }));
+      };
+      await pickAt("Pick on map", -97.362, 31.121);
+      expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
+      expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
+
+      await pickAt("Move link 1", -92.27, 34.77);
+      expect(await within(links()).findByText("North Little Rock · FRA 600002")).toBeInTheDocument();
+      await pickAt("Pick on map", -97.15, 31.55);
+      expect(await within(form).findByDisplayValue("-97.15, 31.55")).toBeInTheDocument();
+      expect(within(links()).getByText("North Little Rock · FRA 600002")).toBeInTheDocument();
+      expect(within(links()).getAllByRole("listitem")).toHaveLength(1);
+    });
+
+    it("Add link, ⌖ to move one, × to remove one; Esc ends a pick", async () => {
+      const user = userEvent.setup();
+      openPage("/shops/shop-ex-1");
+      await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
+      await user.click(within(links()).getByRole("button", { name: "Add link" }));
+      expect(screen.getByText(/Click the map to set link 2/)).toBeInTheDocument();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByText(/Click the map to set link 2/)).not.toBeInTheDocument();
+
+      await user.click(within(links()).getByRole("button", { name: "Add link" }));
+      setNextMapClick(-92.3, 34.8);
+      await user.click(screen.getByRole("button", { name: "Click the map" }));
+      expect(await within(links()).findByText("Two links: cars can pass through.")).toBeInTheDocument();
+      expect(within(links()).getAllByRole("listitem")).toHaveLength(2);
+      expect(within(links()).queryByRole("button", { name: "Add link" })).not.toBeInTheDocument();
+      expect(screen.getByText("Map: 6 shops, link 1, link 2")).toBeInTheDocument();
+
+      await user.click(within(links()).getByRole("button", { name: "Move link 1" }));
+      setNextMapClick(-97.362, 31.121);
+      await user.click(screen.getByRole("button", { name: "Click the map" }));
+      expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
+
+      await user.click(within(links()).getByRole("button", { name: "Remove link 2" }));
+      expect(within(links()).getAllByRole("listitem")).toHaveLength(1);
+      expect(within(links()).getByText("One link: cars leave the way they came in.")).toBeInTheDocument();
+    });
+
+    it("a shop at a network node gets no suggestion", async () => {
+      const shop = fake.state.shops[0];
+      const fraId = 358070 as FraId;
+      fake.state.shops[0] = { ...shop, location: { fraId, railroad: null }, place: { ok: true, place: { ...resolvedOf(shop.place)!, fraId } } };
+      openPage("/shops/shop-ex-1");
+      await screen.findByRole("region", { name: "Edit shop" });
+      expect(await within(links()).findByText("No links: on the network at its node.")).toBeInTheDocument();
+      expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
+      expect(fake.calls.some((call) => call.path.startsWith("/api/places/way-in"))).toBe(false);
+    });
+
+    it("a click on a shop square opens that shop", async () => {
+      const user = userEvent.setup();
+      openPage("/shops/shop-ex-1");
+      await screen.findByRole("region", { name: "Edit shop" });
+      await user.click(screen.getByRole("button", { name: "Shop square Kansas City, MO" }));
+      expect(currentPath()).toBe("/shops/shop-ex-2");
+    });
   });
 
   it("Pick on map scrolls the page to the top, as on a phone the panel may have slid up over the map", async () => {

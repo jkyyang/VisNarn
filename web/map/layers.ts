@@ -4,7 +4,7 @@ import { isClassI, NETWORK_CLASSES, type NetworkClass } from "../../shared/railr
 import type { Mainline } from "../data/basemap.ts";
 import { CLASS_LINES, type RGBA, type ThemeColors } from "../theme.ts";
 import { lineName } from "../words.ts";
-import type { MapScene, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
+import type { MapScene, SceneLink, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
 export const LAYER = {
   alternativesCasing: "alternatives-casing",
@@ -15,6 +15,7 @@ export const LAYER = {
   interchanges: "interchanges",
   pins: "pins",
   pinGlyphs: "pin-glyphs",
+  links: "shop-links",
 } as const;
 
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
@@ -42,7 +43,10 @@ export const PIN_ICONS = {
 const CHEVRON = { url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${PIN.edge}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`), width: 12, height: 12, anchorY: 6 };
 
 /** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
-const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2 };
+const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3 };
+
+/** A suggested link's alpha, of 255: fainter than a link the shop has. */
+const SUGGESTED_ALPHA = 110;
 
 /** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
 const angleOf = (bearingDeg: number) => 90 - bearingDeg;
@@ -161,15 +165,28 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
   ];
 }
 
+/** The edited shop's links: thin straight lines in the route colour, a suggestion fainter. */
+function linkLayer(links: SceneLink[], colors: ThemeColors): PathLayer<SceneLink> {
+  return new PathLayer<SceneLink>({
+    id: LAYER.links,
+    data: links,
+    getPath: (link) => link.path,
+    getColor: (link) => (link.suggested ? fade(colors.route, SUGGESTED_ALPHA) : colors.route),
+    getWidth: ROUTE_PX.link,
+    ...ROUND,
+    updateTriggers: { getColor: colors },
+  });
+}
+
 /**
  * Bottom to top, by scene kind:
  *   route  alternatives (thin, grey) · selected casing · selected route by railroad · chevrons ·
  *          interchange rings · pins
- *   shops  shop squares
+ *   shops  the edited shop's links · shop squares and pins
  * The route pills and the turn-back markers are DOM, over all of these (./RouteMarks.tsx).
  */
 export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number): LayersList {
-  if (scene.kind === "shops") return pinLayers(scene.pins, colors);
+  if (scene.kind === "shops") return [linkLayer(scene.links, colors), ...pinLayers(scene.pins, colors)];
 
   const alternatives = alternativeLegsOf(scene.alternatives, () => scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id }))));
   return [

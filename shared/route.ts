@@ -12,7 +12,7 @@ import type { Line } from "./railroads.ts";
 export const ROUTE_STRATEGIES = ["pick", "shortest", "fewest-interchanges", "no-turn-backs"] as const;
 export type RouteStrategy = (typeof ROUTE_STRATEGIES)[number];
 
-/** One run on one line in one direction (a leg also ends where the route turns back). */
+/** One run on one line in one direction (a leg also ends where the route turns back or backs out of a shop). */
 export interface Leg {
   railroad: Line;
   km: number;
@@ -43,6 +43,8 @@ export type Milestone =
   | { kind: "leg"; kmFromStart: number; leg: number }
   | { kind: "interchange"; kmFromStart: number; from: Line; to: Line; at: string }
   | { kind: "stop"; kmFromStart: number; stop: number; label: string }
+  /** Out of a stop's own track the way the car went in: a shop with one link. Never a turn-back. */
+  | { kind: "back-out"; kmFromStart: number; stop: number }
   | { kind: "destination"; kmFromStart: number };
 
 export interface RoutePath {

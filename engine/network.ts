@@ -2,8 +2,8 @@
  * The rail network as the rest of the app may see it: nodes by FRA id, places by coordinates and
  * public city names. The index-addressed graph stays behind this interface.
  */
-import { round5 } from "../shared/geo.ts";
-import type { FraId, NetworkNode } from "../shared/places.ts";
+import { haversineKm, round5 } from "../shared/geo.ts";
+import { SHOP_LINK_MAX_KM, type FraId, type NetworkNode, type NodesOn } from "../shared/places.ts";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
 import { ALL_LINES_MASK, ALL_RAILROADS_MASK, RailGraph, type GraphMeta } from "./core/graph.ts";
 
@@ -27,10 +27,16 @@ export interface RailNetwork {
   readonly version: string;
   /** The node with this id, or null if this build of the network has none. `km` is 0. */
   node(fraId: FraId): NetworkNode | null;
-  /** The node nearest to a point, on any Class I track; null when none is within `withinKm`. */
-  nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
+  /** The node nearest to a point, on any Class I track or only on Class I mainline; null when none is within `withinKm`. */
+  nearest(lon: number, lat: number, withinKm: number, on: NodesOn): NetworkNode | null;
   /** Null: no freight mainline within SNAP_KM, so a car cannot be routed to or from here. */
   snap(lon: number, lat: number): Snap | null;
+  /**
+   * Where a shop at this point most likely joins the network: from the nearest Class I node, along yard track to
+   * the first node on a line's own track (a plant's lead to the main line). `km` is the straight distance to it;
+   * null when no Class I track is within SHOP_LINK_MAX_KM.
+   */
+  wayIn(lon: number, lat: number): NetworkNode | null;
   /** One of the public city names shipped with the network, matched exactly (case-insensitive). */
   city(name: string): City | null;
   /** City names for autocomplete: those starting with the text first, then those containing it. */
@@ -66,8 +72,8 @@ export function openNetwork(bin: ArrayBuffer, meta: GraphMeta, version: string):
       const index = graph.indexOf(fraId);
       return index < 0 ? null : nodeView(index, 0);
     },
-    nearest(lon, lat, withinKm) {
-      const hit = graph.nearestNode(lon, lat, ALL_RAILROADS_MASK, withinKm, graph.atMask);
+    nearest(lon, lat, withinKm, on) {
+      const hit = graph.nearestNode(lon, lat, ALL_RAILROADS_MASK, withinKm, on === "mainline" ? graph.mainMask : graph.atMask);
       return hit ? nodeView(hit.node, hit.km) : null;
     },
     snap(lon, lat) {
@@ -76,6 +82,13 @@ export function openNetwork(bin: ArrayBuffer, meta: GraphMeta, version: string):
       const hits = classI.length ? classI : graph.servingNear(lon, lat, { allowedMask: ALL_LINES_MASK, passenger: true });
       if (!hits.length) return null;
       return { railroads: classI.map((h) => RAILROADS[h.line]), km: Math.min(...hits.map((h) => h.km)) };
+    },
+    wayIn(lon, lat) {
+      const near = graph.nearestNode(lon, lat, ALL_RAILROADS_MASK, SHOP_LINK_MAX_KM, graph.atMask);
+      if (!near) return null;
+      // The walk spends what the nearest node left of the reach, so the way in is within reach of the point too.
+      const node = graph.yardExit(near.node, ALL_RAILROADS_MASK, SHOP_LINK_MAX_KM - near.km) ?? near.node;
+      return nodeView(node, haversineKm(lon, lat, graph.lon[node], graph.lat[node]));
     },
     city(name) {
       return byName.get(name.trim().toLowerCase()) ?? null;

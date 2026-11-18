@@ -6,7 +6,8 @@
  *
  *   node   → that node, or "removed" if this network build has no such id
  *   coord  → snapped to mainline within SNAP_KM (engine/rules.ts), or "off-network"
- *   shop   → the shop's saved location, or "removed" if the shop was deleted
+ *   shop   → the shop's saved location, or "removed" if the shop was deleted; a shop with links stays at its
+ *            location and joins the network at its links' nodes (no snapping), or is "removed" when one is gone
  *   text   → by role, first list with a match wins; more than one match inside a list is "ambiguous"
  *            and lists the candidates:
  *              any role:  "lon, lat" or "lat, lon"  → coord        "FRA 358070" → node
@@ -18,11 +19,11 @@
  */
 import type { City, RailNetwork } from "../../engine/index.ts";
 import { createCache } from "../../shared/cache.ts";
-import { isLngLat, plainMinus, round5 } from "../../shared/geo.ts";
+import { haversineKm, isLngLat, plainMinus, round5 } from "../../shared/geo.ts";
 import type {
-  FraId, NetworkNode, NodeLocation, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
+  FraId, NetworkNode, NodeLocation, NodesOn, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
 } from "../../shared/places.ts";
-import type { Railroad } from "../../shared/railroads.ts";
+import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
 import type { Store } from "../store/store.ts";
 
 export interface Directory {
@@ -30,7 +31,11 @@ export interface Directory {
   /** Autocomplete. Every suggestion carries a typed ref, so picking one leaves nothing to guess later. */
   suggest(text: string, role: PlaceRole, limit: number): PlaceSuggestion[];
   /** The node a map click snaps to. */
-  nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
+  nearest(lon: number, lat: number, withinKm: number, on: NodesOn): NetworkNode | null;
+  /** Where a shop at this point most likely joins the network: its own track followed to the main line. */
+  wayIn(lon: number, lat: number): NetworkNode | null;
+  /** A shop as a place: where `ref` (the shop itself, or its saved location) leads. */
+  shopPlace(shop: Shop, ref: PlaceRef): PlaceResolution;
 }
 
 /** Resolved places kept: typed text adds one per keystroke, so the least recently used go first. */
@@ -106,7 +111,35 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   // ---- the user's lists ----
 
+  /** A shop wired to the track sits at its location and joins the network only at its links, each a straight piece of its own track. */
+  const atLinks = (ref: PlaceRef, shop: Shop): PlaceResolution => {
+    const at = "fraId" in shop.location ? network.node(shop.location.fraId) : shop.location;
+    if (!at) return problem("removed", `The shop ${shop.name}: no track found for its node.`);
+    const links: NetworkNode[] = [];
+    for (const [i, fraId] of shop.links.entries()) {
+      const node = network.node(fraId);
+      if (!node) return problem("removed", `The shop ${shop.name}: link ${i + 1} is gone from this network.`);
+      links.push({ ...node, km: haversineKm(at.lon, at.lat, node.lon, node.lat) });
+    }
+    const served = new Set(links.flatMap((link) => link.railroads));
+    return {
+      ok: true,
+      place: {
+        ref,
+        label: shop.name,
+        lon: at.lon,
+        lat: at.lat,
+        fraId: null,
+        railroad: null,
+        links,
+        railroads: RAILROADS.filter((railroad) => served.has(railroad)),
+        match: { method: "shop", confidence: "exact", snapKm: 0 },
+      },
+    };
+  };
+
   const atShop = (ref: PlaceRef, shop: Shop): PlaceResolution => {
+    if (shop.links.length) return atLinks(ref, shop);
     const found = atLocation(ref, shop.location, { method: "shop" }, shop.name);
     if (!found.ok) return problem(found.problem.kind, `The shop ${shop.name}: ${found.problem.message}`);
     return found;
@@ -209,24 +242,29 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     }
   };
 
-  const resolve = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {
+  /** Answers are kept until the next write to the store: one may name a shop. */
+  const memoized = (key: string, compute: () => PlaceResolution): PlaceResolution => {
     if (memoRevision !== store.revision) {
       memo.clear();
       memoRevision = store.revision;
     }
-    const key = `${role}\u0000${JSON.stringify(ref)}`;
     let answer = memo.get(key);
     if (!answer) {
-      answer = compute(ref, role);
+      answer = compute();
       memo.set(key, answer);
     }
     return answer;
   };
 
+  const resolve = (ref: PlaceRef, role: PlaceRole): PlaceResolution => memoized(`${role}\u0000${JSON.stringify(ref)}`, () => compute(ref, role));
+
   return {
     resolve,
     suggest,
-    nearest: (lon, lat, withinKm) => network.nearest(lon, lat, withinKm),
+    nearest: (lon, lat, withinKm, on) => network.nearest(lon, lat, withinKm, on),
+    wayIn: (lon, lat) => network.wayIn(lon, lat),
+    // Keyed by the shop's content as well: an import preview shows shops that are not saved.
+    shopPlace: (shop, ref) => memoized(`shop\u0000${JSON.stringify([ref, shop])}`, () => atShop(ref, shop)),
   };
 }
 

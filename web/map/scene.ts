@@ -56,7 +56,25 @@ export type MapScene =
       /** Null until a route exists: no camera jump after the first click. */
       bounds: Bounds | null;
     }
-  | { kind: "shops"; pins: ScenePin[]; bounds: Bounds };
+  | {
+      kind: "shops";
+      pins: ScenePin[];
+      /** The edited shop's own track: a straight piece from the shop to each node it joins; a suggestion is drawn faint. */
+      links: SceneLink[];
+      bounds: Bounds;
+    };
+
+export interface SceneLink {
+  path: [LngLat, LngLat];
+  suggested: boolean;
+}
+
+/** The shop being edited on Shops: where it is, and the nodes its links join. */
+export interface EditedShop {
+  label: string;
+  at: LngLat;
+  links: { at: LngLat; suggested: boolean }[];
+}
 
 /** Something in the scene the user clicked: a route to select, or a place to put in the plan. */
 export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "place"; ref: PlaceRef; position: LngLat };
@@ -284,15 +302,17 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   };
 }
 
-/** Shops: every shop that is on the network, and the place being edited. */
-export function shopsScene(shops: ShopView[], editing: Pick<ResolvedPlace, "label" | "lon" | "lat"> | null): MapScene {
+/** Shops: every shop that is on the network, and the one being edited with its links, numbered as in the form. */
+export function shopsScene(shops: ShopView[], editing: EditedShop | null): MapScene {
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     if (!shop.place.ok) continue;
     pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id });
   }
-  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: [editing.lon, editing.lat], shopId: null });
+  const links = (editing?.links ?? []).map((link): SceneLink => ({ path: [editing!.at, link.at], suggested: link.suggested }));
+  editing?.links.forEach((link, i) => pins.push({ kind: "stop", glyph: String(i + 1), label: `Link ${i + 1}`, position: link.at, shopId: null }));
+  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: editing.at, shopId: null });
   const bounds = new BoundsBuilder();
   bounds.addAll(pins.map((pin) => pin.position));
-  return { kind: "shops", pins, bounds: bounds.done() };
+  return { kind: "shops", pins, links, bounds: bounds.done() };
 }

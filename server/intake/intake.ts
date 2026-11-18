@@ -41,7 +41,7 @@ export function readShops(upload: UploadSource): Parsed<ShopDraft> {
     if (code && code.length > SHOP_TEXT_MAX) issue(`The shop code is longer than ${SHOP_TEXT_MAX} characters.`);
     else if (code && UNSEEN.test(code)) issue("The shop code holds control or invisible characters.");
     const location = locationOf(record, issue);
-    items.push({ name, code, location });
+    items.push({ name, code, location, links: [] });
   });
   return { items, lines: records.map((r) => r.line), issues };
 }

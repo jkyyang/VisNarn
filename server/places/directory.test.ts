@@ -27,7 +27,7 @@ const TEMPLE = 358070 as FraId;
 const KANSAS_CITY = { lon: -94.58, lat: 39.1 };
 const WACO = { lon: -97.14, lat: 31.55 };
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const shop = (over: Partial<Shop>): Shop => ({ id: "s1" as ShopId, name: "EXAMPLE shop", code: null, location: KANSAS_CITY, ...over });
+const shop = (over: Partial<Shop>): Shop => ({ id: "s1" as ShopId, name: "EXAMPLE shop", code: null, location: KANSAS_CITY, links: [], ...over });
 const csv = (body: string): UploadSource => ({ kind: "csv", fileName: "EXAMPLE.csv", text: body });
 
 const placeOf = (r: PlaceResolution) => {
@@ -137,10 +137,10 @@ describe("Directory.suggest / nearest", () => {
 
   it("nearest returns the node within the tolerance with its railroads, else null", () => {
     const { directory } = setup();
-    const hit = directory.nearest(-97.34, 31.09, 5);
+    const hit = directory.nearest(-97.34, 31.09, 5, "track");
     expect(hit).toMatchObject({ fraId: TEMPLE, near: "Temple, TX", railroads: ["BNSF", "UP"] });
     expect(hit!.km).toBeLessThan(1);
-    expect(directory.nearest(-90, 25, 5)).toBeNull();
+    expect(directory.nearest(-90, 25, 5, "track")).toBeNull();
   });
 });
 
@@ -148,9 +148,9 @@ describe("Shops", () => {
   it("save resolves the draft's location and stores a node or coordinates, never text", () => {
     const { store, directory } = setup();
     const shops = createShops(store, directory);
-    const byFra = shops.save({ name: "EXAMPLE A", code: "EX-A", location: text("FRA 358070") }, null);
-    const byNode = shops.save({ name: "EXAMPLE B", code: "EX-B", location: { kind: "node", fraId: TEMPLE, railroad: "BNSF" } }, null);
-    const byCity = shops.save({ name: "EXAMPLE C", code: null, location: text("Temple, TX") }, null);
+    const byFra = shops.save({ name: "EXAMPLE A", code: "EX-A", location: text("FRA 358070"), links: [] }, null);
+    const byNode = shops.save({ name: "EXAMPLE B", code: "EX-B", location: { kind: "node", fraId: TEMPLE, railroad: "BNSF" }, links: [] }, null);
+    const byCity = shops.save({ name: "EXAMPLE C", code: null, location: text("Temple, TX"), links: [] }, null);
     expect(store.shops.get(byFra.id)?.location).toEqual({ fraId: TEMPLE, railroad: null });
     expect(store.shops.get(byNode.id)?.location).toEqual({ fraId: TEMPLE, railroad: "BNSF" });
     expect(store.shops.get(byCity.id)?.location).toEqual({ lon: network.city("Temple, TX")!.lon, lat: network.city("Temple, TX")!.lat });
@@ -165,10 +165,10 @@ describe("Shops", () => {
       }
       return "saved";
     };
-    expect(refused(() => shops.save({ name: " ", code: null, location: text("Temple, TX") }, null))).toBe("invalid name");
-    expect(refused(() => shops.save({ name: "EXAMPLE sea", code: null, location: { kind: "coord", lon: -90, lat: 25 } }, null))).toBe("invalid location");
-    expect(refused(() => shops.save({ name: "EXAMPLE D", code: "ex-a", location: text("Temple, TX") }, null))).toBe("conflict code");
-    expect(refused(() => shops.save({ name: "EXAMPLE E", code: null, location: text("Temple, TX") }, "nope" as ShopId))).toBe("not-found null");
+    expect(refused(() => shops.save({ name: " ", code: null, location: text("Temple, TX"), links: [] }, null))).toBe("invalid name");
+    expect(refused(() => shops.save({ name: "EXAMPLE sea", code: null, location: { kind: "coord", lon: -90, lat: 25 }, links: [] }, null))).toBe("invalid location");
+    expect(refused(() => shops.save({ name: "EXAMPLE D", code: "ex-a", location: text("Temple, TX"), links: [] }, null))).toBe("conflict code");
+    expect(refused(() => shops.save({ name: "EXAMPLE E", code: null, location: text("Temple, TX"), links: [] }, "nope" as ShopId))).toBe("not-found null");
     expect(refused(() => shops.remove("nope" as ShopId))).toBe("not-found null");
     expect(store.shops.all()).toHaveLength(3);
   });
@@ -212,5 +212,65 @@ describe("Shops", () => {
       [5, expect.stringMatching(/repeats the code EX-1 from line 2/)],
     ]);
     expect(store.shops.all().map((s) => s.name)).toEqual(["EXAMPLE ok"]);
+  });
+
+  // Procor's Sarnia plant: its lead joins the main line at 628925; track runs off west to 628886; CSXT is 4.6 km away.
+  const SARNIA = { kind: "coord", lon: -82.3376, lat: 42.9596 } as const;
+  const EAST = 628925 as FraId, WEST = 628886 as FraId;
+  const sarnia = (links: FraId[] = [EAST]) => ({ name: "EXAMPLE Sarnia", code: "EX-SAR", location: SARNIA, links });
+
+  it("a linked shop stays at its location and joins the network at its links, each a straight piece away, with their railroads", () => {
+    const { store, directory } = setup();
+    const shops = createShops(store, directory);
+    const saved = shops.save(sarnia([EAST, WEST]), null);
+    expect(store.shops.get(saved.id)?.links).toEqual([EAST, WEST]);
+    const place = placeOf(saved.place);
+    expect(place).toMatchObject({ label: "EXAMPLE Sarnia", lon: SARNIA.lon, lat: SARNIA.lat, fraId: null, railroad: null, railroads: ["CN", "CPKC"] });
+    expect(place.links).toEqual([
+      expect.objectContaining({ fraId: EAST, km: expect.closeTo(0.519, 2), railroads: ["CN", "CPKC"], near: "Sarnia, ON" }),
+      expect.objectContaining({ fraId: WEST, km: expect.closeTo(0.766, 2) }),
+    ]);
+    expect(placeOf(directory.resolve({ kind: "shop", shopId: saved.id }, "shop")).links).toEqual(place.links);
+    // Unlinked, the location snaps and CSXT, 4.6 km away, serves it too.
+    expect(placeOf(shops.save({ ...sarnia([]), code: "EX-SAR-2" }, null).place).railroads).toEqual(["CSXT", "CN", "CPKC"]);
+  });
+
+  it("a links-only edit is written; a link that repeats, is gone or is over 5 km away is refused on 'links'", () => {
+    const { store, directory } = setup();
+    const shops = createShops(store, directory);
+    const saved = shops.save(sarnia([]), null);
+    const revision = store.revision;
+    shops.save(sarnia(), saved.id);
+    expect(store.revision).toBe(revision + 1);
+    expect(store.shops.get(saved.id)?.links).toEqual([EAST]);
+    const refusal = (links: FraId[]) => {
+      try {
+        shops.save(sarnia(links), saved.id);
+      } catch (error) {
+        if (error instanceof AppError) return [error.field, error.message];
+      }
+      return "saved";
+    };
+    expect(refusal([EAST, EAST])).toEqual(["links", "Link 2 repeats link 1."]);
+    expect(refusal([EAST, 1 as FraId])).toEqual(["links", "The shop EXAMPLE Sarnia: link 2 is gone from this network."]);
+    expect(refusal([633683 as FraId])).toEqual(["links", "Link 1 is more than 5 km from the shop."]);
+  });
+
+  it("a linked shop whose node a new network lacks is removed, naming the link", () => {
+    const { store, directory } = setup();
+    store.shops.save({ id: "s1" as ShopId, name: "EXAMPLE Sarnia", code: null, location: SARNIA, links: [1 as FraId] });
+    expect(problemOf(directory.resolve({ kind: "shop", shopId: "s1" as ShopId }, "shop"))).toMatchObject({ kind: "removed", message: "The shop EXAMPLE Sarnia: link 1 is gone from this network." });
+  });
+
+  it("import keeps a shop's links while the file leaves it where it is, and drops them when it moves it", async () => {
+    const { store, directory } = setup();
+    const shops = createShops(store, directory);
+    const saved = shops.save(sarnia(), null);
+    const preview = await shops.import({ source: csv("name,code,lon,lat\nEXAMPLE Sarnia renamed,EX-SAR,-82.3376,42.9596\n"), commit: false });
+    expect(preview.ready[0].links).toEqual([EAST]);
+    await shops.import({ source: csv("name,code,lon,lat\nEXAMPLE Sarnia renamed,EX-SAR,-82.3376,42.9596\n"), commit: true });
+    expect(store.shops.get(saved.id)).toMatchObject({ name: "EXAMPLE Sarnia renamed", links: [EAST] });
+    await shops.import({ source: csv("name,code,lon,lat\nEXAMPLE Sarnia renamed,EX-SAR,-82.35,42.96\n"), commit: true });
+    expect(store.shops.get(saved.id)?.links).toEqual([]);
   });
 });

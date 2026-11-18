@@ -3,28 +3,36 @@
  *
  *   meta         (key PK, value)                                  schema_version
  *   shops        (id PK, name, code UNIQUE NULL, location_json, updated_at)
+ *   shop_link    (shop_id FK shops, link_no 1|2, join_fra_node_id) PK (shop_id, link_no)   since schema 7
  *   saved_routes (id PK, name, plan_json, option NULL, route_string)            since schema 2; route_string since 3
  *
  * Schema 4 drops the car tables of an earlier stage (settings, code_sets, node_codes, batches, batch_rows,
  * route_fixes); a new database never creates them. Schema 5 drops the shops' EXAMPLE flag.
+ * shop_link follows app.shop_link in docs/architecture/data/data-architecture.md.
  *
- * Nested domain values (NodeLocation, a plan) are stored as JSON text: no query needs to look inside
- * them. Columns exist only for what is looked up: ids, shop code and name, a saved route's name.
+ * A location and a plan are stored as JSON text: no query looks inside them yet.
  */
 import { chmodSync } from "node:fs";
 import process from "node:process";
 import { AppError } from "../../shared/app.ts";
-import type { NodeLocation, PlaceRef, Shop, ShopId } from "../../shared/places.ts";
+import type { FraId, NodeLocation, PlaceRef, Shop, ShopId } from "../../shared/places.ts";
 import type { FullPlan, SavedRoute, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Store } from "./store.ts";
 
+type Row = Record<string, unknown>;
+
+// Imported on demand: vitest 2's module runner does not know prefix-only built-ins and fails to load "sqlite".
+const { DatabaseSync } = process.getBuiltinModule("node:sqlite") as typeof import("node:sqlite");
+
+type Db = InstanceType<typeof DatabaseSync>;
+
 /**
  * Applied in order; the database records how many it has. A shipped migration may change only in ways
  * that leave every database at the same end state: add another to change the schema.
  */
-const MIGRATIONS: string[] = [
+const MIGRATIONS: (string | ((db: Db) => void))[] = [
   `
   CREATE TABLE shops (
     id TEXT PRIMARY KEY,
@@ -54,12 +62,28 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE shops DROP COLUMN example;
   `,
+  // Schema 6 shipped twice as experiments: a route_answers table on some copies, a shops.links_json column on others.
+  // Schema 7 settles both, so 6 does nothing.
+  "",
+  (db) => {
+    db.exec(`
+    DROP TABLE IF EXISTS route_answers;
+    CREATE TABLE shop_link (
+      shop_id TEXT NOT NULL REFERENCES shops (id) ON DELETE CASCADE,
+      link_no INTEGER NOT NULL CHECK (link_no IN (1, 2)),
+      join_fra_node_id INTEGER NOT NULL,
+      PRIMARY KEY (shop_id, link_no)
+    );
+    `);
+    const columns = (db.prepare("PRAGMA table_info(shops)").all() as Row[]).map((column) => column.name);
+    if (!columns.includes("links_json")) return;
+    db.exec(`
+    INSERT INTO shop_link (shop_id, link_no, join_fra_node_id)
+      SELECT shops.id, link.key + 1, link.value FROM shops, json_each(shops.links_json) AS link;
+    ALTER TABLE shops DROP COLUMN links_json;
+    `);
+  },
 ];
-
-type Row = Record<string, unknown>;
-
-// Imported on demand: vitest 2's module runner does not know prefix-only built-ins and fails to load "sqlite".
-const { DatabaseSync } = process.getBuiltinModule("node:sqlite") as typeof import("node:sqlite");
 
 /**
  * Opens (and creates or migrates) the database. ":memory:" for tests.
@@ -90,7 +114,10 @@ export function openStore(file: string): Store {
     if (version > MIGRATIONS.length) {
       throw new Error(`${file} was written by a newer version of Shop Arrival Check (schema ${version}). Update this copy of the app.`);
     }
-    for (const sql of MIGRATIONS.slice(version)) db.exec(sql);
+    for (const step of MIGRATIONS.slice(version)) {
+      if (typeof step === "string") db.exec(step);
+      else step(db);
+    }
     db.prepare("INSERT INTO meta (key, value) VALUES ('schema_version', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(String(MIGRATIONS.length));
   });
 
@@ -106,11 +133,13 @@ export function openStore(file: string): Store {
   const json = (value: unknown) => JSON.stringify(value);
   const parse = <T>(text: unknown): T => JSON.parse(String(text)) as T;
 
+  const linksOf = db.prepare("SELECT join_fra_node_id FROM shop_link WHERE shop_id = ? ORDER BY link_no");
   const shopOf = (row: Row): Shop => ({
     id: String(row.id) as ShopId,
     name: String(row.name),
     code: row.code === null ? null : String(row.code),
     location: parse<NodeLocation>(row.location_json),
+    links: (linksOf.all(String(row.id)) as Row[]).map((link) => Number(link.join_fra_node_id) as FraId),
   });
 
   const planOf = (text: unknown): FullPlan => {
@@ -159,6 +188,9 @@ export function openStore(file: string): Store {
              ON CONFLICT (id) DO UPDATE SET name = excluded.name, code = excluded.code, location_json = excluded.location_json,
                updated_at = excluded.updated_at`,
           ).run(shop.id, shop.name, shop.code, json(shop.location), now());
+          db.prepare("DELETE FROM shop_link WHERE shop_id = ?").run(shop.id);
+          const link = db.prepare("INSERT INTO shop_link (shop_id, link_no, join_fra_node_id) VALUES (?, ?, ?)");
+          shop.links.forEach((fraId, i) => link.run(shop.id, i + 1, fraId));
           wrote(null);
         }),
       remove: (id) => {

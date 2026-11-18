@@ -30,7 +30,7 @@ describe("loadNetwork", () => {
 describe("RailNetwork", () => {
   it("finds a node by FRA id with its railroads and place, and nothing for an id it does not have", () => {
     const temple = network.city("Temple, TX")!;
-    const near = network.nearest(temple.lon, temple.lat, 5)!;
+    const near = network.nearest(temple.lon, temple.lat, 5, "track")!;
     expect(near.km).toBeLessThan(5);
     const node = network.node(near.fraId)!;
     expect(node).toEqual({ ...near, km: 0 });
@@ -41,7 +41,7 @@ describe("RailNetwork", () => {
   });
 
   it("nearest is null when no track is within the distance asked", () => {
-    expect(network.nearest(-140, 30, 50)).toBeNull();
+    expect(network.nearest(-140, 30, 50, "track")).toBeNull();
   });
 
   it("snaps coordinates to every railroad with mainline within 15 km, or says none", () => {
@@ -73,5 +73,21 @@ describe("RailNetwork", () => {
     const temple = network.city("Temple, TX")!;
     expect(network.near(temple.lon, temple.lat)).toBe("Temple, TX");
     expect(network.near(temple.lon + 1, temple.lat)).toMatch(/^\d+ km from /);
+  });
+});
+
+describe("wayIn", () => {
+  it("follows a plant's yard track to where it meets the main line, and keeps a point already on a line where it is", () => {
+    expect(network.wayIn(-82.3376, 42.9596)).toMatchObject({ fraId: 628925, railroads: ["CN", "CPKC"] });
+    expect(network.wayIn(-82.3405, 42.9568)?.fraId).toBe(628925);
+    expect(network.wayIn(-79.7195, 43.4169)?.fraId).toBe(633683);
+    const main = network.node(628912 as FraId)!;
+    expect(network.wayIn(main.lon, main.lat)).toMatchObject({ fraId: 628912, km: expect.closeTo(0, 2) });
+    expect(network.wayIn(-60, 40)).toBeNull();
+  });
+
+  it("nearest on mainline passes over yard track: beside the plant it takes the main line's node, where a link joins", () => {
+    expect(network.nearest(-82.3452, 42.9556, 5, "track")).toMatchObject({ fraId: 628887, yard: true });
+    expect(network.nearest(-82.3452, 42.9556, 5, "mainline")).toMatchObject({ fraId: 628886, railroads: ["CN", "CPKC"] });
   });
 });
