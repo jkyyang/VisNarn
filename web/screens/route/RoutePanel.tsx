@@ -10,7 +10,7 @@ import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
 import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
-import { fmtKmShort } from "../../format.ts";
+import { fmtDistance } from "../../format.ts";
 import { chosenRoute } from "../../map/scene.ts";
 import { lineColor } from "../../theme.ts";
 import { RailroadChips, TurnBadge } from "../../ui/badges.tsx";
@@ -18,6 +18,7 @@ import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { Cross, Crosshair } from "../../ui/icons.tsx";
 import { useReorder } from "../../ui/reorder.ts";
+import type { DistanceUnit } from "../../units.ts";
 import { clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
 import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
@@ -36,6 +37,7 @@ export interface RoutePanelProps {
   onSave: (name: string, routeString: string) => Promise<void>;
   onRemoveSaved: (id: SavedRouteId) => Promise<void>;
   onNew: () => void;
+  unit: DistanceUnit;
 }
 
 /** Shorter railroad stretches are left out of the sections. */
@@ -73,12 +75,6 @@ function PlacePin({ kind, n }: { kind: PlaceKind; n: number }): ReactElement {
 const Grip = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
     <path d="M2 4.5h10M2 7h10M2 9.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
-const FoundMark = () => (
-  <svg className="found-mark" width="16" height="16" viewBox="0 0 14 14" aria-hidden="true">
-    <circle cx="7" cy="7" r="6.2" fill="var(--ok)" />
-    <path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="var(--panel)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -119,7 +115,6 @@ function PlaceField(props: {
   kind: PlaceKind;
   committed: { ref: PlaceRef | null; label: string };
   problem: string | null;
-  found: boolean;
   picking: boolean;
   /** "Remove" takes the row out; "Clear" empties one of the last two. Null: nothing to clear. */
   remove: "Remove" | "Clear" | null;
@@ -162,7 +157,7 @@ function PlaceField(props: {
   };
 
   return (
-    <div className={`place-field${props.picking ? " is-picking" : ""}${props.problem ? " is-wrong" : ""}`}>
+    <div className={`place-field${props.picking ? " is-picking" : ""}`}>
       <div className="input-box place-box">
         <label htmlFor={id} className="visually-hidden">
           {props.label}
@@ -190,12 +185,11 @@ function PlaceField(props: {
             setActive(-1);
           }}
         />
-        {props.found && !typing && <FoundMark />}
-        <button type="button" className="icon-btn small pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
+        <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
           <Crosshair />
         </button>
         {props.remove && (
-          <button type="button" className="icon-btn small" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
+          <button type="button" className="icon-btn" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
             <Cross />
           </button>
         )}
@@ -214,12 +208,12 @@ function PlaceField(props: {
 function LineChips(props: { label: string; railroads: Railroad[]; line: Railroad | null; onChoose: (railroad: Railroad | null) => void }): ReactElement {
   const choices: (Railroad | null)[] = [null, ...RAILROADS.filter((railroad) => props.railroads.includes(railroad))];
   return (
-    <span className="line-chips" role="radiogroup" aria-label={`Next carrier at ${props.label}`}>
+    <span className="chips line-chips" role="radiogroup" aria-label={`Next carrier at ${props.label}`}>
       <span className="line-chips-label" aria-hidden="true">
         Next carrier
       </span>
       {choices.map((railroad) => (
-        <button key={railroad ?? "any"} type="button" role="radio" aria-checked={props.line === railroad} className="line-chip" onClick={() => props.onChoose(railroad)}>
+        <button key={railroad ?? "any"} type="button" role="radio" aria-checked={props.line === railroad} className="chip" onClick={() => props.onChoose(railroad)}>
           {railroad && <span className="rr-swatch" style={{ background: lineColor(railroad) }} aria-hidden="true" />}
           {railroad ?? "Router's pick"}
         </button>
@@ -228,7 +222,7 @@ function LineChips(props: { label: string; railroads: Railroad[]; line: Railroad
   );
 }
 
-/** The place list: one row per place, in travel order, each with the same input, buttons and drag handle. */
+/** The place list: one row per place, in travel order, each with the same input, buttons and drag handle; then Add stop. */
 function PlaceList(props: {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
@@ -236,6 +230,8 @@ function PlaceList(props: {
   named: Map<string, ResolvedPlace>;
   /** The answer to the plan as it is now: its places line up with the rows. */
   current: PlannedRoute | null;
+  /** Null while a row is still empty: that row is where the next stop goes. */
+  onAddStop: (() => void) | null;
 }): ReactElement {
   const { session, dispatch, named, current } = props;
   const { places } = session.plan.present;
@@ -255,39 +251,48 @@ function PlaceList(props: {
 
   return (
     <>
-      <ol className="place-list" ref={reorder.listRef}>
-        {places.map((ref, at) => {
-          const kind = placeKind(at, count);
-          const name = rowName(at, count);
-          const place = ref ? (named.get(spotKey(ref)) ?? null) : null;
-          const lines = ref?.kind === "node" && kind !== "destination" && place && place.railroads.length > 1 ? place.railroads : null;
-          const problem = problemAt(at);
-          return (
-            // By position: a row keeps its typed draft while the place in it changes.
-            <li key={at} className={`place-row${reorder.grabbed === at ? " is-grabbed" : ""}`}>
-              <span className="place-pin">
-                <PlacePin kind={kind} n={at} />
-              </span>
-              <PlaceField
-                label={name}
-                kind={kind}
-                committed={{ ref, label: labelOf(at) }}
-                problem={problem}
-                found={!!resolvedOf(current?.places[at])}
-                picking={session.pick === at}
-                remove={count > 2 ? "Remove" : ref ? "Clear" : null}
-                onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
-                onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
-                onRemove={() => dispatch({ type: "remove", at })}
-              />
-              <button type="button" className="icon-btn small drag-handle" aria-label={`Move ${name}`} aria-describedby={hintId} {...reorder.handleProps(at)}>
-                <Grip />
-              </button>
-              {lines && ref?.kind === "node" && <LineChips label={name} railroads={lines} line={ref.railroad} onChoose={(railroad) => dispatch({ type: "setLine", at, railroad })} />}
-            </li>
-          );
-        })}
-      </ol>
+      <div className="group place-group">
+        <ol className="place-list" ref={reorder.listRef}>
+          {places.map((ref, at) => {
+            const kind = placeKind(at, count);
+            const name = rowName(at, count);
+            const place = ref ? (named.get(spotKey(ref)) ?? null) : null;
+            const lines = ref?.kind === "node" && kind !== "destination" && place && place.railroads.length > 1 ? place.railroads : null;
+            const problem = problemAt(at);
+            return (
+              // By position: a row keeps its typed draft while the place in it changes.
+              <li key={at} className={`place-row${reorder.grabbed === at ? " is-grabbed" : ""}`}>
+                <span className="place-pin">
+                  <PlacePin kind={kind} n={at} />
+                </span>
+                <PlaceField
+                  label={name}
+                  kind={kind}
+                  committed={{ ref, label: labelOf(at) }}
+                  problem={problem}
+                  picking={session.pick === at}
+                  remove={count > 2 ? "Remove" : ref ? "Clear" : null}
+                  onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
+                  onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
+                  onRemove={() => dispatch({ type: "remove", at })}
+                />
+                <button type="button" className="icon-btn drag-handle" aria-label={`Move ${name}`} aria-describedby={hintId} {...reorder.handleProps(at)}>
+                  <Grip />
+                </button>
+                {lines && ref?.kind === "node" && <LineChips label={name} railroads={lines} line={ref.railroad} onChoose={(railroad) => dispatch({ type: "setLine", at, railroad })} />}
+              </li>
+            );
+          })}
+        </ol>
+        {props.onAddStop && (
+          <button type="button" className="add-stop" onClick={props.onAddStop}>
+            <span className="add-stop-icon" aria-hidden="true">
+              +
+            </span>
+            Add stop
+          </button>
+        )}
+      </div>
       <span id={hintId} className="visually-hidden">
         Space grabs, arrows move, Space drops, Escape puts back.
       </span>
@@ -303,19 +308,19 @@ function PlaceList(props: {
 const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; tip: string }[] = [
   { key: "regional", label: "Regional", tip: "Regional: mid-size railroads" },
   { key: "shortLine", label: "Short lines", tip: "Short line: small local railroads, often the last mile to a plant" },
-  { key: "passenger", label: "Passenger / commuter lines", tip: "Passenger: lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
+  { key: "passenger", label: "Passenger", tip: "Passenger: lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
 ];
 
 /** Which track the route may use: Class I always, the rest when ticked. */
 function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackIncluded) => void }): ReactElement {
   return (
-    <div className="track-choice" role="group" aria-label="Track">
-      <label className="check" title={`Class I: the ${RAILROADS.length} big railroads`}>
+    <div className="chips" role="group" aria-label="Track">
+      <label className="chip" title={`Class I: the ${RAILROADS.length} big railroads`}>
         <input type="checkbox" checked disabled />
         Class I
       </label>
       {SMALLER_TRACK.map(({ key, label, tip }) => (
-        <label key={key} className="check" title={tip}>
+        <label key={key} className="chip" title={tip}>
           <input type="checkbox" checked={props.include[key]} onChange={(event) => props.onChange({ ...props.include, [key]: event.target.checked })} />
           {label}
         </label>
@@ -326,19 +331,21 @@ function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackI
 
 // ---- routes ----
 
-/** One row per route, always one line: its railroads, km, ⇄ interchanges and ↩ turn-backs. Click to select. */
-function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (id: RouteStrategy) => void }): ReactElement {
+/** One row per route: its length over its railroads, then ⇄ interchanges and ↩ turn-backs. Click to select. */
+function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (id: RouteStrategy) => void; unit: DistanceUnit }): ReactElement {
   return (
-    <section className="route-rows" aria-label="Routes">
+    <section className="group route-rows" aria-label="Routes">
       {props.routes.map((route) => {
         const selected = route === props.chosen;
         const turns = route.turnBacks.length;
         return (
           <button key={route.strategies[0]} type="button" className={`route-row${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => props.onSelect(route.strategies[0])}>
-            <RailroadChips railroads={route.railroads} />
-            <span className="route-row-km">{fmtKmShort(route.km)}</span>
+            <span className="route-row-text">
+              <span className="route-row-km">{fmtDistance(route.km, props.unit)}</span>
+              <RailroadChips railroads={route.railroads} />
+            </span>
             {route.interchanges > 0 && (
-              // A short chip keeps the row on one line on a phone.
+              // A short count; the word is for screen readers and the tooltip.
               <span className="ix-chip" title={interchangesWord(route.interchanges)}>
                 <span aria-hidden="true">⇄{route.interchanges}</span>
                 <span className="visually-hidden">{interchangesWord(route.interchanges)}</span>
@@ -359,12 +366,12 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
 
 type SectionRow = { key: string; mark: ReactNode; text: ReactNode; kind: "place" | "leg" | "interchange" | "turn-back" };
 
-/** "you chose" or "router's pick". */
-function JunctionChips({ junction }: { junction: RouteString["junctions"][number] }): ReactElement {
+/** "· you chose" or "· router's pick". */
+function JunctionWord({ junction }: { junction: RouteString["junctions"][number] }): ReactElement {
   return (
     <>
-      {" "}
-      <span className={`tag${junction.chosen ? " tag--accent" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
+      {" · "}
+      <span className={`junction${junction.chosen ? " is-chosen" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
     </>
   );
 }
@@ -373,7 +380,7 @@ function JunctionChips({ junction }: { junction: RouteString["junctions"][number
  * The chosen route read top to bottom: start, each railroad's stretch with its km, railroad changes,
  * stops, turn-backs, destination. `rows` are the place rows the route runs through, so a stop shows its row's number.
  */
-function Sections(props: { route: RoutePath; string: RouteString; places: ResolvedPlace[]; rows: number[] }): ReactElement {
+function Sections(props: { route: RoutePath; string: RouteString; places: ResolvedPlace[]; rows: number[]; unit: DistanceUnit }): ReactElement {
   const { route, places } = props;
   const junctionAt = new Map(props.string.junctions.map((junction) => [junction.step, junction]));
   const rows: SectionRow[] = [{ key: "start", mark: <PlacePin kind="start" n={0} />, text: shortPlace(places[0]?.label ?? ""), kind: "place" }];
@@ -388,7 +395,7 @@ function Sections(props: { route: RoutePath; string: RouteString; places: Resolv
           mark: <span className="section-bar" style={{ background: lineColor(leg.railroad) }} />,
           text: (
             <>
-              <span className="strong">{lineName(leg.railroad)}</span> {fmtKmShort(leg.km)}
+              <span className="strong">{lineName(leg.railroad)}</span> <span className="section-km">{fmtDistance(leg.km, props.unit)}</span>
             </>
           ),
           kind: "leg",
@@ -403,7 +410,7 @@ function Sections(props: { route: RoutePath; string: RouteString; places: Resolv
           text: (
             <>
               {lineName(step.from)} → {lineName(step.to)} · {shortPlace(step.at)}
-              {junction && <JunctionChips junction={junction} />}
+              {junction && <JunctionWord junction={junction} />}
             </>
           ),
           kind: "interchange",
@@ -439,9 +446,9 @@ function Sections(props: { route: RoutePath; string: RouteString; places: Resolv
 function RouteStringRow(props: { string: RouteString; saved: string | null }): ReactElement {
   const compact = compactRouteString(props.string);
   return (
-    <section className="route-string" aria-label="Route string">
+    <section className="group-title route-string" aria-label="Route string">
       <span className="route-string-text">{shownRouteString(props.string)}</span>
-      {props.saved && props.saved !== compact && <span className="route-string-saved">Saved as {props.saved}</span>}
+      {props.saved && props.saved !== compact && <span className="caption">Saved as {props.saved}</span>}
     </section>
   );
 }
@@ -503,6 +510,7 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
     // The summary's click is handled here: the toggle event also fires when React sets `open`.
     <details className="saved-list" open={shown ?? props.unfolded}>
       <summary
+        className="group-title"
         onClick={(event) => {
           event.preventDefault();
           setShown(!(shown ?? props.unfolded));
@@ -510,7 +518,7 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
       >
         Saved routes ({props.saved.length})
       </summary>
-      <ul aria-label="Saved routes">
+      <ul className="group" aria-label="Saved routes">
         {props.saved.map((route) => (
           <li key={route.id} className={route.id === props.current ? "is-current" : undefined}>
             {confirming === route.id ? (
@@ -520,7 +528,7 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
                 <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })} aria-current={route.id === props.current ? "page" : undefined}>
                   {route.name}
                 </a>
-                <button type="button" className="icon-btn small" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
+                <button type="button" className="icon-btn" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
                   <Cross />
                 </button>
               </>
@@ -582,24 +590,23 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
   return (
     <div className={`route-panel${planned?.stale ? " is-stale" : ""}`} aria-busy={planned?.stale || undefined}>
       <section className="plan" aria-label="Places">
-        <PlaceList session={session} dispatch={dispatch} named={named} current={current} />
-        <div className="plan-actions">
-          {!plan.places.includes(null) && (
-            <button type="button" className="link-btn" onClick={() => dispatch({ type: "insert", at: plan.places.length - 1, ref: null })}>
-              + Add stop
+        <PlaceList
+          session={session}
+          dispatch={dispatch}
+          named={named}
+          current={current}
+          onAddStop={plan.places.includes(null) ? null : () => dispatch({ type: "insert", at: plan.places.length - 1, ref: null })}
+        />
+        {!empty && (
+          <div className="plan-actions">
+            <button type="button" className="link-btn" onClick={() => dispatch({ type: "reverse" })}>
+              Reverse route
             </button>
-          )}
-          {!empty && (
-            <>
-              <button type="button" className="link-btn" onClick={() => dispatch({ type: "reverse" })}>
-                Reverse route
-              </button>
-              <button type="button" className="link-btn" onClick={props.onNew}>
-                New
-              </button>
-            </>
-          )}
-        </div>
+            <button type="button" className="link-btn" onClick={props.onNew}>
+              New
+            </button>
+          </div>
+        )}
         <TrackChoice include={plan.include} onChange={(include) => dispatch({ type: "setInclude", include })} />
         <p className="hint-line" role="status">
           {hint}
@@ -608,9 +615,13 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
 
       {routes && chosen && string && (
         <>
-          <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} />
-          <RouteStringRow string={string} saved={open?.routeString || null} />
-          <Sections route={chosen} string={string} places={resolved.filter((place) => place !== null)} rows={routedRows} />
+          <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />
+          <div>
+            <RouteStringRow string={string} saved={open?.routeString || null} />
+            <div className="group sections-group">
+              <Sections route={chosen} string={string} places={resolved.filter((place) => place !== null)} rows={routedRows} unit={props.unit} />
+            </div>
+          </div>
           {result && (
             <SaveBar
               key={open?.id ?? "new"}

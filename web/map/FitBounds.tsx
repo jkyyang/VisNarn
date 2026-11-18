@@ -4,18 +4,13 @@ import type { Bounds } from "../../shared/geo.ts";
 import { FIT_MAX_ZOOM, FIT_MS } from "./config.ts";
 
 /**
- * Room for the floating controls, and at the sides for the labels that hang off the outermost
- * pins. A wide map can spare that room; a phone cannot.
+ * The free part of the map, right of the panel, with room for the floating controls, and at the sides
+ * for the labels that hang off the outermost pins. A wide map can spare that room; a phone cannot.
+ * The map buttons take the right edge.
  */
-/** A map this wide has room for the layers card beside a route. */
-const WIDE_MAP_PX = 640;
-
-function fitOptions(mapWidth: number) {
-  const side = Math.round(Math.min(150, Math.max(40, mapWidth * 0.14)));
-  // On a wide map the layers card (about 200 px) floats top-right: keep the route out from under it.
-  // On a phone the round buttons take the right edge: keep pins and their labels clear of them.
-  const right = mapWidth >= WIDE_MAP_PX ? Math.max(side, 240) : Math.max(side, 72);
-  return { padding: { top: 72, bottom: 84, left: side, right }, maxZoom: FIT_MAX_ZOOM };
+function fitOptions(mapWidth: number, coveredLeft: number) {
+  const side = Math.round(Math.min(150, Math.max(40, (mapWidth - coveredLeft) * 0.14)));
+  return { padding: { top: 72, bottom: 84, left: coveredLeft + side, right: Math.max(side, 72) }, maxZoom: FIT_MAX_ZOOM };
 }
 
 type View = { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
@@ -46,11 +41,11 @@ export function shouldRefit(view: View, previous: Bounds | null, next: Bounds): 
 
 /**
  * Moves the camera to `bounds` when they first appear (a plan that has just got its route), when they
- * change and `shouldRefit` says so, and whenever `nonce` changes ("Fit whole route"). Renders
- * nothing; must be a child of the map.
+ * change and `shouldRefit` says so, and whenever `nonce` changes ("Fit whole route"). `coveredLeft`:
+ * the px of the map the panel covers from the left. Renders nothing; must be a child of the map.
  */
-export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
-  const { bounds, nonce = 0 } = props;
+export function FitBounds(props: { bounds: Bounds | null; nonce?: number; coveredLeft: number }) {
+  const { bounds, nonce = 0, coveredLeft } = props;
   const map = useMap().current;
   const mounted = useRef(false);
   const lastNonce = useRef(nonce);
@@ -70,10 +65,15 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
     previous.current = bounds;
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
+    // What the person sees: the map right of the panel.
+    const { clientWidth, clientHeight } = map.getContainer();
+    const nw = map.unproject([coveredLeft, 0]);
+    const se = map.unproject([clientWidth, clientHeight]);
+    const view: View = { getWest: () => nw.lng, getNorth: () => nw.lat, getEast: () => se.lng, getSouth: () => se.lat };
     // Switching tabs or editing stops must not zoom the map back and forth: the camera stays where
     // the user put it unless the route ran off it. "Fit whole route" always moves it.
-    if (!first && !asked && !appeared && !shouldRefit(map.getBounds(), before, bounds)) return;
-    const options = fitOptions(map.getContainer().clientWidth);
+    if (!first && !asked && !appeared && !shouldRefit(view, before, bounds)) return;
+    const options = fitOptions(clientWidth, coveredLeft);
     map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : FIT_MS });
     // Keyed on the numbers: a re-check that lands on the same route leaves the camera wherever the user has panned to.
   }, [map, key, nonce]);

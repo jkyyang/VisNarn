@@ -12,6 +12,7 @@ import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
+import type { DistanceUnit } from "../units.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
 import { NightLights } from "./DayNight.tsx";
@@ -41,23 +42,32 @@ export interface MapCanvasProps {
   content: MapContentProps | null;
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
+  unit: DistanceUnit;
+  onUnit: (unit: DistanceUnit) => void;
   /** The day or night look for the clock and the map centre, worked out by the stage. */
   look: MapLook;
   /** The clock the look was worked out for, as epoch ms; Auto's night tiles follow it too. */
   now: number;
   /** Where the map centre is after each move, for the sun's position. */
   onCentre: (centre: LngLat) => void;
+  /**
+   * How many px of the map the panel covers from the left: every fit and flight frames the rest. Given
+   * to each camera move, never set as the camera's padding: MapLibre keeps PAN_BOUNDS on the whole
+   * canvas only, so a padded camera would show past them beside the panel.
+   */
+  coveredLeft: number;
 }
 
 
 const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
-const INITIAL_VIEW = {
+/** The whole network, in the part of the map the panel leaves free. */
+const initialView = (coveredLeft: number) => ({
   bounds: [
     [NETWORK_BOUNDS[0], NETWORK_BOUNDS[1]],
     [NETWORK_BOUNDS[2], NETWORK_BOUNDS[3]],
   ] as [[number, number], [number, number]],
-  fitBoundsOptions: { padding: INITIAL_PADDING_PX },
-};
+  fitBoundsOptions: { padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: INITIAL_PADDING_PX, left: INITIAL_PADDING_PX + coveredLeft } },
+});
 
 /** Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom. */
 const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
@@ -66,14 +76,15 @@ const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
 
-/** Flies to one junction when the screen asks for it. Renders nothing; must be a child of the map. */
-function FlyTo({ focus }: { focus: MapFocus | undefined }) {
+/** Flies to one place when the screen asks for it, into the middle of the free map. Renders nothing; must be a child of the map. */
+function FlyTo({ focus, coveredLeft }: { focus: MapFocus | undefined; coveredLeft: number }) {
   const map = useMap().current;
   const key = focus?.kind === "place" ? `${focus.lon},${focus.lat},${focus.zoom}` : null;
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, duration: still ? 0 : FLY_MS });
+    // `essential`: the duration already follows reduced motion, and MapLibre's own fallback for it would drop the offset.
+    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [coveredLeft / 2, 0], duration: still ? 0 : FLY_MS, essential: true });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
   }, [map, key]);
   return null;
@@ -113,11 +124,13 @@ function CornerLegend(props: Parameters<typeof Legend>[0]) {
 /** The controls need the map instance for zoom, so they live inside the map. */
 function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactElement {
   const map = useMap().current;
-  const { content, layers, onLayers } = props.canvas;
+  const { content, layers, onLayers, unit, onUnit } = props.canvas;
   return (
     <MapControls
       layers={layers}
       onLayers={onLayers}
+      unit={unit}
+      onUnit={onUnit}
       look={props.canvas.look}
       onZoom={(step) => (step > 0 ? map?.zoomIn() : map?.zoomOut())}
       onFit={props.onFit}
@@ -168,7 +181,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   return (
     <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"} data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}>
       <MapGL
-        initialViewState={INITIAL_VIEW}
+        initialViewState={initialView(props.coveredLeft)}
         maxBounds={PAN_BOUNDS}
         // `zoom` changes only when a move ends, so the style never swaps in the middle of a zoom.
         mapStyle={basemapStyle(layers.basemap, darkStreets)}
@@ -205,9 +218,9 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
-        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} />}
-        <FlyTo focus={content?.focus} />
-        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} />
+        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} coveredLeft={props.coveredLeft} />}
+        <FlyTo focus={content?.focus} coveredLeft={props.coveredLeft} />
+        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
         {chosen && found?.ok && <FoundPin chosen={chosen} place={found.place} actions={content?.placeActions ?? []} onClose={() => setChosen(null)} />}

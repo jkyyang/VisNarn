@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtCompass, fmtKmShort, fmtSub, fmtSubdivision, titleCase } from "./format.ts";
+import { fmtCompass, fmtDistance, fmtSub, fmtSubdivision, titleCase } from "./format.ts";
 
 describe("format", () => {
   it("title-cases accented names without breaking words", () => {
@@ -12,8 +12,11 @@ describe("format", () => {
     expect(fmtSub("LAMPASAS")).toBe("Lampasas Sub");
     expect(fmtSub("GALVESTON (BNSF)")).toBe("Galveston Sub (BNSF)");
   });
-  it("writes km with thousands", () => {
-    expect(fmtKmShort(1045.6)).toBe("1,046 km");
+  it("writes a distance in the viewer's unit, rounded, with thousands", () => {
+    expect(fmtDistance(1045.6, "km")).toBe("1,046 km");
+    expect(fmtDistance(1045.6, "mi")).toBe("650 mi");
+    expect(fmtDistance(1.609344 * 1500, "mi")).toBe("1,500 mi");
+    expect(fmtDistance(0.4, "km")).toBe("0 km");
   });
 });
 

@@ -1,18 +1,18 @@
 /** The Shops screen: Your shops, the form for one, and the shop list import. */
 import { useEffect, useState, type ReactElement } from "react";
 import type { NetworkNode } from "../../../shared/places.ts";
-import { BackHeader } from "../../app/chrome.tsx";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
-import { importShops, removeShop, saveShop, snapToNetwork, useMeta, useShops } from "../../data/hooks.ts";
+import { importShops, removeShop, saveShop, snapToNetwork, useShops } from "../../data/hooks.ts";
 import { SHOP_EDITING_ZOOM, SHOP_PICKED_ZOOM } from "../../map/config.ts";
 import { MapContent } from "../../map/MapStage.tsx";
 import { shopsScene } from "../../map/scene.ts";
+import { useDistanceUnit } from "../../units.ts";
 import { PickPrompt, ShopForm, ShopImportCard, ShopTable } from "./ShopsPage.tsx";
 
 export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops" }> }): ReactElement {
-  const meta = useMeta();
   const shops = useShops();
+  const [unit] = useDistanceUnit();
   // Picking the shop's location on the map: view state of this screen.
   const [picking, setPicking] = useState(false);
   const [missed, setMissed] = useState(false);
@@ -35,14 +35,14 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
 
   useEscape(picking, () => setPicking(false));
 
-  const header = <BackHeader title="Your shops" exampleOnly={meta.status === "ready" && meta.data.exampleOnly} />;
+  const header = <h1 className="visually-hidden">Your shops</h1>;
 
   if (shops.status !== "ready") {
     return (
       <div className="shops-screen">
         {header}
         {shops.status === "error" ? (
-          <div className="alert error-card" role="alert">
+          <div className="alert" role="alert">
             <p>Couldn't load your shops. {shops.error.message}</p>
             <button type="button" className="btn" onClick={shops.retry}>
               Try again
@@ -86,6 +86,7 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
           <ShopForm
             key={editing === "new" ? "new" : editing.id}
             shop={editing === "new" ? null : editing}
+            unit={unit}
             picked={pickedHere}
             picking={picking}
             onTogglePick={() => {

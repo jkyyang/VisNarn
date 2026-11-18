@@ -44,11 +44,22 @@ export async function expectMapCanvases(page: Page): Promise<void> {
   }
 }
 
-/** Clicks the middle of the map, where the search box puts the place it found. */
+/**
+ * The middle of the map the panel leaves free, where the search box puts the place it found: beside
+ * the panel on a desktop (the panel floats over the map's left side), the whole map on a phone.
+ */
+export async function freeMapCentre(page: Page): Promise<{ x: number; y: number }> {
+  const map = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
+  const panel = await page.locator(".panel").boundingBox();
+  if (!map || !panel) throw new Error("The map or the panel is not on the page.");
+  const covered = panel.width < map.width ? panel.x + panel.width - map.x : 0;
+  return { x: map.x + covered + (map.width - covered) / 2, y: map.y + map.height / 2 };
+}
+
+/** Clicks the middle of the free map. */
 export async function clickMapCentre(page: Page): Promise<void> {
-  const box = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
-  if (!box) throw new Error("The map canvas is not on the page.");
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const centre = await freeMapCentre(page);
+  await page.mouse.click(centre.x, centre.y);
 }
 
 /** A phone: an iPhone 14's window, with touch. */

@@ -7,8 +7,9 @@ import type { PlanPlaces } from "../shared/plans.ts";
 import { isClassI } from "../shared/railroads.ts";
 import type { RoutePath, TurnBack } from "../shared/route.ts";
 import { isPlaceName } from "../shared/routeString.ts";
-import { fmtCompass, fmtKmShort, fmtSub } from "./format.ts";
+import { fmtCompass, fmtDistance, fmtSub } from "./format.ts";
 import type { MapLine } from "./theme.ts";
+import type { DistanceUnit } from "./units.ts";
 
 /**
  * "Temple, TX" → "Temple"; "72 km from Jacksonville, FL" → "72 km from Jacksonville";
@@ -49,15 +50,15 @@ export const trackWords = (track: TurnBack["track"]) => (track === "stub-end" ? 
 
 /**
  * A route's pill on the map. The selected route: its length ("828 km"). Another: how it differs from
- * the selected one ("+180 km · 1 more interchange", "−40 km", "same km").
+ * the selected one ("+180 km · 1 more interchange", "−40 km", "same length").
  */
-export function pillText(route: RoutePath, selected: RoutePath): string {
-  if (route === selected || route.strategies[0] === selected.strategies[0]) return fmtKmShort(route.km);
+export function pillText(route: RoutePath, selected: RoutePath, unit: DistanceUnit): string {
+  if (route === selected || route.strategies[0] === selected.strategies[0]) return fmtDistance(route.km, unit);
   const diff = route.km - selected.km;
-  const km = Math.abs(diff) < 1 ? "same km" : `${diff > 0 ? "+" : "−"}${fmtKmShort(Math.abs(diff))}`;
+  const length = Math.abs(diff) < 1 ? "same length" : `${diff > 0 ? "+" : "−"}${fmtDistance(Math.abs(diff), unit)}`;
   const changes = route.interchanges - selected.interchanges;
-  if (!changes) return km;
-  return `${km} · ${plural(Math.abs(changes), `${changes > 0 ? "more" : "fewer"} interchange`, `${changes > 0 ? "more" : "fewer"} interchanges`)}`;
+  if (!changes) return length;
+  return `${length} · ${plural(Math.abs(changes), `${changes > 0 ? "more" : "fewer"} interchange`, `${changes > 0 ? "more" : "fewer"} interchanges`)}`;
 }
 
 /** "Kansas City → Chicago via Galesburg": the name a new saved route starts with. */
@@ -66,6 +67,18 @@ export function routeName(places: PlanPlaces): string {
   // A clicked point named by its distance to a city is no name to save under.
   const via = labels.slice(1, -1).filter(isPlaceName);
   return `${labels[0] ?? ""} → ${labels.at(-1) ?? ""}${via.length ? ` via ${via.join(", ")}` : ""}`;
+}
+
+/** A typed spot this far or farther from the track it snapped to says how far. */
+const SHOW_SNAP_KM = 1;
+
+/** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
+export function placeHint(resolution: PlaceResolution, unit: DistanceUnit): { ok: boolean; text: string } {
+  if (!resolution.ok) return { ok: false, text: resolution.problem.message };
+  const { place } = resolution;
+  const lines = place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
+  if (place.match.confidence === "snapped" && place.match.snapKm >= SHOW_SNAP_KM) return { ok: true, text: `Nearest track ${fmtDistance(place.match.snapKm, unit)} away${lines}` };
+  return { ok: true, text: `On the network${lines}` };
 }
 
 /** The one line under a place that did not resolve; null for one that did. */

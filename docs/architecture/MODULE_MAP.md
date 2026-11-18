@@ -108,26 +108,27 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | File | Owns | May import |
 |---|---|---|
 | `main.tsx` | mounting the app | `./app/App`, styles |
-| `styles.css` | the look: tokens (colours, radii, motion) at the top, the shared kit classes, then each part | |
-| `app/App.tsx` | the page frame: panel, one map, which screen | `./routes`, `./chrome`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
+| `styles.css` | the look: tokens (colours, type sizes, radii, motion) at the top, with the night set the whole page takes from the map's look and the phone sizes; the shared kit classes (`.glass`, `.group`, `.segmented`, `.chip`, buttons, fields); then each part | |
+| `app/App.tsx` | the page frame: one map, the panel floating over it (a sheet under it on a phone), which screen; how far the panel covers the map, for the camera | `./routes`, `./chrome`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
 | `app/routes.ts` | `Screen` ↔ URL: `parseLocation`, `hrefFor`, `useScreen`, `go`, `linkTo` | `shared/` |
-| `app/chrome.tsx` | `AppHeader`, `ModeTabs`, `BackHeader` | `./routes` |
+| `app/chrome.tsx` | `AppHeader`: Route \| Shops and the EXAMPLE DATA caption | `./routes` |
 | `data/query.ts` | the transport and the query cache: `useQuery`, `read`, `write`, `callApi`. **Internal**: only `web/data/` imports it; the only `fetch` to the API | `shared/api`, `shared/app` |
 | `data/hooks.ts` | the named reads and changes the screens use | `./query`, `shared/` |
 | `data/basemap.ts` | loading the static mainline GeoJSON; `canDrawMaps` | |
 | `data/blackMarble.ts` | downloading NASA GIBS Black Marble tiles for the night side, with an in-memory cache (GIBS sends `no-store`); its URL and attribution | |
-| `words.ts` | the words the page says: `shortPlace`, `lineName`, `plural`, `errorText`, `clickToSet`, `pillText`, `routeName`, `placeProblem`, `interchangesWord`, `turnBackMove`, `trackWords`, `PLACE_SOURCE_WORDS` | `shared/` |
-| `format.ts` | distances, subdivision names, compass points. No clock | `shared/` |
+| `words.ts` | the words the page says: `shortPlace`, `lineName`, `plural`, `errorText`, `clickToSet`, `pillText`, `routeName`, `placeHint`, `placeProblem`, `interchangesWord`, `turnBackMove`, `trackWords`, `PLACE_SOURCE_WORDS` | `shared/` |
+| `format.ts` | distances in the viewer's unit (`fmtDistance`), subdivision names, compass points. No clock | `shared/`, `./units` (type) |
+| `units.ts` | the viewer's distance unit, km or mi, kept in this browser: `useDistanceUnit`, `DISTANCE_UNITS`, `DEFAULT_UNIT`. Only the words change; everything else stays in km | |
 | `theme.ts` | CSS theme tokens as deck.gl colours; `MapLine`, `CLASS_LINES`, `lineColor` | `shared/railroads` |
 | `map/config.ts` | the map's camera and click numbers: pan bounds, zooms, fly and fit times, pick radii, the phone query | nothing |
-| `map/MapStage.tsx` | the one map: `MapStageProvider`, `MapStage`, `MapContent`; layer choices | `./MapCanvas` (lazy), `./scene`, `../data/basemap` |
-| `map/MapCanvas.tsx` | MapLibre + deck.gl + controls + legend (the heavy, lazily loaded half) | `./layers`, `./DeckOverlay`, `./FitBounds`, `./RealTracks`, `./MapControls`, `./Legend`, `./basemaps`, `../theme` |
+| `map/MapStage.tsx` | the one map: `MapStageProvider`, `MapStage`, `MapContent`; layer choices; the distance unit for the layers card | `./MapCanvas` (lazy), `./scene`, `../data/basemap` |
+| `map/MapCanvas.tsx` | MapLibre + deck.gl + controls + legend (the heavy, lazily loaded half); the camera's padding for the panel | `./layers`, `./DeckOverlay`, `./FitBounds`, `./RealTracks`, `./MapControls`, `./Legend`, `./basemaps`, `../theme` |
 | `map/scene.ts` | `MapScene` and its builders (`planScene`, `shopsScene`), `chosenRoute`, `pillAnchors`: what the map draws, as data | `../words`, `shared/` |
 | `map/pills.ts` | `placePills`, `pillWidthPx`: where the route pills go on screen, beside the route lines and kept apart from each other, the pins and the legend (pure geometry) | |
 | `map/RouteMarks.tsx` | `RouteMarks`: the route pills and turn-back discs as MapLibre markers, laid out with `placePills` on every move | `./pills`, `./RouteMarkFaces`, `./scene` (types), `../words`, `react-map-gl` |
 | `map/RouteMarkFaces.tsx` | `PillFace`, `TurnBackMark`, `useNativeClick` (a click on a mark never reaches the map): plain DOM, so page tests draw them without a map | `./pills` (type), `./scene` (type), `../words` |
 | `map/layers.ts` | a scene as deck.gl layers (the selected route by railroad, thin alternatives, pins, shop squares; no place names: the panel and the basemap have them); hover names; click targets (`sceneTarget`). The only file that names deck.gl layer classes | `./scene`, `../theme`, `../data/basemap` (type) |
-| `map/MapControls.tsx` | layers card (with the Auto / Day / Night switch), zoom, undo / redo, fit | `./MapCanvas` (type), `./daylight` |
+| `map/MapControls.tsx` | the layers button and card (Map layer, Time of day and Distances, drawn by one row component; Rail network, Real tracks), zoom, undo / redo, fit | `./MapCanvas` (type), `./daylight`, `../units` |
 | `map/daylight.ts` | day and night: sun position and the subsolar point from the clock (no package), `mapLook` (Auto / Day / Night → day or night colours and the Day / Sunrise / Sunset / Night word, at the map centre) | `shared/geo` (type) |
 | `map/nightTiles.ts` | the night side of the Earth per tile: `nightFactor`, `nightShade` (Black Marble where the sun is down, a soft twilight band, clear by day; pure), the `earthnight://` tile URL and its MapLibre loader | `./daylight`, `../data/blackMarble`, `maplibre-gl` (type) |
 | `map/DayNight.tsx` | `NightLights`: the `earthnight://` raster layer under the place names, inside MapLibre (under deck.gl), its opacity per basemap and mode, redrawn every 10 minutes in Auto | `./nightTiles`, `../data/blackMarble` |
@@ -135,7 +136,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `map/Legend.tsx` | `Legend`, `legendFor`: the selected route's railroads only (with no route, the lines of the classes drawn), and "↩ Turn-back" when it has one | `./scene` (type), `../theme`, `shared/railroads` |
 | `screens/route/RouteWorkspace.tsx` | container for the route planner (desktop and phone): saved route from the URL, session, `usePlannedRoute`, scene, save | `./session`, `./RoutePanel`, `../../data/hooks`, `../../map/*`, `../../app/routes` |
 | `screens/route/session.ts` | the plan being worked on: the place list with undo history, which row's ⌖ is on, the missed click; `planReducer` (set, insert, remove, move, reverse as list operations), `nextTarget`, `placeAtEnd`, `stopInsertIndex`, `fullPlan`, `usePlanSession` (click → snap → the first empty row, else a stop where it adds the least km) | `../../data/hooks`, `../../map/config`, `../../ui/useEscape`, `shared/` |
-| `screens/route/RoutePanel.tsx` | the planner's panel: `PlaceList` (one row per place: `PlacePin`, `PlaceField`, drag handle, `LineChips`), + Add stop, route rows, sections, save bar, saved routes, the hint line | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
+| `screens/route/RoutePanel.tsx` | the planner's panel: `PlaceList` (one row per place: `PlacePin`, `PlaceField`, drag handle, `LineChips`, then Add stop), route rows, sections, save bar, saved routes, the hint line | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
 | `screens/shops/ShopsScreen.tsx` | container: shops, the form, the shop import, picking a location | `./ShopsPage`, `../../data/hooks`, `../../map/*`, `../../app/*` |
 | `screens/shops/ShopsPage.tsx` | `ShopTable`, `ShopForm`, `ShopImportCard`, `PickPrompt` | `../../ui/*`, `../../data/hooks`, `shared/` |
 | `ui/badges.tsx` | `RailroadChip`, `RailroadChips`, `TurnBadge` | `shared/` |

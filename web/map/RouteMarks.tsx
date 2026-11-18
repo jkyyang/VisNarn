@@ -30,7 +30,7 @@ interface Placed {
   turns: (Point | null)[];
 }
 
-/** Where each pill and turn-back goes on screen now, given the route lines, the pins, the legend, the map buttons and the search box. */
+/** Where each pill and turn-back goes on screen now, given the route lines, the pins, the legend, the map buttons, the search box and the panel. */
 function layout(map: MapLibreMap, scene: RouteScene): Placed {
   const container = map.getContainer();
   const frame = container.getBoundingClientRect();
@@ -50,7 +50,7 @@ function layout(map: MapLibreMap, scene: RouteScene): Placed {
     return shift;
   });
   if (!scene.pills.length) return { pills: [], turns };
-  const overlays = container.closest(".map-canvas")?.querySelectorAll(".legend, .map-controls > *, .map-search") ?? [];
+  const overlays = container.closest(".app")?.querySelectorAll(".legend, .map-controls > *, .map-search, .panel") ?? [];
   for (const element of overlays) {
     const rect = element.getBoundingClientRect();
     if (rect.width && rect.height) obstacles.push({ left: rect.left - frame.left, top: rect.top - frame.top, right: rect.right - frame.left, bottom: rect.bottom - frame.top });

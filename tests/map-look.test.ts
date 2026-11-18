@@ -1,7 +1,7 @@
 /**
- * Rail lines and the route must stay easy to see when the map turns dark. The map's night look
- * swaps in its own colour set (web/styles.css, `.map[data-look="night"]`); this checks those colours
- * against the two night grounds they are drawn on.
+ * Rail lines and the route must stay easy to see when the map turns dark. The whole page takes the
+ * map's night look (web/styles.css, `:root:has(.map[data-look="night"])`); this checks those colours
+ * against the night grounds they are drawn on, and against each other where two look alike.
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -15,8 +15,8 @@ const CSS = readFileSync(new URL("../web/styles.css", import.meta.url), "utf8");
  */
 const NIGHT_GROUNDS = { "dark map": "#0c0c0c", "night lights": "#14142d", "night ocean": "#04050f", "moonlit land": "#2a2f4a" };
 
-function tokens(selector: string, from = 0): Record<string, string> {
-  const start = CSS.indexOf(`${selector} {`, from);
+function tokens(selector: string): Record<string, string> {
+  const start = CSS.indexOf(`${selector} {`);
   expect(start, `${selector} is in styles.css`).toBeGreaterThanOrEqual(0);
   const body = CSS.slice(start, CSS.indexOf("}", start));
   return Object.fromEntries([...body.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
@@ -33,7 +33,7 @@ const contrast = (a: string, b: string) => {
 };
 
 describe("the night map", () => {
-  const night = tokens('.map[data-look="night"]');
+  const night = tokens(':root:has(.map[data-look="night"])');
 
   it("draws every Class I railroad and the selected route at 4.5:1 or more against the dark ground", () => {
     for (const [ground, colour] of Object.entries(NIGHT_GROUNDS)) {
@@ -43,7 +43,13 @@ describe("the night map", () => {
     }
   });
 
-  it("uses the app's dark theme colours, so the cards over the map match the map", () => {
-    expect(night).toEqual(tokens(":root", CSS.indexOf("@media (prefers-color-scheme: dark)")));
+  // Both are thin, faint lines in the network layer: grey beside a pale brown read as one colour.
+  it("tells regional and short-line track apart, and shows each on every night ground", () => {
+    expect(contrast(night["--rr-regional"], night["--rr-short-line"])).toBeGreaterThanOrEqual(2);
+    for (const [ground, colour] of Object.entries(NIGHT_GROUNDS)) {
+      for (const name of ["--rr-regional", "--rr-short-line"]) {
+        expect(contrast(night[name], colour), `${name} on the ${ground}`).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });

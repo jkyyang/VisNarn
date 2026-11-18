@@ -20,6 +20,7 @@ beforeEach(() => {
 afterEach(() => {
   fake.restore();
   clearQueryCache();
+  localStorage.clear();
 });
 
 const field = (name: "Start" | "Destination") => screen.getByRole("combobox", { name });
@@ -71,8 +72,8 @@ describe("Route planner", () => {
     const [pick, shortest] = routeRows();
     expect(pick).toHaveAttribute("aria-pressed", "true");
     expect(pick).toHaveTextContent("1,046 km");
-    // One line on a phone: km plus a short ⇄ chip; the word is only for screen readers and the tooltip.
-    expect(shortest).toHaveAccessibleName("BNSF UP 839 km 1 interchange");
+    // The length over the railroads, then a short ⇄ count; the word is only for screen readers and the tooltip.
+    expect(shortest).toHaveAccessibleName("839 km BNSF UP 1 interchange");
     expect(within(shortest).queryByText(/interchange/, { ignore: ".visually-hidden, script, style" })).toBeNull();
     expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
@@ -151,7 +152,7 @@ describe("Route planner", () => {
       ["Class I", true],
       ["Regional", false],
       ["Short lines", false],
-      ["Passenger / commuter lines", true],
+      ["Passenger", true],
     ]);
     expect(within(track).getByRole("checkbox", { name: "Class I" })).toBeDisabled();
 
@@ -160,6 +161,29 @@ describe("Route planner", () => {
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
     expect(within(track).getByRole("checkbox", { name: "Short lines" })).not.toBeChecked();
+  });
+
+  it("Distances in the layers card shows every distance in miles, and back in km; this browser keeps the choice", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: /^Map layers/ }));
+    const distances = screen.getByRole("radiogroup", { name: "Distances" });
+    expect(within(distances).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["km", "mi"]);
+    expect(within(distances).getByRole("radio", { name: "km" })).toHaveAttribute("aria-checked", "true");
+
+    await user.click(within(distances).getByRole("radio", { name: "mi" }));
+    expect(localStorage.getItem("visnarn.distance-unit")).toBe("mi");
+    expect(routeRows()[0]).toHaveTextContent(/^650 mi/);
+    expect(routeRows()[1]).toHaveTextContent(/^521 mi/);
+    expect(screen.getByRole("button", { name: "Route 650 mi, selected" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Route −129 mi · 1 more interchange" })).toBeInTheDocument();
+    const sections = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem");
+    expect(sections.filter((row) => /\d mi$/.test(row.textContent ?? ""))).not.toHaveLength(0);
+    expect(sections.filter((row) => /\d km$/.test(row.textContent ?? ""))).toHaveLength(0);
+
+    await user.click(within(distances).getByRole("radio", { name: "km" }));
+    expect(routeRows()[0]).toHaveTextContent(/^1,046 km/);
+    expect(localStorage.getItem("visnarn.distance-unit")).toBe("km");
   });
 
   it("a pill or a grey route on the map selects that route: the URL and the pressed row follow", async () => {
@@ -299,7 +323,7 @@ describe("Route planner", () => {
     }
   });
 
-  it("every place is one row with the same buttons: + Add stop, remove, and a handle that reorders by keyboard", async () => {
+  it("every place is one row with the same buttons: Add stop, remove, and a handle that reorders by keyboard", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
@@ -328,8 +352,8 @@ describe("Route planner", () => {
     await user.keyboard("{Escape}");
     await waitFor(() => expect(rowValues()).toEqual(["TEMPLE, TX wye", "Temple, TX", "North Little Rock, AR"]));
 
-    // + Add stop opens an empty row before the destination with ⌖ on; the route still runs through the set rows.
-    await user.click(screen.getByRole("button", { name: "+ Add stop" }));
+    // Add stop opens an empty row before the destination with ⌖ on; the route still runs through the set rows.
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     expect(placeRows()).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Pick on the map: Stop 2" })).toHaveAttribute("aria-pressed", "true");
     expect(hint()).toHaveTextContent("Click the map to set stop 2.");

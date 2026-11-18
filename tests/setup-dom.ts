@@ -5,4 +5,9 @@ import { afterEach } from "vitest";
 if (typeof document !== "undefined") {
   const { cleanup } = await import("@testing-library/react");
   afterEach(cleanup);
+  // Node 25 has a localStorage of its own (unusable without --localstorage-file) that hides jsdom's.
+  const { jsdom } = globalThis as unknown as { jsdom: { window: Window } };
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage });
+  // jsdom has no layout, so there is nothing to scroll; its own scrollTo only logs "Not implemented".
+  window.scrollTo = () => {};
 }

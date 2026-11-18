@@ -3,7 +3,7 @@
  * hands the place to the planner. Only our own server is asked.
  */
 import type { Page } from "@playwright/test";
-import { expect, expectMapCanvases, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
+import { expect, expectMapCanvases, expectNoSideScroll, freeMapCentre, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
 
 /** Types into the search box and picks the city of that name (Your shops may list a shop with it too). */
 async function findCity(page: Page, name: string) {
@@ -25,12 +25,12 @@ test("Search Kansas City: the map centres on it, and Set as start makes it the p
   await expect(card).toContainText("Kansas City, MO");
   await expect(card).toContainText("City");
 
-  // The pin is in the middle of the map: the camera went there (reduced motion: no flight).
-  const canvas = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
+  // The pin is in the middle of the map beside the panel: the camera went there (reduced motion: no flight).
+  const centre = await freeMapCentre(page);
   const pin = await mapRegion(page).locator(".found-dot").boundingBox();
-  if (!canvas || !pin) throw new Error("The map or the pin is not on the page.");
-  expect(Math.abs(pin.x + pin.width / 2 - (canvas.x + canvas.width / 2))).toBeLessThan(3);
-  expect(Math.abs(pin.y + pin.height / 2 - (canvas.y + canvas.height / 2))).toBeLessThan(3);
+  if (!pin) throw new Error("The pin is not on the page.");
+  expect(Math.abs(pin.x + pin.width / 2 - centre.x)).toBeLessThan(3);
+  expect(Math.abs(pin.y + pin.height / 2 - centre.y)).toBeLessThan(3);
   await keepScreenshot(page, "map-search");
 
   await card.getByRole("button", { name: "Set as start" }).click();

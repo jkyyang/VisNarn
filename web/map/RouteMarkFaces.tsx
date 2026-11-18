@@ -58,7 +58,7 @@ export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; on
   );
 }
 
-/** Air kept between the turn-back popover and the map's edge, the search box and the map buttons. */
+/** Air kept between the turn-back popover and the map's edge, the search box, the map buttons and the panel. */
 const EDGE_PX = 8;
 
 /** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. */
@@ -82,25 +82,29 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
     return () => document.removeEventListener("pointerdown", away);
   }, [pinned]);
   // The details stay in the free part of the map: they go below the disc where the map's top edge or the
-  // search bar would cover them, then slide sideways to stay inside the map and clear of the map buttons.
+  // search bar would cover them, then slide sideways to stay inside the map, clear of the map buttons on
+  // the right and of the panel on the left.
   const pop = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const details = pop.current;
     const canvas = details?.closest(".map-canvas");
-    if (!details || !canvas) return;
+    const app = details?.closest(".app");
+    if (!details || !canvas || !app) return;
     const frame = canvas.getBoundingClientRect();
-    const rects = (selector: string) => [...canvas.querySelectorAll(selector)].map((element) => element.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
+    const rects = (selector: string) => [...app.querySelectorAll(selector)].map((element) => element.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
     let box = details.getBoundingClientRect();
     const searchOver = rects(".map-search").filter((rect) => rect.left < box.right && rect.right > box.left);
     if (box.top < Math.max(frame.top, ...searchOver.map((rect) => rect.bottom)) + EDGE_PX) {
       details.classList.add("turn-pop--below");
       box = details.getBoundingClientRect();
     }
-    // Only the buttons at the popover's own height matter; below them the map is free to its edge.
-    const buttonsBeside = rects(".map-controls > *").filter((rect) => rect.top < box.bottom && rect.bottom > box.top);
-    const right = Math.min(frame.right, ...buttonsBeside.map((rect) => rect.left)) - EDGE_PX;
-    // Clear of the right side first; the left edge wins if both cannot fit, so the text starts in view.
-    details.style.marginLeft = `${Math.max(Math.min(right - box.right, 0), frame.left + EDGE_PX - box.left)}px`;
+    // Only what is at the popover's own height matters; above and below it the map is free to its edge.
+    const beside = (rect: DOMRect) => rect.top < box.bottom && rect.bottom > box.top;
+    const right = Math.min(frame.right, ...rects(".map-controls > *").filter(beside).map((rect) => rect.left)) - EDGE_PX;
+    // The panel as App measures it: beside the map when narrower than it (on a phone it is the sheet below).
+    const left = Math.max(frame.left, ...rects(".panel").filter((rect) => beside(rect) && rect.width < frame.width).map((rect) => rect.right)) + EDGE_PX;
+    // Clear of the right side first; the left wins if both cannot fit, so the text starts in view.
+    details.style.marginLeft = `${Math.max(Math.min(right - box.right, 0), left - box.left)}px`;
   }, [open]);
   return (
     <span className="turn-mark-wrap">
@@ -127,11 +131,11 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
         <span aria-hidden="true">↩</span>
       </button>
       {open && (
-        <span role="tooltip" id={id} className="turn-pop" ref={pop}>
-          <span className="turn-pop-line strong">
+        <span role="tooltip" id={id} className="glass turn-pop" ref={pop}>
+          <span className="strong">
             {turnBack.at.near} · {trackWords(turnBack.track)}
           </span>
-          <span className="turn-pop-line">{turnBackMove(turnBack)}</span>
+          <span>{turnBackMove(turnBack)}</span>
         </span>
       )}
     </span>

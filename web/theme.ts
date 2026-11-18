@@ -33,7 +33,7 @@ function hexOf(style: CSSStyleDeclaration, name: string): RGBA {
 const lineToken = (line: MapLine) => `--rr-${line.replace(" ", "-")}`;
 export const lineColor = (line: MapLine) => `var(${lineToken(line)})`;
 
-/** Tokens as `scope` sees them: the map redefines them for its day or night look (styles.css, `.map[data-look]`). */
+/** Tokens as `scope` sees them: the whole page takes the map's day or night look (styles.css, `:root:has(.map[data-look="night"])`). */
 function read(scope?: Element | null): ThemeColors {
   const style = getComputedStyle(scope ?? document.documentElement);
   const hex = (name: string) => hexOf(style, name);

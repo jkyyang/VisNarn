@@ -5,10 +5,10 @@ export function ConfirmDelete(props: { question: string; label?: string; busy?: 
   return (
     <div className="confirm" role="group" aria-label={props.label ?? props.question}>
       <span>{props.question}</span>
-      <button type="button" className="btn btn--small" autoFocus onClick={props.onKeep}>
+      <button type="button" className="btn" autoFocus onClick={props.onKeep}>
         Keep
       </button>
-      <button type="button" className="btn btn--small btn--danger" disabled={props.busy} onClick={props.onConfirm}>
+      <button type="button" className="btn btn--danger" disabled={props.busy} onClick={props.onConfirm}>
         Delete
       </button>
     </div>

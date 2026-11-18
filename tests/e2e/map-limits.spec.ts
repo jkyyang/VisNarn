@@ -10,13 +10,16 @@ import { PAN_BOUNDS } from "../../web/map/config.ts";
 
 const [[WEST, SOUTH], [EAST, NORTH]] = PAN_BOUNDS;
 
-/** Clicks the map at a fraction of its width and height and returns the place clicked. */
+/**
+ * Clicks the map at a fraction of its width and height and returns the place clicked. It waits for the
+ * answer, as the planner hears no other click while it is still placing one.
+ */
 async function placeAt(page: Page, fx: number, fy: number): Promise<{ lon: number; lat: number }> {
   const box = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
   if (!box) throw new Error("The map canvas is not on the page.");
-  const asked = page.waitForRequest((request) => request.url().includes("/api/places/nearest"));
+  const answered = page.waitForResponse((response) => response.url().includes("/api/places/nearest"));
   await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
-  const query = new URL((await asked).url()).searchParams;
+  const query = new URL((await answered).url()).searchParams;
   return { lon: Number(query.get("lon")), lat: Number(query.get("lat")) };
 }
 
@@ -45,14 +48,15 @@ test("the map pans a margin past North America and no further, and stops zooming
   expect(southEast.lat).toBeGreaterThanOrEqual(SOUTH - SLACK_DEG);
   expect(southEast.lon).toBeLessThanOrEqual(EAST + SLACK_DEG);
   // Fully zoomed out the screen spans at most the 150° between the side limits: the world stays big.
-  const west = await placeAt(page, 0.02, 0.5);
+  // The left edge, in the gap left of the panel that floats over the map from 12 px in.
+  const west = await placeAt(page, 0.004, 0.5);
   expect(west.lon).toBeGreaterThanOrEqual(WEST - SLACK_DEG);
 
   // Pulled towards Siberia: the left edge stops at 170° W, the top edge at 83° N.
   await page.reload();
   await expectMapCanvases(page);
   await zoomOutAndDrag(page, 3000, 3000);
-  // The corner itself: the search box sits over the map from 16 px in, and a click on it never reaches the map.
+  // The corner itself: the panel sits over the map from 12 px in, and a click on it never reaches the map.
   const northWest = await placeAt(page, 0.004, 0.004);
   expect(northWest.lon).toBeGreaterThanOrEqual(WEST - SLACK_DEG);
   expect(northWest.lat).toBeLessThanOrEqual(NORTH + SLACK_DEG);

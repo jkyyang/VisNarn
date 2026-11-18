@@ -1,12 +1,16 @@
 /** Distances, subdivision names and compass points as text. Display only: the browser's locale is applied here and nowhere else. */
+import type { DistanceUnit } from "./units.ts";
 
 /** Numbers stay English whatever the browser's language: the rest of the page is English. */
 const LOCALE = "en-US";
 
 const grouped = (n: number) => Math.round(n).toLocaleString(LOCALE);
 
-/** "1,046 km". */
-export const fmtKmShort = (km: number) => `${grouped(km)} km`;
+const KM_PER_MI = 1.609344;
+const KM_PER_UNIT: Record<DistanceUnit, number> = { km: 1, mi: KM_PER_MI };
+
+/** "1,046 km", "650 mi": every distance the page shows. Distances are km everywhere else. */
+export const fmtDistance = (km: number, unit: DistanceUnit) => `${grouped(km / KM_PER_UNIT[unit])} ${unit}`;
 
 /** Unicode-aware: "QUÉRETARO" → "Quéretaro" (a plain \b\w gives "QuéRetaro"). */
 export const titleCase = (s: string) =>

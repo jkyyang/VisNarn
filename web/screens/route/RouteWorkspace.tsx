@@ -11,6 +11,7 @@ import { go, HOME, type Screen } from "../../app/routes.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
 import { MapContent } from "../../map/MapStage.tsx";
 import { chosenRoute, planScene, type SceneTarget } from "../../map/scene.ts";
+import { useDistanceUnit } from "../../units.ts";
 import { errorText } from "../../words.ts";
 import { RoutePanel } from "./RoutePanel.tsx";
 import { fullPlan, insertIndex, isEmpty, placeAtEnd, usePlanSession } from "./session.ts";
@@ -26,6 +27,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const planned = usePlannedRoute(isEmpty(plan) ? null : plan);
   const shops = useShops();
   const [clickError, setClickError] = useState<string | null>(null);
+  const [unit] = useDistanceUnit();
 
   const result = planned.status === "ready" ? planned.data : null;
   const places = result?.places ?? null;
@@ -33,7 +35,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const option = screen.option ?? saved?.option ?? null;
   const chosen = result?.outcome === "routed" ? chosenRoute(result.routes, option) : null;
   const shopList = shops.status === "ready" ? shops.data : NO_SHOPS;
-  const scene = useMemo(() => planScene({ planned: result, option, shops: shopList }), [result, option, shopList]);
+  const scene = useMemo(() => planScene({ planned: result, option, shops: shopList, unit }), [result, option, shopList, unit]);
 
   // A link to a saved route that is gone (deleted, or never there) opens a new plan instead.
   const known = list.status === "ready" && !list.stale;
@@ -78,6 +80,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         onSave={onSave}
         onRemoveSaved={async (id) => void (await removeRoute(id))}
         onNew={onNew}
+        unit={unit}
       />
       <MapContent
         scene={scene}

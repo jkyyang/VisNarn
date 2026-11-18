@@ -1,6 +1,6 @@
 /** The Shops screen's parts. Views only. */
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
-import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, PlaceSuggestion, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
+import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceSuggestion, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
 import { fresh, usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { readFileText } from "../../ui/files.ts";
@@ -8,21 +8,11 @@ import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
 import { Crosshair, Search } from "../../ui/icons.tsx";
 import { lineColor } from "../../theme.ts";
 import { PHONE_QUERY } from "../../map/config.ts";
-import { clickToSet, errorText, NO_TRACK_NEAR, plural } from "../../words.ts";
+import type { DistanceUnit } from "../../units.ts";
+import { clickToSet, errorText, NO_TRACK_NEAR, placeHint, plural } from "../../words.ts";
 
-/** A typed spot this far or farther from the track it snapped to says how far. */
-const SHOW_SNAP_KM = 1;
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
-
-/** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
-function placeHint(resolution: PlaceResolution): { ok: boolean; text: string } {
-  if (!resolution.ok) return { ok: false, text: resolution.problem.message };
-  const { place } = resolution;
-  const lines = place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
-  if (place.match.confidence === "snapped" && place.match.snapKm >= SHOW_SNAP_KM) return { ok: true, text: `Nearest track ${Math.round(place.match.snapKm)} km away${lines}` };
-  return { ok: true, text: `On the network${lines}` };
-}
 
 const ShopPin = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={Math.round(size * 1.22)} viewBox="0 0 18 22" aria-hidden="true">
@@ -41,7 +31,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
 
   return (
-    <section className="card shop-list" aria-label="Shop list">
+    <section aria-label="Shop list">
       <div className="shop-list-bar">
         <label htmlFor={searchId} className="visually-hidden">
           Search shops
@@ -57,9 +47,9 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
           Add shop
         </button>
       </div>
-      <div className="table-scroll">
+      <div className="group table-scroll">
         <table className="shop-table">
-          <thead>
+          <thead className="visually-hidden">
             <tr>
               <th scope="col">Shop</th>
               <th scope="col">Shop code</th>
@@ -78,10 +68,10 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
                     <span className="shop-name">
                       <ShopPin />
                       <span className={editing ? "strong" : undefined}>{shop.name}</span>
-                      {shop.example && <span className="tag">EXAMPLE</span>}
+                      {shop.example && <span className="caption">EXAMPLE</span>}
                     </span>
                   </td>
-                  <td className="mono">{shop.code ?? "–"}</td>
+                  <td className="shop-code">{shop.code ?? "–"}</td>
                   <td>
                     {shop.place.ok ? (
                       // The legend on the map says which colour is which railroad.
@@ -113,10 +103,10 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
           </tbody>
         </table>
       </div>
-      <div className="table-foot">
+      <p className="table-foot">
         {plural(props.shops.length, "shop")}
         {examples ? ` · ${examples} EXAMPLE` : ""}
-      </div>
+      </p>
     </section>
   );
 }
@@ -137,6 +127,7 @@ function locationInput(shop: ShopView | null): { text: string; ref: PlaceRef | n
  */
 export function ShopForm(props: {
   shop: ShopView | null;
+  unit: DistanceUnit;
   /** A node just picked on the map, to take over as the location. */
   picked: NetworkNode | null;
   picking: boolean;
@@ -204,7 +195,7 @@ export function ShopForm(props: {
     }
   };
   const resolved = fresh(resolution);
-  const hint = resolution.status === "ready" ? placeHint(resolution.data) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
+  const hint = resolution.status === "ready" ? placeHint(resolution.data, props.unit) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
   const canSave = !!name.trim() && !!resolved?.ok && !busy;
 
   const submit = async (event: FormEvent) => {
@@ -231,7 +222,7 @@ export function ShopForm(props: {
   };
 
   return (
-    <section className="card shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
+    <section className="group shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
       <h2>{props.shop ? "Edit shop" : "Add shop"}</h2>
       <form onSubmit={submit}>
         <div className="field">
@@ -240,14 +231,13 @@ export function ShopForm(props: {
         </div>
         <div className="field">
           <label htmlFor={`${ids}-code`}>Shop code (optional)</label>
-          <input id={`${ids}-code`} className="mono" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. EX-NLR-01" />
+          <input id={`${ids}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. EX-NLR-01" />
         </div>
         <div className="field">
           <label htmlFor={`${ids}-loc`}>Location</label>
           <div className="place-field">
             <input
               id={`${ids}-loc`}
-              className="mono"
               role="combobox"
               aria-expanded={listOpen}
               aria-controls={`${ids}-loc-list`}
@@ -274,7 +264,7 @@ export function ShopForm(props: {
               {hint.text}
             </span>
           )}
-          <button type="button" className="btn btn--outline" aria-pressed={props.picking} onClick={props.onTogglePick}>
+          <button type="button" className="btn" aria-pressed={props.picking} onClick={props.onTogglePick}>
             <Crosshair />
             {props.picking ? "Click the map…" : "Pick on map"}
           </button>
@@ -287,7 +277,7 @@ export function ShopForm(props: {
         {props.onDelete && confirmDelete && <ConfirmDelete question="Delete this shop?" busy={busy} onConfirm={remove} onKeep={() => setConfirmDelete(false)} />}
         <div className="actions">
           {props.onDelete && !confirmDelete && (
-            <button type="button" className="btn btn--quiet-danger" onClick={() => setConfirmDelete(true)}>
+            <button type="button" className="btn btn--danger" onClick={() => setConfirmDelete(true)}>
               Delete
             </button>
           )}
@@ -310,7 +300,7 @@ function IssueList(props: { issues: RowIssue[] }): ReactElement | null {
     <ul className="import-issues" aria-label="Rows to fix before saving">
       {props.issues.map((issue, i) => (
         <li key={i}>
-          Line <span className="mono">{issue.line}</span>: {issue.message}
+          Line {issue.line}: {issue.message}
         </li>
       ))}
     </ul>
@@ -375,21 +365,12 @@ function FileButton(props: { label: string; onFile: (file: File | undefined) => 
           e.target.value = "";
         }}
       />
-      <label htmlFor={id} className="btn btn--outline">
+      <label htmlFor={id} className="btn">
         {props.label}
       </label>
     </span>
   );
 }
-
-const ImportIcon = () => (
-  <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true" className="import-icon">
-    <rect x="6" y="4" width="22" height="28" rx="3" fill="var(--surface)" stroke="var(--muted)" strokeWidth="1.8" />
-    <path d="M11 12h12M11 17h12M11 22h8" stroke="var(--muted)" strokeWidth="1.8" strokeLinecap="round" />
-    <circle cx="27" cy="27" r="7" fill="var(--route)" />
-    <path d="M27 31v-8M24 26l3-3 3 3" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
 
 /**
  * "Import shop list (CSV)": choose a file, see a preview (how many rows are ready, and each row that
@@ -398,12 +379,11 @@ const ImportIcon = () => (
 export function ShopImportCard(props: { run: (request: ImportRequest) => Promise<ImportReport<ShopView>> }): ReactElement {
   const flow = useImport(props.run);
   return (
-    <section className="card import-card" aria-label="Import shop list">
+    <section className="group import-card" aria-label="Import shop list">
       <div className="import-row">
-        <ImportIcon />
         <div className="grow">
           <h2>Import shop list (CSV)</h2>
-          <div className="muted small mono">name, lon, lat</div>
+          <div className="muted small">name, lon, lat</div>
         </div>
         <FileButton label={flow.busy ? "Reading…" : "Choose CSV file"} onFile={flow.choose} disabled={flow.busy} />
       </div>
@@ -422,7 +402,7 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
             <ul className="import-ready">
               {flow.preview.report.ready.slice(0, PREVIEW_ROWS).map((shop, i) => (
                 <li key={`${shop.name}-${i}`}>
-                  {shop.name} {shop.code && <span className="mono muted small">{shop.code}</span>}
+                  {shop.name} {shop.code && <span className="muted small">{shop.code}</span>}
                 </li>
               ))}
               {flow.preview.report.ready.length > PREVIEW_ROWS && <li className="muted">and {flow.preview.report.ready.length - PREVIEW_ROWS} more</li>}
@@ -455,20 +435,18 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
 
 /** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near there". */
 export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
-  const ref = useRef<HTMLDivElement>(null);
-  // On a phone the map sits above the panel and scrolls away with it: bring the map back to be clicked.
+  // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be clicked.
   useEffect(() => {
-    const prompt = ref.current;
-    (prompt?.closest(".map") ?? prompt)?.scrollIntoView?.({ block: "nearest" });
+    window.scrollTo({ top: 0 });
   }, []);
   return (
-    <div ref={ref} className="card card--float map-card pick-prompt" role="status">
+    <div className="glass map-card pick-prompt" role="status">
       <Crosshair />
       <span>
         {props.missed ? `${NO_TRACK_NEAR} · ` : `${clickToSet("the shop")} · `}
         <kbd>Esc</kbd> to cancel
       </span>
-      <button type="button" className="btn btn--dark" onClick={props.onCancel}>
+      <button type="button" className="link-btn" onClick={props.onCancel}>
         Cancel
       </button>
     </div>

@@ -147,23 +147,16 @@ describe("Shops screen", () => {
     expect(screen.getByTestId("map")).toHaveAttribute("data-focus", "place");
   });
 
-  it("Pick on map brings the map into view, as on a phone the list may have scrolled it away", async () => {
+  it("Pick on map scrolls the page to the top, as on a phone the panel may have slid up over the map", async () => {
     const user = userEvent.setup();
-    const scrolled: Element[] = [];
-    const scrollIntoView = vi.fn(function (this: Element) {
-      scrolled.push(this);
-    });
-    Element.prototype.scrollIntoView = scrollIntoView;
-    try {
-      openPage("/shops/new");
-      const form = await screen.findByRole("region", { name: "Add shop" });
-      scrolled.length = 0;
-      await user.click(within(form).getByRole("button", { name: "Pick on map" }));
-      expect(screen.getByText(/Click the map to set the shop/)).toBeInTheDocument();
-      expect(scrolled).toContain(screen.getByRole("region", { name: "Map" }));
-    } finally {
-      delete (Element.prototype as Partial<Element>).scrollIntoView;
-    }
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    openPage("/shops/new");
+    const form = await screen.findByRole("region", { name: "Add shop" });
+    scrollTo.mockClear();
+    await user.click(within(form).getByRole("button", { name: "Pick on map" }));
+    expect(screen.getByText(/Click the map to set the shop/)).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+    scrollTo.mockRestore();
   });
 
   it("Edit on a phone scrolls the form's top into view, as 'nearest' left its heading cut off", async () => {

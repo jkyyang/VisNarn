@@ -12,14 +12,9 @@ import { fresh, usePlaceSuggestions } from "../data/hooks.ts";
 import { RailroadChips } from "../ui/badges.tsx";
 import { moveActive, SuggestionList } from "../ui/combobox.tsx";
 import { Cross, Search } from "../ui/icons.tsx";
-import { PLACE_SOURCE_WORDS } from "../words.ts";
 
 export function Railroads({ place }: { place: Pick<ResolvedPlace, "railroads"> }): ReactElement {
-  return place.railroads.length ? (
-    <RailroadChips railroads={place.railroads} />
-  ) : (
-    <span className="muted small">No Class I track</span>
-  );
+  return place.railroads.length ? <RailroadChips railroads={place.railroads} /> : <span>No Class I track</span>;
 }
 
 /**
@@ -59,7 +54,7 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
 
   return (
     <div className="map-search" role="search">
-      <div className="input-box map-search-box">
+      <div className="glass input-box map-search-box">
         <Search size={18} />
         <input
           role="combobox"
@@ -79,7 +74,7 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
           onBlur={() => setDraft(null)}
         />
         {(draft || props.chosen) && (
-          <button type="button" className="icon-btn small" aria-label="Clear the search" onClick={() => choose(null)}>
+          <button type="button" className="icon-btn" aria-label="Clear the search" onClick={() => choose(null)}>
             <Cross />
           </button>
         )}
@@ -93,20 +88,17 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
           onChoose={choose}
           item={(suggestion) => (
             <>
-              <span className="search-line">
-                <span className="search-name">{suggestion.label}</span>
-                <span className="tag">{PLACE_SOURCE_WORDS[suggestion.source]}</span>
-              </span>
+              <span>{suggestion.label}</span>
+              {/* "City", "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070", then the railroads there. */}
               <span className="search-line muted small">
-                {/* "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070"; a city's "City" is the tag already. */}
-                {suggestion.detail !== PLACE_SOURCE_WORDS[suggestion.source] && suggestion.detail}
+                <span>{suggestion.detail}</span>
                 <Railroads place={suggestion} />
               </span>
             </>
           )}
         />
       )}
-      {message && !open && <p className="card map-search-problem">{message}</p>}
+      {message && !open && <p className="glass map-search-problem">{message}</p>}
     </div>
   );
 }

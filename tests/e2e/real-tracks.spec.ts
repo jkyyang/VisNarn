@@ -9,8 +9,8 @@ async function setRealTracks(page: Page, on: boolean): Promise<void> {
   const layers = page.getByRole("button", { name: /^Map layers/ });
   await layers.click();
   const box = page.getByRole("checkbox", { name: "Real tracks" });
-  if ((await box.getAttribute("aria-checked")) !== String(on)) await box.click();
-  await expect(box).toHaveAttribute("aria-checked", String(on));
+  await box.setChecked(on);
+  await expect(box).toBeChecked({ checked: on });
   await layers.click();
 }
 

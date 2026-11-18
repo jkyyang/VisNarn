@@ -17,9 +17,10 @@ const TURN_BACK: TurnBack = {
   track: "stub-end",
 };
 
-/** A phone-sized map (390 px wide): the search bar across the top, the map buttons down the right. */
+/** A phone-sized map (390 px wide): the search bar across the top, the map buttons down the right, the panel below. */
 const RECTS: Record<string, { x: number; y: number; width: number; height: number }> = {
   frame: { x: 0, y: 0, width: 390, height: 700 },
+  sheet: { x: 0, y: 682, width: 390, height: 800 },
   search: { x: 12, y: 12, width: 310, height: 44 },
   layers: { x: 334, y: 12, width: 40, height: 40 },
   fit: { x: 334, y: 140, width: 40, height: 40 },
@@ -30,20 +31,27 @@ const RECTS: Record<string, { x: number; y: number; width: number; height: numbe
 
 afterEach(() => vi.restoreAllMocks());
 
+function mockRects(rects: typeof RECTS) {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const name = this.classList.contains("turn-pop") ? (this.classList.contains("turn-pop--below") ? "below" : "above") : (this.getAttribute("data-rect") ?? "");
+    return DOMRect.fromRect(rects[name] ?? { x: 0, y: 0, width: 0, height: 0 });
+  });
+}
+
 describe("the turn-back popover on a phone", () => {
   it("opens below the search bar and to the left of the map buttons, fully in view", async () => {
-    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-      const name = this.classList.contains("turn-pop") ? (this.classList.contains("turn-pop--below") ? "below" : "above") : (this.getAttribute("data-rect") ?? "");
-      return DOMRect.fromRect(RECTS[name] ?? { x: 0, y: 0, width: 0, height: 0 });
-    });
+    mockRects(RECTS);
     render(
-      <div className="map-canvas" data-rect="frame">
-        <div className="map-search" data-rect="search" />
-        <div className="map-controls">
-          <button type="button" data-rect="layers">Layers</button>
-          <button type="button" data-rect="fit">Fit whole route</button>
+      <div className="app">
+        <main className="panel" data-rect="sheet" />
+        <div className="map-canvas" data-rect="frame">
+          <div className="map-search" data-rect="search" />
+          <div className="map-controls">
+            <button type="button" data-rect="layers">Layers</button>
+            <button type="button" data-rect="fit">Fit whole route</button>
+          </div>
+          <TurnBackMark turnBack={TURN_BACK} />
         </div>
-        <TurnBackMark turnBack={TURN_BACK} />
       </div>,
     );
     await userEvent.setup().click(screen.getByRole("button", { name: "Turn-back at Chicago, IL" }));
@@ -52,5 +60,29 @@ describe("the turn-back popover on a phone", () => {
     expect(pop).toHaveClass("turn-pop--below");
     // Below, it is level with the Fit button (left edge 334 px): its right edge (420) moves to 326.
     expect(pop.style.marginLeft).toBe("-94px");
+  });
+});
+
+describe("the turn-back popover beside the panel", () => {
+  it("slides right, clear of the panel that floats over the map's left side", async () => {
+    // A desktop map: the panel covers its left 392 px; the disc at (400, 300) has its popover centred on it.
+    mockRects({
+      frame: { x: 0, y: 0, width: 1440, height: 900 },
+      panel: { x: 12, y: 12, width: 380, height: 600 },
+      above: { x: 280, y: 252, width: 240, height: 40 },
+    });
+    render(
+      <div className="app">
+        <main className="panel" data-rect="panel" />
+        <div className="map-canvas" data-rect="frame">
+          <TurnBackMark turnBack={TURN_BACK} />
+        </div>
+      </div>,
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Turn-back at Chicago, IL" }));
+    const pop = screen.getByRole("tooltip");
+    expect(pop).not.toHaveClass("turn-pop--below");
+    // Its left edge (280) moves to 8 px past the panel's right edge (392).
+    expect(pop.style.marginLeft).toBe("120px");
   });
 });

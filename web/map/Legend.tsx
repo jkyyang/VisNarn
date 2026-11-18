@@ -22,7 +22,7 @@ export function Legend(props: { railroads: readonly MapLine[]; turnBack: boolean
   const shown = MAP_LINES.filter((line) => props.railroads.includes(line));
   if (!shown.length && !props.turnBack) return null;
   return (
-    <div className="map-ctl card legend">
+    <div className="glass legend">
       <div className="legend-rr" role="list" aria-label="Railroad colors">
         {shown.map((line) => (
           <span role="listitem" key={line}>
@@ -31,7 +31,7 @@ export function Legend(props: { railroads: readonly MapLine[]; turnBack: boolean
           </span>
         ))}
         {props.turnBack && (
-          <span role="listitem" className="legend-turn">
+          <span role="listitem">
             <TurnBadge />
             Turn-back
           </span>

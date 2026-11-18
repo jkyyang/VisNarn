@@ -6,7 +6,8 @@ const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 describe("styles.css", () => {
   // jsdom has no layout, so this reads the rule: a nowrap "DRAFT-UTLX-ECH" made the shop table wider than a 360 px card and clipped Edit.
   it("lets a shop code wrap on a phone so each row's Edit stays visible", () => {
-    const start = css.indexOf("@media (max-width: 640px)");
+    // The last phone block holds the layout; the first only resizes the tokens.
+    const start = css.lastIndexOf("@media (max-width: 640px)");
     expect(start).toBeGreaterThan(-1);
     let depth = 0;
     let end = css.indexOf("{", start);
@@ -16,7 +17,7 @@ describe("styles.css", () => {
       end++;
     } while (depth > 0 && end < css.length);
     const phone = css.slice(start, end);
-    const rule = /\.shop-table td\.mono\s*\{([^}]*)\}/.exec(phone);
+    const rule = /\.shop-table td\.shop-code\s*\{([^}]*)\}/.exec(phone);
     expect(rule?.[1]).toMatch(/white-space:\s*normal/);
   });
 
@@ -24,7 +25,7 @@ describe("styles.css", () => {
   it("lets a long unbroken shop name or code break anywhere", () => {
     const anywhere = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => /overflow-wrap:\s*anywhere/.test(m[2] ?? ""));
     const selectors = anywhere.flatMap((m) => (m[1] ?? "").split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
-    for (const selector of [".section-text", ".shop-name", ".shop-table td.mono", ".suggestions li > span:first-child"]) {
+    for (const selector of [".section-text", ".shop-name", ".shop-table td.shop-code", ".suggestions li > span:first-child"]) {
       expect(selectors).toContain(selector);
     }
   });

@@ -31,22 +31,24 @@ export function FoundPin(props: { chosen: PlaceSuggestion; place: ResolvedPlace;
   return (
     <Marker longitude={place.lon} latitude={place.lat} anchor="center" className="found-pin">
       <span className="found-dot" aria-hidden="true" />
-      <section ref={card} className="card card--float map-card found-card" aria-label={`Found: ${chosen.label}`}>
+      <section ref={card} className="glass map-card found-card" aria-label={`Found: ${chosen.label}`}>
         <div className="found-head">
           <strong>{chosen.label}</strong>
-          <span className="tag">{PLACE_SOURCE_WORDS[chosen.source]}</span>
-          <CardButton label="Close" className="icon-btn small" onPress={props.onClose}>
+          <CardButton label="Close" className="icon-btn" onPress={props.onClose}>
             <Cross />
           </CardButton>
         </div>
-        <Railroads place={place} />
+        <span className="search-line found-sub">
+          <span>{PLACE_SOURCE_WORDS[chosen.source]}</span>
+          <Railroads place={place} />
+        </span>
         {props.actions.length > 0 && (
           <div className="found-actions">
             {props.actions.map((action) => (
               <CardButton
                 key={action.label}
                 label={action.label}
-                className="btn btn--small"
+                className="btn"
                 onPress={() => {
                   action.run(place);
                   props.onClose();

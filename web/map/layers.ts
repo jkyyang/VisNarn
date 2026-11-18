@@ -17,15 +17,16 @@ export const LAYER = {
   pinGlyphs: "pin-glyphs",
 } as const;
 
-const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+/** --sans in web/styles.css: deck.gl draws its text on a canvas, which cannot read CSS variables. */
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif';
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
 const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 
 const svgUrl = (width: number, height: number, body: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`)}`;
 
-/** Pin colours, baked into the icon images: the light theme's --pin-a, --shop, --route, --fg2 and --casing. */
-const PIN = { start: "#80868b", destination: "#c5221f", stop: "#1a73e8", shop: "#3c4043", edge: "#fff" };
+/** Pin colours, baked into the icon images: the day look's --pin-a, --shop, --route and --casing; a shop is a dark grey square. */
+const PIN = { start: "#80868b", destination: "#c5221f", stop: "#0068d6", shop: "#3c4043", edge: "#fff" };
 
 /** Pins as images: start a hollow ring, destination a red drop with a white dot, a stop a numbered ring, a shop a small dark square. */
 export const PIN_ICONS = {
@@ -189,9 +190,9 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
 const TOOLTIP_STYLE: Partial<CSSStyleDeclaration> = {
   backgroundColor: "var(--panel)",
   color: "var(--fg)",
-  border: "1px solid var(--line)",
+  border: "0",
   borderRadius: "var(--radius)",
-  boxShadow: "var(--shadow-1)",
+  boxShadow: "var(--shadow-float)",
   padding: "5px 9px",
   fontFamily: "var(--sans)",
   fontSize: "12px",

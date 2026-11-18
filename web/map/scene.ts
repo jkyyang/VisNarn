@@ -7,6 +7,7 @@ import { resolvedOf, type PlaceRef, type ResolvedPlace, type ShopId, type ShopVi
 import { placeKind, type PlannedRoute } from "../../shared/plans.ts";
 import type { Line } from "../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../../shared/route.ts";
+import type { DistanceUnit } from "../units.ts";
 import { pillText } from "../words.ts";
 
 export type PinKind = "start" | "stop" | "destination" | "shop";
@@ -225,8 +226,8 @@ const inPlaces = (shop: ResolvedPlace, places: (ResolvedPlace | null)[]) => plac
  * turn-backs, a pin for each place as soon as it resolves, and every other saved shop as a small square
  * to click.
  */
-export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; shops: ShopView[] }): MapScene {
-  const { planned, option, shops } = input;
+export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; shops: ShopView[]; unit: DistanceUnit }): MapScene {
+  const { planned, option, shops, unit } = input;
   const routes = planned?.outcome === "routed" ? planned.routes : null;
   const chosen = routes ? chosenRoute(routes, option) : null;
   const places = (planned?.places ?? []).map(resolvedOf);
@@ -262,7 +263,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
       ? []
       : [chosen, ...others].map((route, i) => ({
           id: route.strategies[0],
-          text: pillText(route, chosen),
+          text: pillText(route, chosen, unit),
           selected: i === 0,
           turnBacks: route.turnBacks.length,
           anchors: pillAnchors(all[i], all.filter((_, j) => j !== i)),

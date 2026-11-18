@@ -44,8 +44,8 @@ beforeAll(async () => {
   fake.restore();
 });
 
-const routeScene = (planned: PlannedRoute | null, option: Parameters<typeof planScene>[0]["option"] = null) => {
-  const scene = planScene({ planned, option, shops });
+const routeScene = (planned: PlannedRoute | null, option: Parameters<typeof planScene>[0]["option"] = null, unit: Parameters<typeof planScene>[0]["unit"] = "km") => {
+  const scene = planScene({ planned, option, shops, unit });
   if (scene.kind !== "route") throw new Error("route scene expected");
   return scene;
 };
@@ -63,7 +63,7 @@ describe("planScene", () => {
     expect(squares.length).toBeGreaterThan(0);
     for (const square of squares) expect(square.shopId).not.toBeNull();
     // The destination is the EXAMPLE shop at North Little Rock, typed as a city: it has no square.
-    const usedAsEnd = planScene({ planned: { ...oneRoute, places: oneRoute.places.with(-1, { ok: true, place: { ...shopPlace("North Little Rock, AR") } }) }, option: null, shops });
+    const usedAsEnd = planScene({ planned: { ...oneRoute, places: oneRoute.places.with(-1, { ok: true, place: { ...shopPlace("North Little Rock, AR") } }) }, option: null, shops, unit: "km" });
     expect(usedAsEnd.pins.filter((p) => p.kind === "shop").map((p) => p.label)).not.toContain("North Little Rock, AR");
   });
 
@@ -99,6 +99,7 @@ describe("planScene", () => {
       ["pick", true, "1,046 km"],
       ["shortest", false, "−207 km · 1 more interchange"],
     ]);
+    expect(routeScene(twoRoutes, null, "mi").pills.map((p) => p.text)).toEqual(["650 mi", "−129 mi · 1 more interchange"]);
     expect(scene.pills[0].turnBacks).toBe(1);
     for (const pill of scene.pills) expect(pill.anchors.length).toBeGreaterThanOrEqual(3);
   });
@@ -179,7 +180,7 @@ describe("shopsScene", () => {
 
 describe("legend", () => {
   it("lists the selected route's railroads; with no route, the lines of the network classes drawn", () => {
-    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops }), ["class_i"]).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
+    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops, unit: "km" }), ["class_i"]).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
     expect(legendFor(null, ["class_i"]).railroads).toEqual(RAILROADS);
     expect(legendFor(null, ["class_i", "short_line", "passenger"]).railroads).toEqual([...RAILROADS, "short line", "passenger"]);
     expect(legendFor(null, []).railroads).toEqual([]);
@@ -190,7 +191,7 @@ describe("layers", () => {
   let scene: MapScene;
   let layers: Layer[];
   beforeAll(() => {
-    scene = planScene({ planned: twoRoutes, option: null, shops });
+    scene = planScene({ planned: twoRoutes, option: null, shops, unit: "km" });
     layers = sceneLayers(scene, colors, 5) as Layer[];
   });
 
