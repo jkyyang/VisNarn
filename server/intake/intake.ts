@@ -4,11 +4,11 @@
  * A source (a CSV file now, a database query later) yields records: header → text, nothing more.
  * The readers below turn records into domain rows and a list of what they could not read. They do
  * not touch the network or the database, so a new source is one new `RecordSource` and nothing else
- * changes: shops and codes from a company database would arrive as the same rows.
+ * changes: shops from a company database would arrive as the same rows.
  */
 import { createHash } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
-import { SHOP_TEXT_MAX, UNSEEN, type CodeType, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type SourceInfo, type UploadSource } from "../../shared/places.ts";
+import { SHOP_TEXT_MAX, UNSEEN, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type SourceInfo, type UploadSource } from "../../shared/places.ts";
 import { csvSource } from "./csv.ts";
 
 export interface RawRecord {
@@ -42,14 +42,11 @@ export interface Parsed<T> {
   contentHash: string;
 }
 
-/**
- * Shops: a `name`, and a location given by `fra_id`, by `lon` and `lat`, or by `node_code` (a code
- * looked up in the imported code sets). The shop's own code is `code`, or else `node_code`.
- */
+/** Shops: a `name`, an optional `code`, and a location given by `fra_id` or by `lon` and `lat`. */
 export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>> {
   const records = await all(source);
   requireColumns(source, records, [{ names: ["name"], what: "shop name" }]);
-  requireLocationColumns(source, records, ["node_code", "fra_id", "lon, lat"]);
+  requireLocationColumns(source, records);
 
   const items: ShopDraft[] = [];
   const issues: RowIssue[] = [];
@@ -59,42 +56,12 @@ export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>
     if (!name) issue("The shop name is empty.");
     else if (name.length > SHOP_TEXT_MAX) issue(`The shop name is longer than ${SHOP_TEXT_MAX} characters.`);
     else if (UNSEEN.test(name)) issue("The shop name holds control or invisible characters.");
-    const nodeCode = record.cells.node_code ?? "";
-    const code = record.cells.code || nodeCode || null;
+    const code = record.cells.code || null;
     // The same limits as the shop form (POST /api/shops), so both doors store the same shops.
     if (code && code.length > SHOP_TEXT_MAX) issue(`The shop code is longer than ${SHOP_TEXT_MAX} characters.`);
     else if (code && UNSEEN.test(code)) issue("The shop code holds control or invisible characters.");
-    const location = locationOf(record, nodeCode ? { kind: "text", text: nodeCode } : null, issue, "Give the shop a node_code, an fra_id, or lon and lat.");
+    const location = locationOf(record, issue);
     items.push({ name, code, location });
-  });
-  return parsed(source, records, items, issues);
-}
-
-export interface NodeCodeDraft {
-  code: string;
-  name: string | null;
-  /** A `node` or `coord` ref, as the row gave it. */
-  location: PlaceRef;
-}
-
-/** Codes of one code set: `code`, an optional `name`, and `fra_id` or `lon` and `lat`. */
-export async function readCodes(source: RecordSource, codeType: CodeType): Promise<Parsed<NodeCodeDraft>> {
-  const records = await all(source);
-  requireColumns(source, records, [{ names: ["code"], what: `code (of the ${codeType} code set)` }]);
-  requireLocationColumns(source, records, ["fra_id", "lon, lat"]);
-
-  const items: NodeCodeDraft[] = [];
-  const issues: RowIssue[] = [];
-  records.forEach((record, row) => {
-    const issue = (message: string) => issues.push({ row, line: record.line, message });
-    const code = record.cells.code ?? "";
-    // SQLite cuts text at a NUL, so two such codes would collide on the unique key; refuse them like shop text.
-    if (!code) issue("The code is empty.");
-    else if (UNSEEN.test(code)) issue("The code holds control or invisible characters.");
-    const name = record.cells.name || null;
-    if (name && UNSEEN.test(name)) issue("The code name holds control or invisible characters.");
-    const location = locationOf(record, null, issue, "Give the code an fra_id, or lon and lat.");
-    items.push({ code, name, location });
   });
   return parsed(source, records, items, issues);
 }
@@ -118,15 +85,16 @@ function requireColumns(source: RecordSource, records: RawRecord[], wanted: { na
 }
 
 /** At least one way to say where a row is. "lon, lat" means both columns. */
-function requireLocationColumns(source: RecordSource, records: RawRecord[], ways: string[]): void {
+function requireLocationColumns(source: RecordSource, records: RawRecord[]): void {
+  const ways = ["fra_id", "lon, lat"];
   if (!records.length) return;
   const have = new Set(Object.keys(records[0].cells));
   const ok = ways.some((way) => way.split(", ").every((name) => have.has(name)));
   if (!ok) throw new AppError("invalid", `${source.info.label} has no location columns. Add ${ways.map((w) => `"${w}"`).join(" or ")}.`, "source");
 }
 
-/** A row's location: fra_id first, then lon and lat, then the fallback. Null (with an issue) when there is none. */
-function locationOf(record: RawRecord, fallback: PlaceRef | null, issue: (message: string) => void, none: string): PlaceRef {
+/** A row's location: fra_id first, then lon and lat. Empty text (with an issue) when there is none. */
+function locationOf(record: RawRecord, issue: (message: string) => void): PlaceRef {
   const fra = record.cells.fra_id ?? "";
   const lon = record.cells.lon ?? "";
   const lat = record.cells.lat ?? "";
@@ -142,8 +110,7 @@ function locationOf(record: RawRecord, fallback: PlaceRef | null, issue: (messag
     issue(`"${lon}, ${lat}" is not a longitude and latitude (such as -92.27, 34.77).`);
     return { kind: "text", text: "" };
   }
-  if (fallback) return fallback;
-  issue(none);
+  issue("Give the shop an fra_id, or lon and lat.");
   return { kind: "text", text: "" };
 }
 

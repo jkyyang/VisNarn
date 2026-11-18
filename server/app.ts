@@ -4,13 +4,11 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { assumptionsProblem, loadNetwork, loadTrackShapes, type TrackShapes } from "../engine/index.ts";
+import { loadNetwork, loadTrackShapes, type TrackShapes } from "../engine/index.ts";
 import { AppError, type Meta } from "../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
 import { RAILROADS } from "../shared/railroads.ts";
 import type { Config } from "./config.ts";
 import { exampleShops } from "./intake/example.ts";
-import { createCodes, type Codes } from "./places/codes.ts";
 import { createDirectory, type Directory } from "./places/directory.ts";
 import { createShops, type Shops } from "./places/shops.ts";
 import { createPlans, type Plans } from "./plans/plans.ts";
@@ -19,16 +17,8 @@ import type { Store } from "./store/store.ts";
 
 export interface App {
   meta(): Meta;
-  /** The routing rules. Kept on the server; no screen shows them in stage 1. */
-  settings: {
-    assumptions(): Assumptions;
-    /** Throws AppError("invalid") with the reason when the numbers cannot produce a result. */
-    saveAssumptions(assumptions: Assumptions): Assumptions;
-  };
   places: Directory;
   shops: Shops;
-  /** Company node codes: the seam for the company's own codes, with no screen yet. */
-  codes: Codes;
   plans: Plans;
   /** Routes drawn on the real track (the map's Real tracks). */
   track: TrackShapes;
@@ -46,9 +36,8 @@ export async function createApp(config: Config): Promise<App> {
   const store = openStore(databaseFile);
   const directory = createDirectory(network, store);
   const shops = createShops(store, directory);
-  const codes = createCodes(store, directory);
   const planner = startRoutePlanner({ networkDir: config.networkDir, networkVersion: network.version, workers: config.routeWorkers });
-  const plans = createPlans({ store, directory, planner, rules: () => store.settings.assumptions().routing });
+  const plans = createPlans({ store, directory, planner });
 
   try {
     if (store.fresh) addExamples(store, shops);
@@ -68,19 +57,8 @@ export async function createApp(config: Config): Promise<App> {
         storage: databaseFile,
       };
     },
-    settings: {
-      assumptions: () => store.settings.assumptions(),
-      saveAssumptions(assumptions) {
-        const problem = assumptionsProblem(assumptions);
-        if (problem) throw new AppError("invalid", problem, fieldAtFault(assumptions));
-        // Saving the numbers already in force writes nothing, so every route worked out under them stays valid.
-        if (JSON.stringify(assumptions) !== JSON.stringify(store.settings.assumptions())) store.settings.saveAssumptions(assumptions);
-        return store.settings.assumptions();
-      },
-    },
     places: directory,
     shops,
-    codes,
     plans,
     track,
     async close() {
@@ -104,17 +82,4 @@ function addExamples(store: Store, shops: Shops): void {
       console.error(`EXAMPLE shop ${draft.name} was not added: ${error.message}`);
     }
   }
-}
-
-/** The assumption a problem is about: the one whose default value makes that problem go away. */
-function fieldAtFault(given: Assumptions): string | null {
-  const problem = assumptionsProblem(given);
-  for (const group of ["routing", "timing", "flags"] as const) {
-    for (const key of Object.keys(given[group])) {
-      const trial = structuredClone(given) as unknown as Record<string, Record<string, unknown>>;
-      trial[group][key] = (DEFAULT_ASSUMPTIONS[group] as Record<string, unknown>)[key];
-      if (assumptionsProblem(trial as unknown as Assumptions) !== problem) return `${group}.${key}`;
-    }
-  }
-  return null;
 }

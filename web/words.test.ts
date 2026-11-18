@@ -4,7 +4,7 @@ import type { RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
 import { interchangesWord, pillText, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
 
 function route(id: RouteStrategy, km: number, interchanges: number): RoutePath {
-  return { strategies: [id], km, interchanges, railroads: ["BNSF"], legs: [], turnBacks: [], steps: [], passesA: false };
+  return { strategies: [id], km, interchanges, railroads: ["BNSF"], legs: [], turnBacks: [], steps: [] };
 }
 
 const found = (label: string): PlaceResolution => ({
@@ -17,7 +17,7 @@ const found = (label: string): PlaceResolution => ({
     fraId: null,
     railroad: null,
     railroads: ["BNSF"],
-    match: { method: "city", codeType: null, confidence: "snapped", snapKm: 0.4 },
+    match: { method: "city", confidence: "snapped", snapKm: 0.4 },
     example: false,
   },
 });

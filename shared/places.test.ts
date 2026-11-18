@@ -9,7 +9,7 @@ const place = (over: Partial<ResolvedPlace>): ResolvedPlace => ({
   railroad: null,
   ref: { kind: "text", text: "Temple, TX" },
   railroads: ["BNSF"],
-  match: { method: "city", codeType: null, confidence: "snapped", snapKm: 0.4 },
+  match: { method: "city", confidence: "snapped", snapKm: 0.4 },
   example: false,
   ...over,
 });

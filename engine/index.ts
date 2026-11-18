@@ -9,6 +9,5 @@
  */
 export { DEFAULT_NETWORK_DIR, loadNetwork, loadTrackShapes } from "./load.ts";
 export { MAX_SNAP_KM, type City, type RailNetwork, type Snap } from "./network.ts";
-export { combine, createCarRouter, tripKey, type CarRouter, type NoRoute, type Routed, type RoutedTrip, type RouteResult, type Trip } from "./trip.ts";
+export { combine, createCarRouter, tripKey, type CarRouter, type NoRoute, type Routed, type RouteResult, type Trip } from "./trip.ts";
 export type { TrackShapes } from "./track.ts";
-export { assumptionsProblem, classifyTiming, judge, travelHours, triage, type CarClock } from "./verdict.ts";

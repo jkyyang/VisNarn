@@ -64,8 +64,6 @@ function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
       return y.kind === "text" && x.text === y.text;
     case "shop":
       return y.kind === "shop" && x.shopId === y.shopId;
-    case "code":
-      return y.kind === "code" && x.codeType === y.codeType && x.code === y.code;
     case "node":
       return y.kind === "node" && x.fraId === y.fraId && x.railroad === y.railroad;
     case "coord":

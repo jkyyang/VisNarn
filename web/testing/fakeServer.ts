@@ -63,7 +63,7 @@ function resolved(ref: PlaceRef, label: string, at: LngLat, method: ResolvedPlac
       fraId: fraId as ResolvedPlace["fraId"],
       railroad,
       railroads: railroads ?? servedAt(at[0], at[1]),
-      match: { method, codeType: ref.kind === "code" ? ref.codeType : null, confidence: fraId !== null ? "exact" : "snapped", snapKm: 0.4 },
+      match: { method, confidence: fraId !== null ? "exact" : "snapped", snapKm: 0.4 },
       example: false,
     },
   };
@@ -75,7 +75,7 @@ function resolve(state: FakeState, ref: PlaceRef, role: PlaceRole): PlaceResolut
   switch (ref.kind) {
     case "text": {
       const text = ref.text.trim();
-      if (!text) return problem("empty", "Type a place: a city, one of Your shops, a node code, or lon, lat.");
+      if (!text) return problem("empty", "Type a place: a city, one of Your shops, or lon, lat.");
       const coords = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/.exec(text);
       if (coords) return resolve(state, { kind: "coord", lon: Number(coords[1]), lat: Number(coords[2]) }, role);
       if (role === "shop") {
@@ -84,15 +84,13 @@ function resolve(state: FakeState, ref: PlaceRef, role: PlaceRole): PlaceResolut
       }
       const city = cityByName(text);
       if (city) return resolved(ref, city.name, city.at, "city", city.railroads);
-      return problem("unknown", `No place called “${text}”. Try a city, one of Your shops, a node code, or lon, lat.`);
+      return problem("unknown", `No place called “${text}”. Try a city, one of Your shops, or lon, lat.`);
     }
     case "shop": {
       const shop = state.shops.find((s) => s.id === ref.shopId);
       if (!shop) return problem("removed", "This shop was removed from Your shops.");
       return shop.place.ok ? { ok: true, place: { ...shop.place.place, ref, label: shop.name, match: { ...shop.place.place.match, method: "shop" }, example: shop.example } } : shop.place;
     }
-    case "code":
-      return problem("unknown", `There is no code set "${ref.codeType}" yet, so ${ref.code} cannot be found.`);
     case "node": {
       const n = NODES.find((x) => x.fraId === ref.fraId);
       if (!n) return problem("unknown", "No track found for that code.");
@@ -158,17 +156,17 @@ function pathOf(spec: PathSpec, stops: ResolvedPlace[]): RoutePath {
   }));
   const steps: Milestone[] = [];
   let km = 0;
-  stops.forEach((stop, i) => steps.push({ kind: "stop", kmFromB: 2 + i, stop: i, label: stop.label }));
+  stops.forEach((stop, i) => steps.push({ kind: "stop", kmFromStart: 2 + i, stop: i, label: stop.label }));
   legs.forEach((leg, i) => {
     spec.turnBacks.forEach((t, j) => {
-      if (t.beforeLeg === i) steps.push({ kind: "turn-back", kmFromB: km, turnBack: j });
+      if (t.beforeLeg === i) steps.push({ kind: "turn-back", kmFromStart: km, turnBack: j });
     });
-    if (i > 0 && legs[i - 1].railroad !== leg.railroad) steps.push({ kind: "interchange", kmFromB: km, from: legs[i - 1].railroad, to: leg.railroad, at: leg.from });
-    steps.push({ kind: "leg", kmFromB: km, leg: i });
+    if (i > 0 && legs[i - 1].railroad !== leg.railroad) steps.push({ kind: "interchange", kmFromStart: km, from: legs[i - 1].railroad, to: leg.railroad, at: leg.from });
+    steps.push({ kind: "leg", kmFromStart: km, leg: i });
     km += leg.km;
   });
-  steps.push({ kind: "shop", kmFromB: spec.km });
-  steps.sort((x, y) => x.kmFromB - y.kmFromB);
+  steps.push({ kind: "destination", kmFromStart: spec.km });
+  steps.sort((x, y) => x.kmFromStart - y.kmFromStart);
   return {
     strategies: spec.strategies,
     km: spec.km,
@@ -177,7 +175,6 @@ function pathOf(spec: PathSpec, stops: ResolvedPlace[]): RoutePath {
     legs,
     turnBacks: spec.turnBacks.map((t) => t.turnBack),
     steps,
-    passesA: false,
   };
 }
 
@@ -222,8 +219,8 @@ function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
   const h = (name: string) => header?.indexOf(name) ?? -1;
   rows.forEach((cells, row) => {
     const name = cells[h("name")] ?? "";
-    const code = h("node_code") >= 0 ? (cells[h("node_code")] ?? "") : "";
-    const location: PlaceRef = h("lon") >= 0 ? { kind: "coord", lon: Number(cells[h("lon")]), lat: Number(cells[h("lat")]) } : { kind: "text", text: code };
+    const code = h("code") >= 0 ? (cells[h("code")] ?? "") : "";
+    const location: PlaceRef = { kind: "coord", lon: Number(cells[h("lon")]), lat: Number(cells[h("lat")]) };
     const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location }, false);
     if ("error" in view) issues.push({ row, line: row + 2, message: view.error });
     else ready.push(view);

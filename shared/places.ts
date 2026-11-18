@@ -3,19 +3,15 @@
  *
  * Two rules hold everywhere outside engine/core:
  * - A place is identified by something that survives a rebuild of the network file: an FRA node id,
- *   coordinates, or a name the user owns (a shop, a company code). Never a position in graph.bin.
- * - A name says which list it belongs to. A company code is looked up in its own code set and
- *   nowhere else, so a 6-digit code can never turn into the FRA node that happens to share its digits.
+ *   coordinates, or a name the user owns (a shop). Never a position in graph.bin.
+ * - A name says which list it belongs to.
  */
 import { round5 } from "./geo.ts";
 import type { Railroad } from "./railroads.ts";
-import type { Instant } from "./time.ts";
 
 /** The public NARN node id. Branded so that a graph index (also a number) cannot be passed as one. */
 export type FraId = number & { readonly __brand: "FraId" };
 export type ShopId = string & { readonly __brand: "ShopId" };
-/** A user-defined set of location codes, e.g. "splc" or "station". No code set is built in. */
-export type CodeType = string;
 
 /** A location as it was given. Stored and sent exactly like this; resolved again every time it is used. */
 export type PlaceRef =
@@ -23,8 +19,6 @@ export type PlaceRef =
   | { kind: "text"; text: string }
   /** One of Your shops. */
   | { kind: "shop"; shopId: ShopId }
-  /** A company location code in a named code set. */
-  | { kind: "code"; codeType: CodeType; code: string }
   /** An exact network node, from a map pick. `railroad` is the answer to "Which line?" where several meet. */
   | { kind: "node"; fraId: FraId; railroad: Railroad | null }
   | { kind: "coord"; lon: number; lat: number };
@@ -45,8 +39,7 @@ export interface Waypoint {
 
 export interface PlaceMatch {
   /** Which list or syntax the name was found by. */
-  method: "node" | "coordinates" | "shop" | "code" | "city";
-  codeType: CodeType | null;
+  method: "node" | "coordinates" | "shop" | "city";
   /** "exact": a network node. "snapped": coordinates moved to the nearest mainline, `snapKm` away. */
   confidence: "exact" | "snapped";
   snapKm: number;
@@ -65,10 +58,10 @@ export interface PlaceSuggestion {
   /** What to store if the person picks this suggestion: always a typed ref, never text. */
   ref: PlaceRef;
   label: string;
-  /** "Your shop · EX-NLR-01", "SPLC 668240", "City", "FRA node 358070". */
+  /** "Your shop · EX-NLR-01", "City", "FRA node 358070". */
   detail: string;
   /** Which list it came from; a network node says what it is: yard track, a junction of railroads, or neither. */
-  source: "shop" | "code" | "city" | "yard" | "junction" | "node";
+  source: "shop" | "city" | "yard" | "junction" | "node";
   /** Railroads with track there, as resolving the place finds them. */
   railroads: Railroad[];
 }
@@ -123,8 +116,8 @@ export interface Shop {
 
 /**
  * A shop as the form or an import row submits it. `location` is whatever was given (a node picked on
- * the map, coordinates, or text such as a node code to look up); saving resolves it once and stores
- * the node or coordinates it came to.
+ * the map, coordinates, or text to look up); saving resolves it once and stores the node or
+ * coordinates it came to.
  */
 /** Longest shop name or code, the same through the shop form and a file import: longer text breaks map labels. */
 export const SHOP_TEXT_MAX = 200;
@@ -148,20 +141,6 @@ export interface ShopView extends Shop {
   place: PlaceResolution;
 }
 
-export interface CodeSet {
-  codeType: CodeType;
-  label: string;
-  count: number;
-  importedAt: Instant;
-}
-
-export interface NodeCode {
-  codeType: CodeType;
-  code: string;
-  name: string | null;
-  location: NodeLocation;
-}
-
 /** Company data arrives as one of these. Adding the database is a new member here and a new source in server/intake. */
 export type UploadSource = { kind: "csv"; fileName: string; text: string };
 
@@ -179,7 +158,7 @@ export interface RowIssue {
   message: string;
 }
 
-/** A preview (commit: false) or the result (commit: true) of importing shops or codes. */
+/** A preview (commit: false) or the result (commit: true) of importing shops. */
 export interface ImportRequest {
   source: UploadSource;
   commit: boolean;

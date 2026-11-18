@@ -17,7 +17,7 @@ export interface Shops {
   save(draft: ShopDraft, id: ShopId | null): ShopView;
   remove(id: ShopId): void;
   /**
-   * Columns: name, node_code — or name, lon, lat. With commit false nothing is saved and the report
+   * Columns: name, code, and fra_id or lon, lat. With commit false nothing is saved and the report
    * is a preview. With commit true the ready rows are upserted by code (else by name), so importing
    * the same file twice changes nothing. Rows that match no node are returned as issues, never saved.
    */
@@ -36,7 +36,7 @@ export function createShops(store: Store, directory: Directory): Shops {
     const name = draft.name.trim();
     if (!name) return { field: "name", message: "Give the shop a name." };
     const code = draft.code?.trim() || null;
-    // A shop's own location is a position: its text is looked up in code sets and cities, not in Your shops first.
+    // A shop's own location is a position: its text is looked up in cities before Your shops.
     const place = directory.resolve(draft.location, "position");
     if (!place.ok) return { field: "location", message: place.problem.message };
     return { shop: { id, name, code, location: locationOf(place.place), example } };

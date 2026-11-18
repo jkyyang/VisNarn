@@ -4,8 +4,7 @@
     "target": "ES2022",
     "strict": true,
     "noUnusedLocals": true,
-    // Sketch phase only: bodies throw "not implemented", so their parameters are unused. Turn back on when Phase D fills them in.
-    "noUnusedParameters": false,
+    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
     // Node runs these sources directly (type stripping), so a type import must be written as one,

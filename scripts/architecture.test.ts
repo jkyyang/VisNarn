@@ -1,5 +1,5 @@
 /**
- * The import rules of docs/MODULE_MAP.md that the compiler cannot check. (`npm run typecheck`
+ * The import rules of docs/architecture/MODULE_MAP.md that the compiler cannot check. (`npm run typecheck`
  * already fails an import across areas: web → engine or server, engine → server, anything → web.)
  *
  * Add a rule here when a module gains an internal that others must not reach.
@@ -90,12 +90,8 @@ describe("import rules", () => {
     expect(importers((target) => target === "web/data/query.ts", (path) => path.startsWith("web/data/") || isTest(path))).toEqual([]);
   });
 
-  it("the page knows no clock: nothing under web/ imports shared/time.ts or shared/assumptions.ts", () => {
-    expect(importers((target) => target === "shared/time.ts" || target === "shared/assumptions.ts", (path) => !path.startsWith("web/"))).toEqual([]);
-  });
-
   it("the server is assembled in server/app.ts only: no module reaches into another's folder for its factory", () => {
-    const factories = /\b(openStore|createDirectory|createShops|createCodes|createPlans|startRoutePlanner)\b/;
+    const factories = /\b(openStore|createDirectory|createShops|createPlans|startRoutePlanner)\b/;
     // server/selftest.ts starts one route planner on its own: the boot check must not need a database.
     const assemblers = ["server/app.ts", "server/selftest.ts"];
     const users = files.filter((file) => file.path.startsWith("server/") && !isTest(file.path) && !assemblers.includes(file.path));

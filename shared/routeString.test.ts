@@ -12,17 +12,17 @@ function route(...rows: string[]): RoutePath {
   let line = rows.find(isLine) as Line;
   for (const [km, row] of rows.entries()) {
     const next = rows.slice(km).find(isLine) as Line;
-    if (row.startsWith("[")) steps.push({ kind: "interchange", kmFromB: km, from: line, to: next, at: row.slice(1, -1) });
-    else if (row.startsWith("stop ")) steps.push({ kind: "stop", kmFromB: km, stop: Number(row.slice(5)), label: row });
-    else if (row === "↩") steps.push({ kind: "turn-back", kmFromB: km, turnBack: 0 });
+    if (row.startsWith("[")) steps.push({ kind: "interchange", kmFromStart: km, from: line, to: next, at: row.slice(1, -1) });
+    else if (row.startsWith("stop ")) steps.push({ kind: "stop", kmFromStart: km, stop: Number(row.slice(5)), label: row });
+    else if (row === "↩") steps.push({ kind: "turn-back", kmFromStart: km, turnBack: 0 });
     else {
       line = row as Line;
-      steps.push({ kind: "leg", kmFromB: km, leg: legs.length });
+      steps.push({ kind: "leg", kmFromStart: km, leg: legs.length });
       legs.push({ railroad: line, km: 100, from: "", to: "", headingDeg: 0, subdivisions: [], path: [] });
     }
   }
-  steps.push({ kind: "shop", kmFromB: rows.length });
-  return { strategies: ["pick"], km: 100 * legs.length, interchanges: 0, railroads: [], legs, turnBacks: [], steps, passesA: false };
+  steps.push({ kind: "destination", kmFromStart: rows.length });
+  return { strategies: ["pick"], km: 100 * legs.length, interchanges: 0, railroads: [], legs, turnBacks: [], steps };
 }
 
 const node = (railroad: "BNSF" | "UP" | null): PlaceRef => ({ kind: "node", fraId: 412783 as FraId, railroad });

@@ -18,7 +18,7 @@
  */
 import { haversineKm } from "../../shared/geo.ts";
 import type { FraId } from "../../shared/places.ts";
-import { LINES, RAILROADS, type Railroad } from "../../shared/railroads.ts";
+import { LINES, RAILROADS } from "../../shared/railroads.ts";
 
 export const REGIONAL = LINES.indexOf("regional");
 export const SHORT_LINE = LINES.indexOf("short line");
@@ -36,10 +36,6 @@ export interface Track {
   allowedMask: number;
   passenger: boolean;
 }
-
-/** Railroads as the bit mask graph.bin uses. */
-export const maskOf = (railroads: readonly Railroad[]): number =>
-  railroads.reduce((mask, railroad) => mask | (1 << RAILROADS.indexOf(railroad)), 0);
 
 /** Coordinates snap to a railroad's mainline only within this distance. */
 export const MAX_SNAP_KM = 15;

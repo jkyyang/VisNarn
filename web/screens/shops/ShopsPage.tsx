@@ -167,9 +167,9 @@ export function ShopForm(props: {
     setLocRef({ kind: "node", fraId: props.picked.fraId, railroad: null });
   }, [props.picked]);
 
-  // The server reads the text the way it reads an import cell: a code, "lon, lat", a city, a node.
+  // The server reads the text as "lon, lat", a city or "FRA 358070".
   const ref = useMemo<PlaceRef | null>(() => locRef ?? (locText.trim() ? { kind: "text", text: locText.trim() } : null), [locRef, locText]);
-  // "position", as the server saves a shop's own location: codes and cities before Your shops.
+  // "position", as the server saves a shop's own location: cities before Your shops.
   const resolution = usePlace(ref, "position");
   const suggestions = usePlaceSuggestions(suggesting ? locText : "", "position");
   // A stale list belongs to the text before the last keystroke.

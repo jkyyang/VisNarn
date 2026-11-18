@@ -4,15 +4,14 @@
  * compile error and not a 404 at run time.
  *
  * Only server/http and web/data import this file (scripts/architecture.test.ts checks). Everything
- * else speaks the domain types the routes carry (./places.ts, ./plans.ts, ./route.ts,
- * ./assumptions.ts), and those are plain JSON by construction, so there is no second set of "wire"
+ * else speaks the domain types the routes carry (./places.ts, ./plans.ts, ./route.ts), and those are
+ * plain JSON by construction, so there is no second set of "wire"
  * types to keep in step with them.
  */
 import type { AppErrorKind, Meta } from "./app.ts";
-import type { Assumptions } from "./assumptions.ts";
 import type { LngLat } from "./geo.ts";
 import type {
-  CodeSet, CodeType, ImportReport, ImportRequest, NetworkNode, NodeCode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
+  ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
 } from "./places.ts";
 import type { Plan, PlannedRoute, SavedRoute, SavedRouteDraft } from "./plans.ts";
 
@@ -21,11 +20,7 @@ type Endpoint<Res, Body = undefined, Query = undefined> = { res: Res; body: Body
 export interface Api {
   "GET /api/meta": Endpoint<Meta>;
 
-  /** The routing rules the planner uses. Kept on the server; no screen shows them in stage 1. */
-  "GET /api/assumptions": Endpoint<Assumptions>;
-  "PUT /api/assumptions": Endpoint<Assumptions, Assumptions>;
-
-  /** Autocomplete for a place input: Your shops, company codes and city names that match. */
+  /** Autocomplete for a place input: Your shops and city names that match. */
   "GET /api/places/suggest": Endpoint<PlaceSuggestion[], undefined, { q: string; role: PlaceRole }>;
   /** What one place means on the network: "Found on the network · served by BNSF and UP". */
   "POST /api/places/resolve": Endpoint<PlaceResolution, { ref: PlaceRef; role: PlaceRole }>;
@@ -37,11 +32,6 @@ export interface Api {
   "PUT /api/shops/:shopId": Endpoint<ShopView, ShopDraft>;
   "DELETE /api/shops/:shopId": Endpoint<null>;
   "POST /api/shops/import": Endpoint<ImportReport<ShopView>, ImportRequest>;
-
-  /** Company node codes. Kept on the server for when the company's code format is known; no screen uses them. */
-  "GET /api/codes": Endpoint<CodeSet[]>;
-  "POST /api/codes/import": Endpoint<ImportReport<NodeCode>, ImportRequest & { codeType: CodeType; label: string }>;
-  "DELETE /api/codes/:codeType": Endpoint<null>;
 
   /** The routes for a plan, as far as its places resolve. Nothing is stored; the same plan always gives the same answer. */
   "POST /api/route": Endpoint<PlannedRoute, Plan>;

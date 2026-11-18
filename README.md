@@ -1,11 +1,11 @@
 # VisNARN — Shop Arrival Check
 
-Stage 1: a route planner over the Class I rail network, for one laptop. Click (or type) a start and a
+Stage 1: a route planner over the North American rail network, for one laptop. Click (or type) a start and a
 destination, shop or station, and a route appears; each further click adds a stop the route must pass
 through. Choose the line where several meet, pick between the alternatives, and save the route with a
 name. Your own shops are on the Shops screen. Stage 1 shows no dates, times or cars.
 
-> Read [docs/architecture/RATIONALE.md](docs/architecture/RATIONALE.md) and [docs/architecture/MODULE_MAP.md](docs/architecture/MODULE_MAP.md) first.
+> Read [docs/architecture/MODULE_MAP.md](docs/architecture/MODULE_MAP.md) first.
 
 ## Run
 ```
@@ -36,18 +36,19 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 ```
 
 ## Layout
-- `shared/` — the words both sides use: places, plans, routes, routing rules, and the HTTP contract (`api.ts`)
-- `engine/` — rail network and router (and the arrival-time code, which no stage-1 screen uses). Pure logic; the server and the backtest use it through `engine/index.ts`
+- `shared/` — the words both sides use: places, plans, routes, and the HTTP contract (`api.ts`)
+- `engine/` — rail network and router. Pure logic; the server and the scripts use it through `engine/index.ts`
 - `server/` — the back end: database (`store/`), places (`places/`), routing workers (`routing/`), planned and saved routes (`plans/`), shop lists in (`intake/`), HTTP (`http/`)
 - `web/` — the page: screens (`screens/`), map (`map/`), server data (`data/`)
-- `scripts/` — `backtest.ts` and the import-rule test
+- `scripts/` — the weekly network update (`update-network.ts`, see `scripts/README.md`) and the import-rule test
 - `tests/` — the API over HTTP and the screens rendered from real answers
 - `pipeline/` — Python: download NARN lines, build the graph, export `public/data/graph.bin`
 
 ## Map sources (free, no key)
-OpenFreeMap vector styles (OpenStreetMap data), Esri World Imagery for satellite, OpenRailwayMap overlay.
+OpenFreeMap vector styles (OpenStreetMap data, also the rail lines of Real tracks), Esri World Imagery for satellite,
+NASA GIBS Black Marble for city lights at night.
 Check each provider's terms before production use (Esri imagery needs an ArcGIS account for commercial apps).
 
 ## Known limits
-Shortest-distance routing is not the railroads' real operating plan; only Class I track (short lines and spurs
-mostly missing); coordinates snap to Class I mainline within 15 km.
+Shortest-distance routing is not the railroads' real operating plan; industry spurs are missing; coordinates snap
+to mainline within 15 km.

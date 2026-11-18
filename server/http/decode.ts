@@ -9,9 +9,8 @@
  */
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
-import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
 import type { LngLat } from "../../shared/geo.ts";
-import { SHOP_TEXT_MAX, UNSEEN, type CodeType, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
+import { SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
@@ -112,19 +111,15 @@ const list =
 
 const railroad: Decoder<Railroad> = oneOf(RAILROADS);
 
-const codeTypeOf: Decoder<CodeType> = visible(nonEmpty(64));
-
 // ---- domain values ----
 
 const placeRef: Decoder<PlaceRef> = (value, path) => {
-  const kind = field(value, path, "kind", oneOf(["text", "shop", "code", "node", "coord"] as const));
+  const kind = field(value, path, "kind", oneOf(["text", "shop", "node", "coord"] as const));
   switch (kind) {
     case "text":
       return { kind, text: field(value, path, "text", text()) };
     case "shop":
       return { kind, shopId: field(value, path, "shopId", nonEmpty(200)) as ShopId };
-    case "code":
-      return { kind, codeType: field(value, path, "codeType", codeTypeOf), code: field(value, path, "code", nonEmpty(200)) };
     case "node":
       return { kind, fraId: field(value, path, "fraId", wholeNumber) as FraId, railroad: field(value, path, "railroad", nullable(railroad)) };
     case "coord":
@@ -171,35 +166,6 @@ const shopDraft: Decoder<ShopDraft> = (value, path) => ({
   location: field(value, path, "location", placeRef),
 });
 
-const basis: Decoder<EstimateBasis> = (value, path) => {
-  const kind = field(value, path, "kind", oneOf(["placeholder", "calibrated"] as const));
-  if (kind === "placeholder") return { kind };
-  return { kind, trips: field(value, path, "trips", wholeNumber), scope: field(value, path, "scope", oneOf(["lane", "region", "global"] as const)) };
-};
-
-const assumptions: Decoder<Assumptions> = (value, path) => {
-  const group = (key: string) => [field(value, path, key, object), at(path, key)] as const;
-  const [routing, routingPath] = group("routing");
-  const [timing, timingPath] = group("timing");
-  const [flags, flagsPath] = group("flags");
-  return {
-    routing: {
-      allowed: [...new Set(field(routing, routingPath, "allowed", list(railroad, RAILROADS.length * 2)))],
-      interchangePenaltyKm: field(routing, routingPath, "interchangePenaltyKm", number),
-    },
-    timing: {
-      speedKmPerDay: field(timing, timingPath, "speedKmPerDay", number),
-      interchangeDelayH: field(timing, timingPath, "interchangeDelayH", number),
-      bufferH: field(timing, timingPath, "bufferH", number),
-      basis: field(timing, timingPath, "basis", basis),
-    },
-    flags: {
-      detourRatio: field(flags, flagsPath, "detourRatio", number),
-      positionAgeH: field(flags, flagsPath, "positionAgeH", number),
-    },
-  };
-};
-
 /** CSV text can be large; the HTTP layer already caps the whole body. */
 const uploadSource: Decoder<UploadSource> = (value, path) => {
   field(value, path, "kind", oneOf(["csv"] as const));
@@ -224,12 +190,10 @@ const MAX_PATH_POINTS = 50_000;
 
 /** One decoder per route that has a body: a route added to `Api` without one does not compile. */
 export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R]["body"] } = {
-  "PUT /api/assumptions": (json) => assumptions(json, ""),
   "POST /api/places/resolve": (json) => ({ ref: field(json, "", "ref", placeRef), role: field(json, "", "role", role) }),
   "POST /api/shops": (json) => shopDraft(json, ""),
   "PUT /api/shops/:shopId": (json) => shopDraft(json, ""),
   "POST /api/shops/import": (json) => importRequest(json, ""),
-  "POST /api/codes/import": (json) => ({ ...importRequest(json, ""), codeType: field(json, "", "codeType", codeTypeOf), label: field(json, "", "label", visible(text(200))) }),
   "POST /api/route": (json) => plan(json, ""),
   "POST /api/saved-routes": (json) => savedRouteDraft(json, ""),
   "PUT /api/saved-routes/:routeId": (json) => savedRouteDraft(json, ""),
@@ -257,7 +221,4 @@ export function shopId(text: string): ShopId {
 }
 export function savedRouteId(text: string): SavedRouteId {
   return nonEmpty(200)(text, "routeId") as SavedRouteId;
-}
-export function codeType(text: string): CodeType {
-  return codeTypeOf(text, "codeType");
 }

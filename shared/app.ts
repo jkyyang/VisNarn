@@ -6,7 +6,7 @@ export interface Meta {
   /** Hash of graph.bin. Route caches are keyed by it; saved data never depends on it. */
   graphVersion: string;
   railroads: readonly Railroad[];
-  /** True while every shop and batch is a seeded EXAMPLE row: the header shows "EXAMPLE DATA". */
+  /** True while every shop is a seeded EXAMPLE row and no route is saved: the header shows "EXAMPLE DATA". */
   exampleOnly: boolean;
   /** Where the database file lives on this laptop, for the "data stays here" note. */
   storage: string;

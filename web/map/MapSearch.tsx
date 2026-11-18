@@ -1,5 +1,5 @@
 /**
- * The search box over the map, as in a maps app: Your shops, cities and company codes. An FRA node id
+ * The search box over the map, as in a maps app: Your shops and cities. An FRA node id
  * ("FRA 358070") still finds its node, but the placeholder does not advertise it: jargon, and it clips on a phone.
  * Choosing a suggestion flies the map there and drops a pin with a card (./FoundPin.tsx). Plain DOM,
  * no map library, so page tests draw it.
@@ -12,7 +12,7 @@ import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
 import { usePlaceSuggestions } from "../data/hooks.ts";
 import { RailroadChip } from "../ui/badges.tsx";
 
-export const TYPE_CHIPS: Record<PlaceSuggestion["source"], string> = { shop: "Shop", code: "Code", city: "City", yard: "Yard", junction: "Junction", node: "Node" };
+export const TYPE_CHIPS: Record<PlaceSuggestion["source"], string> = { shop: "Shop", city: "City", yard: "Yard", junction: "Junction", node: "Node" };
 
 /** The highlighted row after ↓ or ↑, going round the list; with none highlighted, ↓ takes the first and ↑ the last. */
 export function moveActive(active: number, key: "ArrowDown" | "ArrowUp", count: number): number {

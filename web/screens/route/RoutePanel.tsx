@@ -101,8 +101,6 @@ function givenText(ref: PlaceRef, failed: boolean): string {
   switch (ref.kind) {
     case "text":
       return ref.text;
-    case "code":
-      return ref.code;
     case "coord":
       return `${ref.lon}, ${ref.lat}`;
     case "node":
@@ -407,7 +405,7 @@ function Sections(props: { route: RoutePath; string: RouteString; start: string;
         rows.push({ key, mark: <span className="section-turn">↩</span>, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back", kind: "turn-back" });
         return;
       }
-      case "shop":
+      case "destination":
         rows.push({ key, mark: <DestinationPin />, text: shortPlace(props.destination), kind: "place" });
         return;
     }

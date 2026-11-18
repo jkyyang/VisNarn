@@ -5,9 +5,9 @@
  * touches no database and opens no port.
  */
 import { loadNetwork, loadTrackShapes, type Trip } from "../engine/index.ts";
-import { DEFAULT_ASSUMPTIONS } from "../shared/assumptions.ts";
 import { haversineKm, type LngLat } from "../shared/geo.ts";
 import type { Waypoint } from "../shared/places.ts";
+import { DEFAULT_INCLUDE } from "../shared/railroads.ts";
 import type { Config } from "./config.ts";
 import { startRoutePlanner } from "./routing/planner.ts";
 
@@ -20,7 +20,7 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
     if (!found) throw new Error(`The network has no city named ${name}.`);
     return { label: found.name, lon: found.lon, lat: found.lat, fraId: null, railroad: null };
   };
-  const trip: Trip = { a: city("Taylor, TX"), b: city("Temple, TX"), stops: [], shop: city("North Little Rock, AR"), rules: DEFAULT_ASSUMPTIONS.routing };
+  const trip: Trip = { start: city("Taylor, TX"), stops: [city("Temple, TX")], destination: city("North Little Rock, AR"), include: DEFAULT_INCLUDE };
   const planner = startRoutePlanner({ networkDir: config.networkDir, networkVersion: network.version, workers: 1 });
   try {
     const routed = await planner.plan(trip, "pick");
@@ -28,7 +28,7 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
       log(`selftest FAILED: the EXAMPLE route Taylor, TX to North Little Rock, AR (via Temple, TX) has no path: ${routed.noRoute.message}`);
       return false;
     }
-    const [path] = routed.trip.paths;
+    const [path] = routed.paths;
     // Drawn on the surveyed lines, the route is as long as the track km it was routed on; node to node it is shorter.
     const drawnKm = path.legs.reduce((km, leg) => km + lengthKm(track.follow(leg.path)), 0);
     if (Math.abs(drawnKm - path.km) > 0.01 * path.km) {

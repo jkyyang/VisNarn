@@ -4,8 +4,6 @@ import { routeMatcher, urlFor, type Route } from "./api.ts";
 /** Every route of the contract; a route added to `Api` and missing here does not compile. */
 const EVERY_ROUTE: Record<Route, true> = {
   "GET /api/meta": true,
-  "GET /api/assumptions": true,
-  "PUT /api/assumptions": true,
   "GET /api/places/suggest": true,
   "POST /api/places/resolve": true,
   "GET /api/places/nearest": true,
@@ -14,9 +12,6 @@ const EVERY_ROUTE: Record<Route, true> = {
   "PUT /api/shops/:shopId": true,
   "DELETE /api/shops/:shopId": true,
   "POST /api/shops/import": true,
-  "GET /api/codes": true,
-  "POST /api/codes/import": true,
-  "DELETE /api/codes/:codeType": true,
   "POST /api/route": true,
   "GET /api/saved-routes": true,
   "POST /api/saved-routes": true,
@@ -27,7 +22,7 @@ const EVERY_ROUTE: Record<Route, true> = {
 const ROUTES = Object.keys(EVERY_ROUTE) as Route[];
 
 /** Awkward values on purpose: a slash, a space, a percent sign and non-ASCII letters must survive the trip. */
-const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", routeId: "r%7 é", codeType: "sp lc" };
+const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", routeId: "r%7 é" };
 
 describe("urlFor / routeMatcher", () => {
   it("urlFor fills path params (encoded) and appends the query", () => {

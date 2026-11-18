@@ -3,13 +3,12 @@
  * saved by name. Routing composes two things that can each say "no": the Directory (does every
  * place resolve?) and the route planner (is there a route?).
  *
- * A routed plan is not stored. It is a function of the plan, the stored shops and codes, the routing
- * rules and the network version: ask again and you get the same answer.
+ * A routed plan is not stored. It is a function of the plan, the stored shops and the network version:
+ * ask again and you get the same answer.
  */
 import { randomUUID } from "node:crypto";
 import type { NoRoute, Trip } from "../../engine/index.ts";
 import { AppError } from "../../shared/app.ts";
-import type { Assumptions } from "../../shared/assumptions.ts";
 import type { PlaceResolution, ResolvedPlace, Waypoint } from "../../shared/places.ts";
 import type { Plan, PlannedRoute, PlanPlaces, PlanProblem, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import type { Directory } from "../places/directory.ts";
@@ -31,7 +30,7 @@ type Resolved = Extract<PlaceResolution, { ok: true }>;
 
 const isResolved = (place: PlaceResolution | null): place is Resolved => place !== null && place.ok;
 
-export function createPlans(parts: { store: Store; directory: Directory; planner: RoutePlanner; rules: () => Assumptions["routing"] }): Plans {
+export function createPlans(parts: { store: Store; directory: Directory; planner: RoutePlanner }): Plans {
   const { store, directory, planner } = parts;
 
   const unknown = (): never => {
@@ -50,14 +49,12 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
       const stops = places.stops.filter(isResolved);
       if (!isResolved(start) || !isResolved(destination) || stops.length !== places.stops.length) return { outcome: "incomplete", places };
 
-      // A = B (the engine's precedent for "no next node"): the route may leave the start either way.
-      const from = waypoint(start.place);
-      const trip: Trip = { a: from, b: from, stops: stops.map((s) => waypoint(s.place)), shop: waypoint(destination.place), rules: { ...parts.rules(), include: plan.include } };
+      const trip: Trip = { start: waypoint(start.place), stops: stops.map((s) => waypoint(s.place)), destination: waypoint(destination.place), include: plan.include };
       const routed = await planner.plan(trip, "all", { signal });
       if (!routed.ok) return { outcome: "no-route", places, problem: problemOf(routed.noRoute, trip) };
       // Every place on one spot: nothing moves, so there is no route to show or save.
-      if (routed.trip.paths.every((path) => path.legs.length === 0)) return { outcome: "no-route", places, problem: { at: "destination", message: "Start and destination are the same place." } };
-      return { outcome: "routed", places, routes: routed.trip.paths };
+      if (routed.paths.every((path) => path.legs.length === 0)) return { outcome: "no-route", places, problem: { at: "destination", message: "Start and destination are the same place." } };
+      return { outcome: "routed", places, routes: routed.paths };
     },
 
     saved: () => store.savedRoutes.all(),
@@ -84,15 +81,11 @@ function waypoint(place: ResolvedPlace): Waypoint {
   return { label: place.label, lon: place.lon, lat: place.lat, fraId: place.fraId, railroad: place.railroad };
 }
 
-/**
- * Where the plan breaks, in the plan's own words. The engine's messages name "A", "B" and "the shop",
- * which this screen does not have, so they never pass through.
- */
-function problemOf(noRoute: NoRoute, trip: Trip): PlanProblem {
-  const at: PlanProblem["at"] = noRoute.at === "a" || noRoute.at === "b" ? "start" : noRoute.at === "shop" ? "destination" : noRoute.at;
-  if (noRoute.kind === "no-path") return { at, message: "No route on the allowed track joins this place to the rest of the route." };
-  if (noRoute.kind === "dead-end") return { at, message: "The route cannot go on from here without turning back." };
-  const point = at === "start" ? trip.b : at === "destination" ? trip.shop : trip.stops[at];
+/** Where the plan breaks, in one short line about that place. */
+function problemOf({ kind, at }: NoRoute, trip: Trip): PlanProblem {
+  if (kind === "no-path") return { at, message: "No route on the allowed track joins this place to the rest of the route." };
+  if (kind === "dead-end") return { at, message: "The route cannot go on from here without turning back." };
+  const point = at === "start" ? trip.start : at === "destination" ? trip.destination : trip.stops[at];
   return { at, message: point?.railroad ? `${point.railroad} has no track here.` : "No allowed railroad has track here." };
 }
 

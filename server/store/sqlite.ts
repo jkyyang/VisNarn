@@ -2,28 +2,22 @@
  * The Store on node:sqlite. The only file that knows the schema.
  *
  *   meta         (key PK, value)                                  schema_version
- *   settings     (key PK, json)                                   'assumptions'
  *   shops        (id PK, name, code UNIQUE NULL, location_json, example, updated_at)
- *   code_sets    (code_type PK, label, imported_at)
- *   node_codes   (code_type, code, name NULL, location_json, PRIMARY KEY (code_type, code))
  *   saved_routes (id PK, name, plan_json, option NULL, route_string)            since schema 2; route_string since 3
  *
- * Dormant since schema 2, kept because they hold user data: batches, batch_rows, route_fixes and the
- * 'import_profile' settings key. Nothing reads or writes them.
+ * Dormant, kept because they may hold user data: settings, code_sets, node_codes, batches, batch_rows,
+ * route_fixes. Nothing reads or writes them.
  *
- * Nested domain values (PlaceRef, NodeLocation, a plan) are stored as JSON text: the format of
- * company node codes is still unknown, and no query needs to look inside them. Columns exist only
- * for what is looked up: ids, (code_type, code), shop code and name, a saved route's name.
+ * Nested domain values (NodeLocation, a plan) are stored as JSON text: no query needs to look inside
+ * them. Columns exist only for what is looked up: ids, shop code and name, a saved route's name.
  */
 import { chmodSync } from "node:fs";
 import process from "node:process";
 import { AppError } from "../../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../../shared/assumptions.ts";
-import type { CodeSet, CodeType, NodeCode, NodeLocation, Shop, ShopId } from "../../shared/places.ts";
+import type { NodeLocation, Shop, ShopId } from "../../shared/places.ts";
 import type { FullPlan, SavedRoute, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
-import type { Instant } from "../../shared/time.ts";
 import type { Store } from "./store.ts";
 
 /** Applied in order; the database records how many it has. Never edit one that has shipped: add another. */
@@ -141,13 +135,6 @@ export function openStore(file: string): Store {
     example: row.example === 1,
   });
 
-  const nodeCodeOf = (row: Row): NodeCode => ({
-    codeType: String(row.code_type),
-    code: String(row.code),
-    name: row.name === null ? null : String(row.name),
-    location: parse<NodeLocation>(row.location_json),
-  });
-
   const planOf = (text: unknown): FullPlan => {
     const plan = parse<FullPlan>(text);
     // A route saved before track could be chosen has no `include`.
@@ -162,18 +149,6 @@ export function openStore(file: string): Store {
     option: (ROUTE_STRATEGIES as readonly unknown[]).includes(row.option) ? (row.option as RouteStrategy) : null,
     routeString: String(row.route_string),
   });
-
-  const setting = <T>(key: string): T | null => {
-    const row = db.prepare("SELECT json FROM settings WHERE key = ?").get(key) as Row | undefined;
-    return row ? parse<T>(row.json) : null;
-  };
-  const saveSetting = (key: string, value: unknown) => {
-    db.prepare("INSERT INTO settings (key, json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET json = excluded.json").run(key, json(value));
-    wrote(null);
-  };
-
-  /** LIKE treats % and _ as wildcards; a code may contain either. */
-  const likePrefix = (text: string) => `${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
   return {
     fresh,
@@ -210,52 +185,6 @@ export function openStore(file: string): Store {
       },
     },
 
-    codes: {
-      sets: () =>
-        (
-          db
-            .prepare("SELECT s.*, (SELECT COUNT(*) FROM node_codes c WHERE c.code_type = s.code_type) AS n FROM code_sets s ORDER BY s.label COLLATE NOCASE, s.code_type")
-            .all() as Row[]
-        ).map((row): CodeSet => ({ codeType: String(row.code_type), label: String(row.label), count: Number(row.n), importedAt: String(row.imported_at) as Instant })),
-      find: (code, codeType) => {
-        const t = code.trim();
-        const rows =
-          codeType === null
-            ? db.prepare("SELECT * FROM node_codes WHERE code = ? COLLATE NOCASE ORDER BY code_type").all(t)
-            : db.prepare("SELECT * FROM node_codes WHERE code = ? COLLATE NOCASE AND code_type = ? COLLATE NOCASE").all(t, codeType);
-        return (rows as Row[]).map(nodeCodeOf);
-      },
-      search: (text, limit) => {
-        const t = text.trim();
-        if (!t || limit <= 0) return [];
-        const like = likePrefix(t);
-        return (
-          db
-            .prepare(
-              `SELECT * FROM node_codes WHERE code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\'
-               ORDER BY (code LIKE ? ESCAPE '\\') DESC, code COLLATE NOCASE, code_type LIMIT ?`,
-            )
-            .all(like, like, like, limit) as Row[]
-        ).map(nodeCodeOf);
-      },
-      replaceSet: (set: { codeType: CodeType; label: string }, codes: NodeCode[], at: Instant) =>
-        transaction(() => {
-          db.prepare("DELETE FROM node_codes WHERE code_type = ?").run(set.codeType);
-          db.prepare(
-            "INSERT INTO code_sets (code_type, label, imported_at) VALUES (?, ?, ?) ON CONFLICT (code_type) DO UPDATE SET label = excluded.label, imported_at = excluded.imported_at",
-          ).run(set.codeType, set.label, at);
-          const insert = db.prepare("INSERT INTO node_codes (code_type, code, name, location_json) VALUES (?, ?, ?, ?)");
-          for (const code of codes) insert.run(set.codeType, code.code, code.name, json(code.location));
-          wrote(null);
-        }),
-      removeSet: (codeType) =>
-        transaction(() => {
-          db.prepare("DELETE FROM node_codes WHERE code_type = ?").run(codeType);
-          const removed = db.prepare("DELETE FROM code_sets WHERE code_type = ?").run(codeType).changes;
-          return Number(removed) > 0 ? wrote(true) : false;
-        }),
-    },
-
     savedRoutes: {
       all: () => (db.prepare("SELECT * FROM saved_routes ORDER BY name COLLATE NOCASE, rowid").all() as Row[]).map(savedRouteOf),
       get: (id) => {
@@ -274,20 +203,6 @@ export function openStore(file: string): Store {
         const removed = db.prepare("DELETE FROM saved_routes WHERE id = ?").run(id).changes;
         return Number(removed) > 0 ? wrote(true) : false;
       },
-    },
-
-    settings: {
-      assumptions: () => {
-        const saved = setting<Assumptions>("assumptions");
-        if (!saved) return structuredClone(DEFAULT_ASSUMPTIONS);
-        // A group added after the user saved theirs takes its default.
-        return {
-          routing: { ...DEFAULT_ASSUMPTIONS.routing, ...saved.routing },
-          timing: { ...DEFAULT_ASSUMPTIONS.timing, ...saved.timing },
-          flags: { ...DEFAULT_ASSUMPTIONS.flags, ...saved.flags },
-        };
-      },
-      saveAssumptions: (assumptions) => saveSetting("assumptions", assumptions),
     },
 
     close: () => {

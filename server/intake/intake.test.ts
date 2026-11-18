@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
 import { SHOP_TEXT_MAX } from "../../shared/places.ts";
 import { exampleShops } from "./example.ts";
-import { openSource, readCodes, readShops, type RecordSource } from "./intake.ts";
+import { openSource, readShops, type RecordSource } from "./intake.ts";
 
 const csv = (text: string, fileName = "shops.csv") => openSource({ kind: "csv", fileName, text });
 
@@ -56,10 +56,8 @@ describe("parseCsv (through the intake door)", () => {
   });
 });
 
-describe("readShops / readCodes", () => {
-  it("accepts name, node_code and name, lon, lat", async () => {
-    const byCode = await readShops(csv("name,node_code\nEXAMPLE Temple shop,EX-TPL\n"));
-    expect(byCode.items).toEqual([{ name: "EXAMPLE Temple shop", code: "EX-TPL", location: { kind: "text", text: "EX-TPL" } }]);
+describe("readShops", () => {
+  it("accepts name, code, lon, lat", async () => {
     const byCoords = await readShops(csv("name,code,lon,lat\nEXAMPLE North,EX-N,−92.27,34.77\nEXAMPLE bad,EX-B,abc,34\n,EX-C,-90,30\n"));
     expect(byCoords.items[0]).toEqual({ name: "EXAMPLE North", code: "EX-N", location: { kind: "coord", lon: -92.27, lat: 34.77 } });
     expect(byCoords.issues.map((i) => [i.row, i.line])).toEqual([
@@ -89,26 +87,16 @@ describe("readShops / readCodes", () => {
     ]);
   });
 
-  it("reports a code or code name with control or invisible characters instead of storing a cut value", async () => {
-    const { issues } = await readCodes(csv("code,name,lon,lat\nA\u0000B,,-90.37,40.95\nA\u0000C,,-94.58,39.1\nEX-C,EX\u200bC,-94.58,39.1\nEX-D,EXAMPLE D,-94.58,39.1\n"), "splc");
-    expect(issues.map((i) => [i.row, i.message])).toEqual([
-      [0, "The code holds control or invisible characters."],
-      [1, "The code holds control or invisible characters."],
-      [2, "The code name holds control or invisible characters."],
-    ]);
-  });
-
-  it("accepts code, name, fra_id and code, name, lon, lat", async () => {
-    const { items, issues } = await readCodes(csv("code,name,fra_id,lon,lat\n668240,Temple,358070,,\n668241,,,-97.3,31.1\n668242,Nowhere,,,\n668243,,12a,,\n"), "splc");
-    expect(items.slice(0, 2)).toEqual([
-      { code: "668240", name: "Temple", location: { kind: "node", fraId: 358070, railroad: null } },
-      { code: "668241", name: null, location: { kind: "coord", lon: -97.3, lat: 31.1 } },
+  it("reads fra_id first, then lon and lat, and lists a row with neither", async () => {
+    const { items, issues } = await readShops(csv("name,fra_id,lon,lat\nEXAMPLE Temple,358070,,\nEXAMPLE Waco,,-97.3,31.1\nEXAMPLE Nowhere,,,\nEXAMPLE Bad,12a,,\n"));
+    expect(items.slice(0, 2).map((shop) => shop.location)).toEqual([
+      { kind: "node", fraId: 358070, railroad: null },
+      { kind: "coord", lon: -97.3, lat: 31.1 },
     ]);
     expect(issues.map((i) => [i.line, i.message])).toEqual([
       [4, expect.stringMatching(/fra_id, or lon and lat/)],
       [5, expect.stringMatching(/"12a" is not a whole number/)],
     ]);
-    expect(await refusal(() => readCodes(csv("code,name\n1,x\n", "codes.csv"), "splc"))).toMatch(/no location columns/);
   });
 });
 

@@ -1,4 +1,4 @@
-/** Reads the network files from disk. The one loader for the server, its routing worker, the backtest and the tests. */
+/** Reads the network files from disk. The one loader for the server, its routing worker, the scripts and the tests. */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

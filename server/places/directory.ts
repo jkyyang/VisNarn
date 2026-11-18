@@ -1,27 +1,25 @@
 /**
  * The Directory: what a place reference means on the network. The one resolver in the app.
  *
- * It answers from three sources, each its own namespace: Your shops, the imported code sets, and
- * the network itself (FRA node ids, coordinates, public city names). The rules below are the whole
- * policy, and they live only here:
+ * It answers from two sources, each its own namespace: Your shops, and the network itself (FRA node
+ * ids, coordinates, public city names). The rules below are the whole policy, and they live only here:
  *
  *   node   → that node, or "removed" if this network build has no such id
  *   coord  → snapped to mainline within MAX_SNAP_KM, or "off-network"
  *   shop   → the shop's saved location, or "removed" if the shop was deleted
- *   code   → looked up in its own code set and nowhere else, or "unknown"
  *   text   → by role, first list with a match wins; more than one match inside a list is "ambiguous"
  *            and lists the candidates:
  *              any role:  "lon, lat" or "lat, lon"  → coord        "FRA 358070" → node
- *              shop:      Your shops (name or code) → code sets → city names
- *              position:  code sets → city names → Your shops        (A, B, a stop, a shop's own location)
- *            A bare number is never an FRA id: digits alone are only ever looked up as a code.
+ *              shop:      Your shops (name or code) → city names
+ *              position:  city names → Your shops        (a stop, a shop's own location)
+ *            A bare number is never an FRA id.
  *
  * Anything that does not resolve is a PlaceProblem, shown at the place it is about; a plan with one is not routed.
  */
 import type { City, RailNetwork } from "../../engine/index.ts";
 import { round5 } from "../../shared/geo.ts";
 import type {
-  FraId, NetworkNode, NodeCode, NodeLocation, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
+  FraId, NetworkNode, NodeLocation, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
 } from "../../shared/places.ts";
 import type { Railroad } from "../../shared/railroads.ts";
 import type { Store } from "../store/store.ts";
@@ -53,8 +51,6 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     ok: false,
     problem: { kind, message, candidates },
   });
-
-  const codeSetLabel = (codeType: string) => store.codes.sets().find((s) => s.codeType.toLowerCase() === codeType.toLowerCase())?.label ?? codeType;
 
   // ---- the network's own answers ----
 
@@ -108,18 +104,12 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   // ---- the user's lists ----
 
   const atShop = (ref: PlaceRef, shop: Shop): PlaceResolution => {
-    const found = atLocation(ref, shop.location, { method: "shop", codeType: null }, shop.name);
+    const found = atLocation(ref, shop.location, { method: "shop" }, shop.name);
     if (!found.ok) return problem(found.problem.kind, `The shop ${shop.name}: ${found.problem.message}`);
     return { ok: true, place: { ...found.place, example: shop.example } };
   };
 
-  const atCode = (ref: PlaceRef, code: NodeCode): PlaceResolution => {
-    const label = code.name ?? `${codeSetLabel(code.codeType)} ${code.code}`;
-    const found = atLocation(ref, code.location, { method: "code", codeType: code.codeType }, label);
-    return found.ok ? found : problem(found.problem.kind, `${codeSetLabel(code.codeType)} ${code.code}: ${found.problem.message}`);
-  };
-
-  const atCity = (ref: PlaceRef, city: City): PlaceResolution => atCoordinates(ref, city.lon, city.lat, { method: "city", codeType: null }, city.name);
+  const atCity = (ref: PlaceRef, city: City): PlaceResolution => atCoordinates(ref, city.lon, city.lat, { method: "city" }, city.name);
 
   // ---- suggestions (also the candidates of a problem) ----
 
@@ -132,11 +122,6 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     const ref: PlaceRef = { kind: "shop", shopId: shop.id };
     const detail = ["Your shop", ...(shop.example ? ["EXAMPLE"] : []), ...(shop.code ? [shop.code] : [])].join(" · ");
     return { ref, label: shop.name, detail, source: "shop", railroads: railroadsAt(ref) };
-  };
-  const codeSuggestion = (code: NodeCode): PlaceSuggestion => {
-    const ref: PlaceRef = { kind: "code", codeType: code.codeType, code: code.code };
-    const detail = `${codeSetLabel(code.codeType)} ${code.code}`;
-    return { ref, label: code.name ?? detail, detail, source: "code", railroads: railroadsAt(ref) };
   };
   const citySuggestion = (city: City): PlaceSuggestion => {
     const ref: PlaceRef = { kind: "coord", lon: city.lon, lat: city.lat };
@@ -158,12 +143,11 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
       .filter((s) => s.name.toLowerCase().includes(lower) || !!s.code?.toLowerCase().includes(lower))
       .sort((x, y) => Number(!startsWith(x, lower)) - Number(!startsWith(y, lower)))
       .map(shopSuggestion);
-    const codes = store.codes.search(q, limit).map(codeSuggestion);
     const cities = network.cities(q, limit).map(citySuggestion);
-    // Only the explicit "FRA 358070" form: a bare number is a company code, and Enter picks the first suggestion.
+    // Only the explicit "FRA 358070" form: Enter picks the first suggestion, and a bare number is not a node id.
     const fra = FRA_TEXT.exec(q)?.[1] ?? null;
     const nodes = fra ? nodeSuggestion(Number(fra) as FraId) : [];
-    const ordered = role === "shop" ? [...shops, ...codes, ...cities, ...nodes] : [...codes, ...cities, ...shops, ...nodes];
+    const ordered = role === "shop" ? [...shops, ...cities, ...nodes] : [...cities, ...shops, ...nodes];
     return ordered.slice(0, limit);
   };
 
@@ -174,14 +158,14 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     if (!text) return problem("empty", "Nothing is filled in.");
 
     const fra = FRA_TEXT.exec(text);
-    if (fra) return atNode(ref, Number(fra[1]) as FraId, null, { method: "node", codeType: null });
+    if (fra) return atNode(ref, Number(fra[1]) as FraId, null, { method: "node" });
 
     const pair = COORD_TEXT.exec(text);
     if (pair) {
       const [x, y] = [Number(pair[1]), Number(pair[2])];
       const [lon, lat] = inNorthAmerica(x, y) ? [x, y] : inNorthAmerica(y, x) ? [y, x] : [x, y];
       if (Math.abs(lon) > 180 || Math.abs(lat) > 90) return problem("unknown", `"${ref.text}" is not a longitude and latitude.`);
-      return atCoordinates(ref, lon, lat, { method: "coordinates", codeType: null });
+      return atCoordinates(ref, lon, lat, { method: "coordinates" });
     }
 
     const lists: (() => PlaceResolution | null)[] = [];
@@ -190,20 +174,12 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
       if (shops.length > 1) return problem("ambiguous", `${shops.length} of Your shops are called "${text}". Pick one.`, shops.map(shopSuggestion));
       return shops.length ? atShop(ref, shops[0]) : null;
     };
-    const codeList = () => {
-      const codes = store.codes.find(text, null);
-      if (codes.length > 1) {
-        const sets = codes.map((c) => codeSetLabel(c.codeType)).join(" and ");
-        return problem("ambiguous", `"${text}" is a code in ${sets}. Pick the one you mean.`, codes.map(codeSuggestion));
-      }
-      return codes.length ? atCode(ref, codes[0]) : null;
-    };
     const cityList = () => {
       const city = network.city(text);
       return city ? atCity(ref, city) : null;
     };
-    if (role === "shop") lists.push(shopList, codeList, cityList);
-    else lists.push(codeList, cityList, shopList);
+    if (role === "shop") lists.push(shopList, cityList);
+    else lists.push(cityList, shopList);
     for (const list of lists) {
       const found = list();
       if (found) return found;
@@ -218,23 +194,12 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   const compute = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {
     switch (ref.kind) {
       case "node":
-        return atNode(ref, ref.fraId, ref.railroad, { method: "node", codeType: null });
+        return atNode(ref, ref.fraId, ref.railroad, { method: "node" });
       case "coord":
-        return atCoordinates(ref, ref.lon, ref.lat, { method: "coordinates", codeType: null });
+        return atCoordinates(ref, ref.lon, ref.lat, { method: "coordinates" });
       case "shop": {
         const shop = store.shops.get(ref.shopId);
         return shop ? atShop(ref, shop) : problem("removed", "This shop was deleted. Pick another shop.");
-      }
-      case "code": {
-        const [code] = store.codes.find(ref.code, ref.codeType);
-        if (code) return atCode(ref, code);
-        const known = store.codes.sets().some((s) => s.codeType.toLowerCase() === ref.codeType.toLowerCase());
-        return problem(
-          "unknown",
-          known
-            ? `The code set ${codeSetLabel(ref.codeType)} has no code ${ref.code}.`
-            : `There is no code set "${ref.codeType}" yet, so ${ref.code} cannot be found. Import the code set on the Shops screen.`,
-        );
       }
       case "text":
         return fromText(ref, role);

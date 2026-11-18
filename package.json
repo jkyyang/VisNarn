@@ -15,7 +15,6 @@
     "typecheck": "tsc -b tsconfig.areas.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "backtest": "node --disable-warning=ExperimentalWarning scripts/backtest.ts",
     "data": "bash pipeline/run_all.sh",
     "data:update": "node --disable-warning=ExperimentalWarning scripts/update-network.ts"
   },

@@ -293,7 +293,7 @@ id is simpler and equally safe).
 7. **Existing ETA.** If Synapse or CPS already holds a railroad ETA, should `CarReport` carry it and the verdict prefer it? That would bypass the planner for those cars.
 8. **Batch retention and size.** How long are batches kept, and how many cars does a morning list have? Hundreds of continental cars suggest two or three workers.
 9. **Phone.** The server listens on 127.0.0.1, so a real phone cannot reach it. Is "Phone" a narrow window on the laptop for now, or must the tool be reachable on the local network (which needs a login first)?
-10. **Third parties.** Map tiles and fonts are fetched from OpenFreeMap, Esri, OpenRailwayMap and Google Fonts. They see map viewports, not car rows. Is that acceptable, and should fonts be bundled?
+10. **Third parties.** Map tiles and fonts are fetched from OpenFreeMap, Esri, NASA GIBS and Google Fonts. They see map viewports, not car rows. Is that acceptable, and should fonts be bundled?
 11. **Database location.** Is `~/.visnarn` acceptable, given that `~/Documents` may sync to a cloud drive?
 12. **Interchange limit.** Routes needing more than 3 interchanges return "no route" (fixed when the router is built). Is 3 enough for the company's lanes?
 13. **Shop dwell.** Where should the destination dwell term (1 to 3 days) live once it is wanted: per shop, or in the assumptions?

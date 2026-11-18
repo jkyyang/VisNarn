@@ -72,8 +72,7 @@ describe("train movement rules", () => {
   };
 
   it("never reverses at a junction outside a yard (the Taylor, TX U-turn)", () => {
-    const approach = router.route([at("Taylor, TX"), at("Temple, TX")], opt);
-    const toShop = router.route([at("Temple, TX"), at("North Little Rock, AR")], opt, { continueFrom: approach.end! });
+    const toShop = router.route([at("Taylor, TX"), at("Temple, TX"), at("North Little Rock, AR")], opt);
     for (const leg of toShop.legs) expect(sharpTurnsOutsideYards(leg.nodes)).toBe(0);
     // every reported reversal is at a yard, and says how the car arrived and left
     for (const r of toShop.reversals) {
@@ -88,15 +87,5 @@ describe("train movement rules", () => {
       const r = router.route([at(a), at(b)], opt);
       for (const leg of r.legs) expect(sharpTurnsOutsideYards(leg.nodes)).toBe(0);
     }
-  });
-
-  it("continues in the direction the car was moving", () => {
-    const ab = router.route([at("Austin, TX"), at("Taylor, TX")], opt);
-    const onward = router.route([at("Taylor, TX"), at("Chicago, IL")], opt, { continueFrom: ab.end! });
-    const first = onward.legs[0].nodes;
-    const e0 = graph.edgeBetween(first[0], first[1]);
-    const arriving = (graph.leaving(ab.end!.edge, ab.end!.node) + 180) % 360;
-    const reversedAtStart = e0 === ab.end!.edge || turnDeg(arriving, graph.leaving(e0, first[0])) > 90;
-    expect(reversedAtStart && !(graph.edgeYard[ab.end!.edge] && graph.edgeYard[e0])).toBe(false);
   });
 });

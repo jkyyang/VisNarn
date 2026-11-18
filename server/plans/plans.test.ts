@@ -1,8 +1,7 @@
 /** Plans on the real network: a real Directory, one routing worker, a ":memory:" store. */
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_NETWORK_DIR, loadNetwork } from "../../engine/index.ts";
 import { AppError } from "../../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { FraId, PlaceRef } from "../../shared/places.ts";
 import type { Plan, PlannedRoute, PlanProblem, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
@@ -20,13 +19,12 @@ beforeAll(() => {
   const network = loadNetwork();
   store = openStore(":memory:");
   planner = startRoutePlanner({ networkDir: DEFAULT_NETWORK_DIR, networkVersion: network.version, workers: 1 });
-  plans = createPlans({ store, directory: createDirectory(network, store), planner, rules: () => store.settings.assumptions().routing });
+  plans = createPlans({ store, directory: createDirectory(network, store), planner });
 });
 afterAll(async () => {
   await planner.close();
   store.close();
 });
-afterEach(() => store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS));
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
 const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination, include: DEFAULT_INCLUDE });
@@ -88,7 +86,7 @@ describe("Plans.route", () => {
       const at = route.steps.find((step) => step.kind === "stop");
       expect(at, route.strategies[0]).toBeDefined();
       // The leg running when the route reaches the stop is on UP.
-      const leg = [...route.steps].filter((step) => step.kind === "leg" && step.kmFromB <= (at?.kmFromB ?? 0)).at(-1);
+      const leg = [...route.steps].filter((step) => step.kind === "leg" && step.kmFromStart <= (at?.kmFromStart ?? 0)).at(-1);
       expect(leg?.kind === "leg" && route.legs[leg.leg].railroad).toBe("UP");
     }
   });
@@ -117,16 +115,15 @@ describe("Plans.route", () => {
   });
 
   it("no route is said at the place it breaks, in the plan's words", async () => {
-    store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["CN"] } });
-    const notServed = await plans.route(TAYLOR_TO_NLR);
+    // Ville Platte, LA: only a short line has track there.
+    const notServed = await plans.route(plan({ kind: "coord", lon: -92.271, lat: 30.688 }, text("Baton Rouge, LA")));
     expect(notServed).toMatchObject({ outcome: "no-route", problem: { at: "start", message: "No allowed railroad has track here." } });
 
-    store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } });
-    const noPath = await plans.route(plan(text("Houston, TX"), text("Pasco, WA")));
+    // Oakville, ON without passenger-owned track.
+    const noPath = await plans.route({ ...plan(text("Chicago, IL"), { kind: "coord", lon: -79.7195, lat: 43.4169 }), include: { regional: false, shortLine: false, passenger: false } });
     expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
 
-    // A stop on a branch the car can only leave the wrong way: the stop is at fault, not the destination.
-    store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS);
+    // A stop on a branch the route can only leave the wrong way: the stop is at fault, not the destination.
     const deadEnd = await plans.route(plan(text("Taylor, TX"), { kind: "coord", lon: -94.0116, lat: 33.4423 }, [{ kind: "node", fraId: 362313 as FraId, railroad: null }]));
     expect(deadEnd).toMatchObject({ outcome: "no-route", problem: { at: 0, message: "The route cannot go on from here without turning back." } });
 

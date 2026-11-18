@@ -7,7 +7,7 @@
  */
 import type { Request, Res, Route } from "../../shared/api.ts";
 import type { App } from "../app.ts";
-import { codeType, savedRouteId, shopId } from "./decode.ts";
+import { savedRouteId, shopId } from "./decode.ts";
 
 export interface HandlerContext {
   app: App;
@@ -20,9 +20,6 @@ export type Handlers = { [R in Route]: (request: Request<R>, context: HandlerCon
 export const handlers: Handlers = {
   "GET /api/meta": (_request, { app }) => app.meta(),
 
-  "GET /api/assumptions": (_request, { app }) => app.settings.assumptions(),
-  "PUT /api/assumptions": ({ body }, { app }) => app.settings.saveAssumptions(body),
-
   "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, 8),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
   "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm),
@@ -32,10 +29,6 @@ export const handlers: Handlers = {
   "PUT /api/shops/:shopId": ({ params, body }, { app }) => app.shops.save(body, shopId(params.shopId)),
   "DELETE /api/shops/:shopId": ({ params }, { app }) => (app.shops.remove(shopId(params.shopId)), null),
   "POST /api/shops/import": ({ body }, { app }) => app.shops.import(body),
-
-  "GET /api/codes": (_request, { app }) => app.codes.sets(),
-  "POST /api/codes/import": ({ body }, { app }) => app.codes.import(body),
-  "DELETE /api/codes/:codeType": ({ params }, { app }) => (app.codes.remove(codeType(params.codeType)), null),
 
   "POST /api/route": ({ body }, { app, signal }) => app.plans.route(body, signal),
   "GET /api/saved-routes": (_request, { app }) => app.plans.saved(),

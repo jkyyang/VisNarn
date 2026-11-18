@@ -4,11 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
-import type { FraId, NodeCode, Shop, ShopId } from "../../shared/places.ts";
+import type { FraId, Shop, ShopId } from "../../shared/places.ts";
 import type { SavedRoute, SavedRouteId } from "../../shared/plans.ts";
-import type { Instant } from "../../shared/time.ts";
 import { openStore } from "./sqlite.ts";
 import type { Store } from "./store.ts";
 
@@ -24,7 +22,6 @@ const memory = () => {
   return store;
 };
 
-const T = "2026-11-17T12:00:00.000Z" as Instant;
 const shop = (over: Partial<Shop> = {}): Shop => ({
   id: "s1" as ShopId,
   name: "North Little Rock, AR",
@@ -41,7 +38,6 @@ const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedR
   routeString: "BNSF-[Temple, TX]-UP",
   ...over,
 });
-const code = (c: string, over: Partial<NodeCode> = {}): NodeCode => ({ codeType: "splc", code: c, name: null, location: { fraId: 358070 as FraId, railroad: null }, ...over });
 
 describe("Store", () => {
   it("creates the schema on an empty file and is a no-op on a current one", () => {
@@ -61,7 +57,7 @@ describe("Store", () => {
     expect(again.shops.all()).toEqual([shop()]);
   });
 
-  it("round-trips a shop, a code set, a saved route, the assumptions", () => {
+  it("round-trips a shop and a saved route", () => {
     const store = memory();
     store.shops.save(shop());
     store.shops.save(shop({ id: "s2" as ShopId, name: "Kansas City, MO", code: null, location: { fraId: 358070 as FraId, railroad: "UP" }, example: false }));
@@ -70,21 +66,9 @@ describe("Store", () => {
     expect(store.shops.named("ex-nlr-01")).toEqual([shop()]);
     expect(store.shops.named("  kansas city, mo ")).toHaveLength(1);
 
-    store.codes.replaceSet({ codeType: "splc", label: "SPLC" }, [code("668240", { name: "Temple" }), code("668241", { location: { lon: -97.3, lat: 31.1 } })], T);
-    expect(store.codes.sets()).toEqual([{ codeType: "splc", label: "SPLC", count: 2, importedAt: T }]);
-    expect(store.codes.find("668240", "splc")).toEqual([code("668240", { name: "Temple" })]);
-    expect(store.codes.find("668240", "fsac")).toEqual([]);
-    expect(store.codes.search("tem", 5).map((c) => c.code)).toEqual(["668240"]);
-    expect(store.codes.search("66824", 1)).toHaveLength(1);
-
     store.savedRoutes.save(route("r1", "KC → Chicago", { option: "shortest" }));
     expect(store.savedRoutes.get("r1" as SavedRouteId)).toEqual(route("r1", "KC → Chicago", { option: "shortest" }));
     expect(store.savedRoutes.get("nope" as SavedRouteId)).toBeNull();
-
-    const mine = { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: 550 } };
-    expect(store.settings.assumptions()).toEqual(DEFAULT_ASSUMPTIONS);
-    store.settings.saveAssumptions(mine);
-    expect(store.settings.assumptions()).toEqual(mine);
   });
 
   it("lists saved routes by name ignoring case, ties in the order saved; saving again keeps a route's place", () => {
@@ -154,10 +138,7 @@ describe("Store", () => {
     const store = memory();
     const steps: [string, () => unknown][] = [
       ["save shop", () => store.shops.save(shop())],
-      ["save code set", () => store.codes.replaceSet({ codeType: "splc", label: "SPLC" }, [code("1")], T)],
       ["save route", () => store.savedRoutes.save(route("r1", "KC → Chicago"))],
-      ["save assumptions", () => store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS)],
-      ["remove code set", () => store.codes.removeSet("splc")],
       ["remove route", () => store.savedRoutes.remove("r1" as SavedRouteId)],
       ["remove shop", () => store.shops.remove("s1" as ShopId)],
     ];
@@ -169,16 +150,12 @@ describe("Store", () => {
     const before = store.revision;
     store.shops.all();
     store.shops.named("x");
-    store.codes.sets();
-    store.codes.search("1", 5);
     store.savedRoutes.all();
     store.savedRoutes.get("r1" as SavedRouteId);
-    store.settings.assumptions();
     expect(store.revision).toBe(before);
     // Removing what is not there writes nothing.
     expect(store.shops.remove("s1" as ShopId)).toBe(false);
     expect(store.savedRoutes.remove("r1" as SavedRouteId)).toBe(false);
-    expect(store.codes.removeSet("splc")).toBe(false);
     expect(store.revision).toBe(before);
   });
 
@@ -202,34 +179,12 @@ describe("Store", () => {
     expect(store.shops.all()).toHaveLength(3);
   });
 
-  it("codes.replaceSet twice with the same rows leaves one copy", () => {
-    const store = memory();
-    const rows = [code("668240"), code("668241")];
-    store.codes.replaceSet({ codeType: "splc", label: "SPLC" }, rows, T);
-    store.codes.replaceSet({ codeType: "splc", label: "SPLC codes" }, rows, T);
-    expect(store.codes.sets()).toEqual([{ codeType: "splc", label: "SPLC codes", count: 2, importedAt: T }]);
-    expect(store.codes.find("668240", null)).toHaveLength(1);
-    // Another set may hold the same code: that is what makes text ambiguous.
-    store.codes.replaceSet({ codeType: "fsac", label: "FSAC" }, [code("668240", { codeType: "fsac" })], T);
-    expect(store.codes.find("668240", null).map((c) => c.codeType)).toEqual(["fsac", "splc"]);
-    expect(store.codes.removeSet("splc")).toBe(true);
-    expect(store.codes.find("668240", null).map((c) => c.codeType)).toEqual(["fsac"]);
-  });
-
-  it("finds a code with % or _ in it as written, not as a pattern", () => {
-    const store = memory();
-    store.codes.replaceSet({ codeType: "yard", label: "Yard" }, [code("A_1"), code("AB1"), code("50%")], T);
-    expect(store.codes.search("A_", 10).map((c) => c.code)).toEqual(["A_1"]);
-    expect(store.codes.search("50%", 10).map((c) => c.code)).toEqual(["50%"]);
-  });
-
   it("no stored value contains a graph index: places are FRA ids, coordinates or user names", () => {
     const store = memory();
     store.shops.save(shop());
     store.shops.save(shop({ id: "s2" as ShopId, code: "X", location: { fraId: 358070 as FraId, railroad: null } }));
-    store.codes.replaceSet({ codeType: "splc", label: "SPLC" }, [code("1")], T);
     store.savedRoutes.save(route("r1", "KC → Chicago"));
-    const stored = JSON.stringify([store.shops.all(), store.codes.find("1", null), store.savedRoutes.all()]);
+    const stored = JSON.stringify([store.shops.all(), store.savedRoutes.all()]);
     const keys = new Set([...stored.matchAll(/"(\w+)":/g)].map((m) => m[1]));
     for (const key of keys) expect(["node", "index", "edge", "nodes"], key).not.toContain(key);
     expect(stored).toContain('"fraId":358070');

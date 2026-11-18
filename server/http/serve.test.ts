@@ -8,7 +8,7 @@ import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "../../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { App } from "../app.ts";
 import { serve, type Server } from "./serve.ts";
 
@@ -47,16 +47,16 @@ const json = (headers: Record<string, string> = {}) => ({ "content-type": "appli
 let routeStarted: () => void = () => {};
 let routeAborted: Promise<unknown> = Promise.resolve();
 
+const DRAFT = {
+  name: "EXAMPLE route",
+  plan: { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "Waco, TX" }, include: DEFAULT_INCLUDE },
+  option: null,
+  routeString: "BNSF",
+};
+
 /** Only what these tests call; the rest of App is never reached. */
 const fakeApp = {
   meta: () => ({ graphVersion: "test", railroads: [], exampleOnly: true, storage: "/tmp" }),
-  settings: {
-    assumptions: () => DEFAULT_ASSUMPTIONS,
-    saveAssumptions: (a: typeof DEFAULT_ASSUMPTIONS) => {
-      if (a.timing.speedKmPerDay <= 0) throw new AppError("invalid", "Speed must be more than 0 km/day.", "timing.speedKmPerDay");
-      return a;
-    },
-  },
   shops: {
     remove: (id: string) => {
       if (id === "gone") throw new AppError("not-found", "No such shop.");
@@ -68,6 +68,10 @@ const fakeApp = {
     },
   },
   plans: {
+    save: (draft: typeof DRAFT) => {
+      if (draft.name === "EXAMPLE taken") throw new AppError("invalid", "Give the route another name.", "name");
+      return { ...draft, id: "r1" };
+    },
     route: (_plan: unknown, signal: AbortSignal) =>
       new Promise((_resolve, reject) => {
         routeAborted = new Promise((done) => signal.addEventListener("abort", () => (done(signal.reason), reject(signal.reason))));
@@ -115,12 +119,12 @@ describe("serve: local only", () => {
   });
 
   it("refuses API calls from another page's Origin, and a body that is not JSON", async () => {
-    const body = JSON.stringify(DEFAULT_ASSUMPTIONS);
-    expect((await raw(port, "PUT", "/api/assumptions", json({ origin: "https://evil.example" }), body)).status).toBe(403);
+    const body = JSON.stringify(DRAFT);
+    expect((await raw(port, "POST", "/api/saved-routes", json({ origin: "https://evil.example" }), body)).status).toBe(403);
     expect((await raw(port, "GET", "/api/meta", { origin: "http://127.0.0.1:1" })).status).toBe(403);
-    expect((await raw(port, "PUT", "/api/assumptions", json({ origin: `http://127.0.0.1:${port}` }), body)).status).toBe(200);
-    expect((await raw(port, "PUT", "/api/assumptions", json({ origin: `http://localhost:${port}` }), body)).status).toBe(200);
-    const asForm = await raw(port, "PUT", "/api/assumptions", { "content-type": "text/plain" }, body);
+    expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://127.0.0.1:${port}` }), body)).status).toBe(200);
+    expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://localhost:${port}` }), body)).status).toBe(200);
+    const asForm = await raw(port, "POST", "/api/saved-routes", { "content-type": "text/plain" }, body);
     expect(asForm.status).toBe(415);
     expect(JSON.parse(asForm.body).error.message).toMatch(/application\/json/);
   });
@@ -139,24 +143,23 @@ describe("serve: the API envelope", () => {
     expect(JSON.parse(unknown.body)).toEqual({ error: { kind: "not-found", message: "There is no GET /api/nothing.", field: null } });
     expect((await raw(port, "POST", "/api/meta", json(), "{}")).status).toBe(404);
 
-    const notJson = await raw(port, "PUT", "/api/assumptions", json(), "{ not json");
+    const notJson = await raw(port, "POST", "/api/saved-routes", json(), "{ not json");
     expect(notJson.status).toBe(400);
     expect(JSON.parse(notJson.body).error).toMatchObject({ kind: "invalid", message: "The request body is not valid JSON." });
 
-    const badField = await raw(port, "PUT", "/api/assumptions", json(), JSON.stringify({ ...DEFAULT_ASSUMPTIONS, flags: { detourRatio: "big", positionAgeH: 48 } }));
+    const badField = await raw(port, "POST", "/api/saved-routes", json(), JSON.stringify({ ...DRAFT, option: "fastest" }));
     expect(badField.status).toBe(400);
-    expect(JSON.parse(badField.body).error).toMatchObject({ kind: "invalid", field: "flags.detourRatio" });
+    expect(JSON.parse(badField.body).error).toMatchObject({ kind: "invalid", field: "option" });
   });
 
   it("turns an AppError into its status, with the field the app named", async () => {
-    const zero = { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: 0 } };
-    const refused = await raw(port, "PUT", "/api/assumptions", json(), JSON.stringify(zero));
+    const refused = await raw(port, "POST", "/api/saved-routes", json(), JSON.stringify({ ...DRAFT, name: "EXAMPLE taken" }));
     expect(refused.status).toBe(400);
-    expect(JSON.parse(refused.body)).toEqual({ error: { kind: "invalid", message: "Speed must be more than 0 km/day.", field: "timing.speedKmPerDay" } });
+    expect(JSON.parse(refused.body)).toEqual({ error: { kind: "invalid", message: "Give the route another name.", field: "name" } });
     expect((await raw(port, "DELETE", "/api/shops/gone")).status).toBe(404);
     expect((await raw(port, "DELETE", "/api/shops/taken")).status).toBe(409);
-    const saved = await raw(port, "PUT", "/api/assumptions", json(), JSON.stringify(DEFAULT_ASSUMPTIONS));
-    expect(JSON.parse(saved.body)).toEqual(DEFAULT_ASSUMPTIONS);
+    const saved = await raw(port, "POST", "/api/saved-routes", json(), JSON.stringify(DRAFT));
+    expect(JSON.parse(saved.body)).toEqual({ ...DRAFT, id: "r1" });
   });
 
   it("hides a crash behind 'internal' and logs the route and stack, never the request body", async () => {

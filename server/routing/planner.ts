@@ -2,31 +2,26 @@
  * The route planner: "how can this trip run?" for the rest of the server.
  *
  * Behind `plan` are the worker threads that own the routers (a search blocks its thread for up to
- * ~0.3 s, so it never runs on the thread that answers HTTP), a queue in which a person's request
- * goes ahead of batch work, and the cache. Callers see none of it.
+ * ~0.3 s, so it never runs on the thread that answers HTTP), a queue, and the cache. Callers see none of it.
  *
- * The cache is keyed by tripKey (network version, waypoints, routing rules) and strategy, and holds
- * RouteResults, which have no clock in them. So speed, delay, buffer and flag changes never reach
- * this module, and a new network file or a moved shop simply asks under a new key. It lives in
- * memory: after a restart routes are computed again.
+ * The cache is keyed by tripKey (network version, waypoints, track included) and strategy. A new
+ * network file or a moved shop simply asks under a new key. It lives in memory: after a restart
+ * routes are computed again.
  */
 import { Worker } from "node:worker_threads";
 import { combine, tripKey, type RouteResult, type Routed, type Trip } from "../../engine/index.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Job, JobResult, WorkerData } from "./protocol.ts";
 
-/** "pick": the router's own route only (enough for a list). "all": every distinct alternative too. */
+/** "pick": the router's own route only. "all": every distinct alternative too. */
 export type Want = "pick" | "all";
 
 export interface RoutePlanner {
   /**
-   * The routes for a trip. Identical requests in flight share one computation. `background` work
-   * waits behind everything else. Aborting the signal drops the request if it has not started;
-   * the promise then rejects with the signal's reason.
+   * The routes for a trip. Identical requests in flight share one computation. Aborting the signal
+   * drops the request if it has not started; the promise then rejects with the signal's reason.
    */
-  plan(trip: Trip, want: Want, options?: { background?: boolean; signal?: AbortSignal }): Promise<Routed>;
-  /** What is already known, without starting any work. */
-  peek(trip: Trip, want: Want): Routed | undefined;
+  plan(trip: Trip, want: Want, options?: { signal?: AbortSignal }): Promise<Routed>;
   close(): Promise<void>;
 }
 
@@ -39,7 +34,6 @@ interface Search {
   key: string;
   trip: Trip;
   strategy: RouteStrategy;
-  background: boolean;
   running: boolean;
   /** Plans still waiting for it. A queued search nobody waits for is dropped. */
   interest: number;
@@ -56,11 +50,8 @@ interface Thread {
 
 export function startRoutePlanner(options: { networkDir: string; networkVersion: string; workers: number }): RoutePlanner {
   const size = Math.max(1, Math.floor(options.workers));
-  // Lanes: batch work may hold at most size − 1 threads, so a person's click finds one free.
-  const backgroundLimit = Math.max(1, size - 1);
   const threads: Thread[] = [];
-  const foreground: Search[] = [];
-  const background: Search[] = [];
+  const queue: Search[] = [];
   const inFlight = new Map<string, Search>();
   const cache = new Map<string, { result: RouteResult; points: number }>();
   let cachedPoints = 0;
@@ -78,7 +69,7 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
   };
 
   const remember = (key: string, result: RouteResult) => {
-    const points = result.ok ? 1 + result.path.legs.reduce((n, leg) => n + leg.path.length, 0) + result.approach.paths.reduce((n, p) => n + p.length, 0) : 1;
+    const points = result.ok ? 1 + result.path.legs.reduce((n, leg) => n + leg.path.length, 0) : 1;
     cache.set(key, { result, points });
     cachedPoints += points;
     for (const [oldest, entry] of cache) {
@@ -87,8 +78,6 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
       cachedPoints -= entry.points;
     }
   };
-
-  const runningBackground = () => threads.filter((t) => t.search?.background).length;
 
   const spawn = (): Thread => {
     const data: WorkerData = { networkDir: options.networkDir };
@@ -133,12 +122,10 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
   };
 
   const pump = () => {
-    while (!closed) {
-      const lane = foreground.length ? foreground : background.length && runningBackground() < backgroundLimit ? background : null;
-      if (!lane) return;
+    while (!closed && queue.length) {
       const thread = threads.find((t) => !t.search) ?? (threads.length < size ? spawn() : null);
       if (!thread) return;
-      const search = lane.shift()!;
+      const search = queue.shift()!;
       search.running = true;
       thread.search = search;
       thread.worker.ref();
@@ -147,32 +134,29 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
     }
   };
 
-  const enqueue = (key: string, trip: Trip, strategy: RouteStrategy, isBackground: boolean): Search => {
+  const enqueue = (key: string, trip: Trip, strategy: RouteStrategy): Search => {
     let resolve!: (result: RouteResult) => void;
     let reject!: (error: Error) => void;
     const promise = new Promise<RouteResult>((res, rej) => ((resolve = res), (reject = rej)));
     // Every waiter has its own handler; this one keeps a failure nobody waits for any more from being "unhandled".
     promise.catch(() => {});
-    const search: Search = { id: nextId++, key, trip, strategy, background: isBackground, running: false, interest: 0, promise, resolve, reject };
+    const search: Search = { id: nextId++, key, trip, strategy, running: false, interest: 0, promise, resolve, reject };
     inFlight.set(key, search);
-    (isBackground ? background : foreground).push(search);
+    queue.push(search);
     return search;
   };
 
   const drop = (search: Search) => {
-    const lane = search.background ? background : foreground;
-    const at = lane.indexOf(search);
-    if (at >= 0) lane.splice(at, 1);
+    const at = queue.indexOf(search);
+    if (at >= 0) queue.splice(at, 1);
     inFlight.delete(search.key);
   };
 
-  const strategiesFor = (want: Want): readonly RouteStrategy[] => (want === "pick" ? ["pick"] : ROUTE_STRATEGIES);
-
   return {
-    plan(trip, want, { background: isBackground = false, signal } = {}) {
+    plan(trip, want, { signal } = {}) {
       if (closed) return Promise.reject(new Error("The route planner is closed."));
       if (signal?.aborted) return Promise.reject(signal.reason);
-      const strategies = strategiesFor(want);
+      const strategies = want === "pick" ? ["pick" as const] : ROUTE_STRATEGIES;
       const known = new Map<RouteStrategy, RouteResult>();
       const waiting: Search[] = [];
       for (const strategy of strategies) {
@@ -182,12 +166,7 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
           known.set(strategy, hit);
           continue;
         }
-        const search = inFlight.get(key) ?? enqueue(key, trip, strategy, isBackground);
-        if (!isBackground && search.background && !search.running) {
-          background.splice(background.indexOf(search), 1);
-          search.background = false;
-          foreground.push(search);
-        }
+        const search = inFlight.get(key) ?? enqueue(key, trip, strategy);
         search.interest++;
         waiting.push(search);
       }
@@ -224,21 +203,11 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
       });
     },
 
-    peek(trip, want) {
-      const results: RouteResult[] = [];
-      for (const strategy of strategiesFor(want)) {
-        const hit = cached(searchKey(trip, strategy));
-        if (!hit) return undefined;
-        results.push(hit);
-      }
-      return combine(results);
-    },
-
     async close() {
       if (closed) return;
       closed = true;
       const stopped = new Error("The route planner was closed.");
-      for (const search of [...foreground.splice(0), ...background.splice(0), ...threads.flatMap((t) => (t.search ? [t.search] : []))]) search.reject(stopped);
+      for (const search of [...queue.splice(0), ...threads.flatMap((t) => (t.search ? [t.search] : []))]) search.reject(stopped);
       inFlight.clear();
       await Promise.all(threads.splice(0).map((t) => ((t.dead = true), t.worker.terminate())));
     },

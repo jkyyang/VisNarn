@@ -6,7 +6,6 @@ import { connect } from "node:net";
 import { networkInterfaces } from "node:os";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Res, Route } from "../shared/api.ts";
-import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
 import type { FraId, PlaceRef, ShopId } from "../shared/places.ts";
 import type { FullPlan, Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../shared/plans.ts";
 import { haversineKm, type LngLat } from "../shared/geo.ts";
@@ -86,10 +85,10 @@ describe("server", () => {
     expect((await malformed.json()).error).toMatchObject({ kind: "invalid", field: "start.kind" });
     // The page's transport turns the envelope back into the same error.
     await expect(t.api("DELETE /api/saved-routes/:routeId", { params: { routeId: "no-such-route" } })).rejects.toMatchObject({ kind: "not-found" });
-    await expect(t.api("PUT /api/assumptions", { body: { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: -1 } } })).rejects.toMatchObject({
+    await expect(t.api("POST /api/saved-routes", { body: { name: " ", plan: TAYLOR_TO_NLR, option: null, routeString: "" } })).rejects.toMatchObject({
       kind: "invalid",
-      field: "timing.speedKmPerDay",
-      message: "Speed must be more than 0 km/day.",
+      field: "name",
+      message: "name cannot be empty.",
     });
   });
 
@@ -102,8 +101,6 @@ describe("server", () => {
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/meta": () => s.api("GET /api/meta"),
-        "GET /api/assumptions": () => s.api("GET /api/assumptions"),
-        "PUT /api/assumptions": () => s.api("PUT /api/assumptions", { body: DEFAULT_ASSUMPTIONS }),
         "GET /api/places/suggest": () => s.api("GET /api/places/suggest", { query: { q: "temple", role: "position" } }),
         "POST /api/places/resolve": () => s.api("POST /api/places/resolve", { body: { ref: text("Temple, TX"), role: "position" } }),
         "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } }),
@@ -116,10 +113,6 @@ describe("server", () => {
         "PUT /api/shops/:shopId": () => s.api("PUT /api/shops/:shopId", { params: { shopId }, body: { name: "EXAMPLE smoke 2", code: "EX-SMOKE", location: text("Waco, TX") } }),
         "DELETE /api/shops/:shopId": () => s.api("DELETE /api/shops/:shopId", { params: { shopId } }),
         "POST /api/shops/import": () => s.api("POST /api/shops/import", { body: { source: { kind: "csv", fileName: "EXAMPLE shops.csv", text: "name,lon,lat\nEXAMPLE x,-97.34,31.09\n" }, commit: false } }),
-        "GET /api/codes": () => s.api("GET /api/codes"),
-        "POST /api/codes/import": () =>
-          s.api("POST /api/codes/import", { body: { source: { kind: "csv", fileName: "EXAMPLE codes.csv", text: "code,fra_id\n1,358070\n" }, commit: true, codeType: "smoke", label: "Smoke" } }),
-        "DELETE /api/codes/:codeType": () => s.api("DELETE /api/codes/:codeType", { params: { codeType: "smoke" } }),
         "POST /api/route": () => s.api("POST /api/route", { body: draft.plan }),
         "GET /api/saved-routes": () => s.api("GET /api/saved-routes"),
         "POST /api/saved-routes": async () => {
@@ -131,7 +124,7 @@ describe("server", () => {
         "DELETE /api/saved-routes/:routeId": () => s.api("DELETE /api/saved-routes/:routeId", { params: { routeId } }),
         "POST /api/track": () => s.api("POST /api/track", { body: { paths: [[[-97.34, 31.09], [-97.3, 31.1]]] } }),
       };
-      expect(Object.keys(calls)).toHaveLength(20);
+      expect(Object.keys(calls)).toHaveLength(15);
       for (const [route, call] of Object.entries(calls)) {
         const answer = await (call as () => Promise<unknown>)().catch((error: Error) => `${route} failed: ${error.message}`);
         expect(answer, route).not.toEqual(expect.stringMatching(/ failed: /));
@@ -188,19 +181,16 @@ describe("Route screen: plan a route", () => {
     const answer = routed(await t.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NLR-01"), [{ kind: "node", fraId: WYE, railroad: "UP" }]) }));
     for (const route of answer.routes) {
       const stop = route.steps.find((step) => step.kind === "stop");
-      const leg = route.steps.filter((step) => step.kind === "leg" && step.kmFromB <= (stop?.kmFromB ?? 0)).at(-1);
+      const leg = route.steps.filter((step) => step.kind === "leg" && step.kmFromStart <= (stop?.kmFromStart ?? 0)).at(-1);
       expect(leg?.kind === "leg" && route.legs[leg.leg].railroad, route.strategies[0]).toBe("UP");
     }
   });
 
   it("no route is said at the place it breaks, in the plan's words", async () => {
-    await t.api("PUT /api/assumptions", { body: { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } } });
-    try {
-      const answer = await t.api("POST /api/route", { body: plan(text("Houston, TX"), text("Pasco, WA")) });
-      expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
-    } finally {
-      await t.api("PUT /api/assumptions", { body: DEFAULT_ASSUMPTIONS });
-    }
+    // Oakville, ON is reached only over passenger-owned track.
+    const oakville: Plan = { ...plan(text("Chicago, IL"), { kind: "coord", lon: -79.7195, lat: 43.4169 }), include: { regional: false, shortLine: false, passenger: false } };
+    const answer = await t.api("POST /api/route", { body: oakville });
+    expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
   });
 
   it("GET /api/places/suggest, POST /api/places/resolve and GET /api/places/nearest answer what the fields and the map need", async () => {
@@ -275,7 +265,7 @@ describe("Shops screen", () => {
   });
 
   it("POST /api/shops/import previews without saving, then saves; a second commit changes nothing", async () => {
-    const source = { kind: "csv" as const, fileName: "EXAMPLE shops.csv", text: "name,node_code,lon,lat\nEXAMPLE Pueblo,EX-PUB-01,-104.61,38.27\nEXAMPLE sea,EX-SEA-01,-90,25\n" };
+    const source = { kind: "csv" as const, fileName: "EXAMPLE shops.csv", text: "name,code,lon,lat\nEXAMPLE Pueblo,EX-PUB-01,-104.61,38.27\nEXAMPLE sea,EX-SEA-01,-90,25\n" };
     const count = async () => (await s.api("GET /api/shops")).length;
     const before = await count();
     const preview = await s.api("POST /api/shops/import", { body: { source, commit: false } });
@@ -296,29 +286,13 @@ describe("Shops screen", () => {
     const found = routed(await s.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NEW-01")) }));
     expect(found.places.destination).toMatchObject({ ok: true, place: { label: "EXAMPLE new shop" } });
   });
-
-  it("POST /api/codes/import: a code of that set then names a place on a route; removing the set unnames it", async () => {
-    const codes = { kind: "csv" as const, fileName: "EXAMPLE stations.csv", text: "code,name,fra_id,lon,lat\n100001,EXAMPLE Taylor,,-97.41,30.57\n100002,EXAMPLE Temple,358070,,\n" };
-    const imported = await s.api("POST /api/codes/import", { body: { source: codes, commit: true, codeType: "station", label: "Station" } });
-    expect(imported).toMatchObject({ committed: true, issues: [], ready: [{ code: "100001" }, { code: "100002", location: { fraId: 358070 } }] });
-    expect(await s.api("GET /api/codes")).toMatchObject([{ codeType: "station", label: "Station", count: 2 }]);
-
-    const byCode = plan(text("100001"), text("EX-NLR-01"), [{ kind: "code", codeType: "station", code: "100002" }]);
-    const answer = routed(await s.api("POST /api/route", { body: byCode }));
-    expect(answer.places.stops[0]).toMatchObject({ ok: true, place: { label: "EXAMPLE Temple", fraId: 358070, match: { method: "code", codeType: "station" } } });
-
-    await s.api("DELETE /api/codes/:codeType", { params: { codeType: "station" } });
-    expect(await s.api("POST /api/route", { body: byCode })).toMatchObject({ outcome: "incomplete" });
-  });
 });
 
 describe("restart", () => {
-  it("a new server on the same data folder has the shops, the saved routes and the routing rules; routes are worked out again", async () => {
+  it("a new server on the same data folder has the shops and the saved routes; routes are worked out again", async () => {
     const first = await startTestApp();
     const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
     const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id }, include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" } });
-    const mine: Assumptions = { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, interchangePenaltyKm: 300 } };
-    await first.api("PUT /api/assumptions", { body: mine });
     // The user deletes every EXAMPLE shop: they must not come back on the next start.
     for (const example of (await first.api("GET /api/shops")).filter((s) => s.example)) {
       await first.api("DELETE /api/shops/:shopId", { params: { shopId: example.id } });
@@ -329,7 +303,6 @@ describe("restart", () => {
     try {
       expect((await second.api("GET /api/shops")).map((s) => s.id)).toEqual([shop.id]);
       expect(await second.api("GET /api/saved-routes")).toEqual([saved]);
-      expect(await second.api("GET /api/assumptions")).toEqual(mine);
       const reopened = routed(await second.api("POST /api/route", { body: saved.plan }));
       expect(reopened.places.destination).toMatchObject({ ok: true, place: { label: "Temple shop" } });
       // A saved route naming a deleted shop says so at that place.

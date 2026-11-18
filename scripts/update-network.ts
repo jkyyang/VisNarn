@@ -15,10 +15,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCarRouter, DEFAULT_NETWORK_DIR, loadNetwork } from "../engine/index.ts";
 import { selfTest } from "../server/selftest.ts";
-import { DEFAULT_ASSUMPTIONS } from "../shared/assumptions.ts";
 import { haversineKm } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
-import { NETWORK_CLASSES } from "../shared/railroads.ts";
+import { DEFAULT_INCLUDE, NETWORK_CLASSES } from "../shared/railroads.ts";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 const LAYER_URL = "https://services.arcgis.com/xOi1kZaI0eWDREZv/ArcGIS/rest/services/NTAD_North_American_Rail_Network_Lines/FeatureServer/0";
@@ -27,14 +26,8 @@ const DATA_FILES = ["graph.bin", "graph_meta.json", "track.bin", "basemap_mainli
 const VERSION_FILE = "data/source-version.json";
 const SHOPS_CSV = "docs/shops/marmon-rail-shops-public.csv";
 const LOG_FILE = join(homedir(), "Library/Logs/visnarn-network-update.log");
-/** Where each test car is: between A and B, heading to B. Spread over the network's corners. */
-const ORIGINS: [a: string, b: string][] = [
-  ["Gary, IN", "Chicago, IL"],
-  ["Taylor, TX", "Temple, TX"],
-  ["Los Angeles, CA", "Barstow, CA"],
-  ["Chattanooga, TN", "Atlanta, GA"],
-  ["Thunder Bay, ON", "Winnipeg, MB"],
-];
+/** Where each test route starts. Spread over the network's corners. */
+const ORIGINS = ["Chicago, IL", "Temple, TX", "Barstow, CA", "Atlanta, GA", "Winnipeg, MB"];
 const MAX_END_KM = 2.5;
 const REPORT_KM_CHANGE = 0.05;
 
@@ -110,15 +103,15 @@ function checkRoutes(dir: string, shops: Shop[]): RouteCheck[] {
     if (!found) throw new Error(`The network has no city named ${name}.`);
     return { label: found.name, lon: found.lon, lat: found.lat, fraId: null, railroad: null };
   };
-  return ORIGINS.flatMap(([a, b]) =>
+  return ORIGINS.flatMap((origin) =>
     shops.map((shop): RouteCheck => {
-      const route = `${b} → ${shop.name}`;
+      const route = `${origin} → ${shop.name}`;
       // A shop given only by its FRA node is wherever that node is in this build.
       const node = shop.fraId === null ? null : network.node(shop.fraId as FraId);
       if (shop.fraId !== null && !node) return { route, km: null, problem: `FRA node ${shop.fraId} is gone` };
       const lon = node?.lon ?? shop.lon!, lat = node?.lat ?? shop.lat!;
       const target: Waypoint = { label: shop.name, lon, lat, fraId: node?.fraId ?? null, railroad: null };
-      const result = router.route({ a: city(a), b: city(b), stops: [], shop: target, rules: DEFAULT_ASSUMPTIONS.routing }, "pick");
+      const result = router.route({ start: city(origin), stops: [], destination: target, include: DEFAULT_INCLUDE }, "pick");
       if (!result.ok) return { route, km: null, problem: result.noRoute.message };
       const [endLon, endLat] = result.path.legs.at(-1)!.path.at(-1)!;
       const endKm = haversineKm(endLon, endLat, lon, lat);

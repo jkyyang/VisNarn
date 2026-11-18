@@ -14,8 +14,7 @@
  *   lead does not count. It costs `reverseKm` and is reported in Route.reversals so a person can check it.
  * - Changing line at a node is an interchange: allowed only where both lines have track, costs
  *   `interchangeKm` so the router prefers single-line routes.
- * Because state includes the direction of travel, a route can continue from where the previous one ended
- * (a via point, or the car's A→B approach) without turning back.
+ * Because state includes the direction of travel, a route keeps its direction through a via point.
  */
 import { LINES, type Line } from "../../shared/railroads.ts";
 import { MAX_SNAP_KM, type Point, type RailGraph, type Track } from "./graph.ts";
@@ -44,21 +43,11 @@ export interface Reversal {
   km: number;
 }
 
-/** Where a route ended and which way the car was moving, so the next route can continue from there. */
-export interface RouteEnd {
-  /** Segment the car arrived on, and the node it arrived at. */
-  edge: number;
-  node: number;
-  railroad: number;
-}
-
 export interface Route {
   legs: Leg[];
   km: number;
   interchanges: number;
   reversals: Reversal[];
-  /** Null when the route has no movement (start is already at the goal). */
-  end: RouteEnd | null;
 }
 
 export interface RouteOptions extends Track {
@@ -69,9 +58,6 @@ export interface RouteOptions extends Track {
   /** Largest change of heading (degrees) allowed outside a yard. Default 90. */
   maxTurnDeg?: number;
 }
-
-/** How the first route starts: from a known move (continuing), or with the car's heading only. */
-export type RouteStart = { continueFrom: RouteEnd } | { headingDeg: number };
 
 export class RouteError extends Error {
   /** Index, in the points given to `route`, of the point that could not be served or reached; -1 when none. */
@@ -314,24 +300,19 @@ export class Router {
     return hits;
   }
 
-  private firstStarts(p: Point, how: RouteStart | null, opt: RouteOptions): Start[] {
-    if (how && "continueFrom" in how) {
-      const { node, edge, railroad } = how.continueFrom;
-      return [{ node, rr: railroad, heading: this.arrivingHeading(edge, node), edge, cost: 0, prefix: [{ edge, node, rr: railroad }] }];
-    }
-    const heading = how && "headingDeg" in how ? how.headingDeg : null;
-    return [...this.graph.serving(p, opt)].map(([rr, node]) => ({ node, rr, heading, edge: -1, cost: 0, prefix: [{ edge: -1, node, rr }] }));
+  /** The first point, facing either way, on every line that serves it. */
+  private firstStarts(p: Point, opt: RouteOptions): Start[] {
+    return [...this.graph.serving(p, opt)].map(([rr, node]) => ({ node, rr, heading: null, edge: -1, cost: 0, prefix: [{ edge: -1, node, rr }] }));
   }
 
   /**
    * Route through [start, ...vias, end]. Direction and railroad carry over at each via point, so a via
    * point never becomes a free reversal or interchange; every way of arriving at a via point is kept, so
-   * the next part can pick the arrival the car can actually continue from. `start` continues an earlier
-   * move or sets the car's heading at the first point.
+   * the next part can pick the arrival the car can actually continue from.
    */
-  route(points: Point[], opt: RouteOptions, start: RouteStart | null = null): Route {
+  route(points: Point[], opt: RouteOptions): Route {
     if (points.length < 2) throw new RouteError("Need at least two points.");
-    let frontier = this.firstStarts(points[0], start, opt);
+    let frontier = this.firstStarts(points[0], opt);
     if (!frontier.length) throw new RouteError(`No allowed mainline within ${MAX_SNAP_KM} km of ${points[0].label}.`, 0);
     for (let i = 0; i < points.length - 1; i++) {
       const from = points[i], to = points[i + 1];
@@ -345,7 +326,7 @@ export class Router {
       if (!hits.length) {
         // The car keeps its direction through a via point. If the next point is reachable from the via
         // point facing either way, the via point is what blocks (a node on a dead-end branch, 2026-11-17).
-        if (i > 0 && this.search(this.firstStarts(from, null, opt), goals, opt, null).length) {
+        if (i > 0 && this.search(this.firstStarts(from, opt), goals, opt, null).length) {
           throw new RouteError(`${from.label} is reached, but the car cannot go on toward ${to.label} without reversing outside a yard.`, i, true);
         }
         throw new RouteError(
@@ -353,7 +334,7 @@ export class Router {
           i + 1,
         );
       }
-      if (last) return this.describe(hits[0].steps, opt, start);
+      if (last) return this.describe(hits[0].steps, opt);
       frontier = hits.map((h) => {
         const end = h.steps[h.steps.length - 1];
         return { node: end.node, rr: end.rr, edge: end.edge, heading: h.heading, cost: h.cost, prefix: h.steps };
@@ -362,14 +343,13 @@ export class Router {
     throw new RouteError("unreachable");
   }
 
-  private describe(steps: Step[], opt: RouteOptions, start: RouteStart | null): Route {
+  private describe(steps: Step[], opt: RouteOptions): Route {
     const g = this.graph;
     const maxTurn = opt.maxTurnDeg ?? DEFAULT_MAX_TURN;
     const legs: (Omit<Leg, "path" | "from" | "to"> & { rr: number })[] = [];
     const reversals: Reversal[] = [];
     let cur: (typeof legs)[number] | null = null;
-    let heading: number | null =
-      start && "headingDeg" in start ? start.headingDeg : steps[0].edge >= 0 ? this.arrivingHeading(steps[0].edge, steps[0].node) : null;
+    let heading: number | null = null;
     let km = 0;
     for (let i = 1; i < steps.length; i++) {
       const a = steps[i - 1], b = steps[i];
@@ -399,13 +379,11 @@ export class Router {
       const [x0, y0] = path[0], [x1, y1] = path[path.length - 1];
       return { ...l, path, from: g.nearestPlace(x0, y0), to: g.nearestPlace(x1, y1) };
     });
-    const last = steps[steps.length - 1];
     return {
       legs: out,
       km: out.reduce((s, l) => s + l.km, 0),
       interchanges: Math.max(0, out.length - 1),
       reversals,
-      end: last.edge >= 0 ? { edge: last.edge, node: last.node, railroad: last.rr } : null,
     };
   }
 }

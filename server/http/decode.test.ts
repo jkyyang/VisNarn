@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
-import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { decodeBody, decodeQuery, savedRouteId } from "./decode.ts";
 
@@ -61,20 +60,9 @@ describe("decodeBody", () => {
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: "a\u0000b" }))).toMatch(/^invalid routeString: .*invisible/);
   });
 
-  it("reads assumptions in their three groups and refuses a number that is not finite", () => {
-    expect(decodeBody["PUT /api/assumptions"](JSON.parse(JSON.stringify(DEFAULT_ASSUMPTIONS)))).toEqual(DEFAULT_ASSUMPTIONS);
-    const broken = { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: "fast" } };
-    expect(refusal(() => decodeBody["PUT /api/assumptions"](broken))).toMatch(/^invalid timing\.speedKmPerDay: /);
-    expect(refusal(() => decodeBody["PUT /api/assumptions"]({ ...DEFAULT_ASSUMPTIONS, routing: { allowed: ["XX"], interchangePenaltyKm: 1 } }))).toMatch(
-      /^invalid routing\.allowed\[0\]: /,
-    );
-  });
-
   it("reads imports and shops", () => {
     const source = { kind: "csv", fileName: "EXAMPLE shops.csv", text: "name\n1" };
-    expect(decodeBody["POST /api/codes/import"]({ source, commit: false, codeType: "splc", label: "SPLC" })).toEqual({ source, commit: false, codeType: "splc", label: "SPLC" });
-    expect(refusal(() => decodeBody["POST /api/codes/import"]({ source, commit: true, codeType: "q\u202eb", label: "SPLC" }))).toMatch(/^invalid codeType: .*invisible/);
-    expect(refusal(() => decodeBody["POST /api/codes/import"]({ source, commit: true, codeType: "splc", label: "Hello\u0000World" }))).toMatch(/^invalid label: .*invisible/);
+    expect(decodeBody["POST /api/shops/import"]({ source, commit: false })).toEqual({ source, commit: false });
     expect(refusal(() => decodeBody["POST /api/shops/import"]({ source: { ...source, kind: "xlsx" }, commit: true }))).toMatch(/^invalid source\.kind: /);
     expect(decodeBody["POST /api/shops"]({ name: "EXAMPLE shop", code: null, location: { kind: "text", text: "" } })).toEqual({
       name: "EXAMPLE shop",
