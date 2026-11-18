@@ -54,8 +54,10 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
       const from = waypoint(start.place);
       const trip: Trip = { a: from, b: from, stops: stops.map((s) => waypoint(s.place)), shop: waypoint(destination.place), rules: { ...parts.rules(), include: plan.include } };
       const routed = await planner.plan(trip, "all", { signal });
-      if (routed.ok) return { outcome: "routed", places, routes: routed.trip.paths };
-      return { outcome: "no-route", places, problem: problemOf(routed.noRoute, trip) };
+      if (!routed.ok) return { outcome: "no-route", places, problem: problemOf(routed.noRoute, trip) };
+      // Every place on one spot: nothing moves, so there is no route to show or save.
+      if (routed.trip.paths.every((path) => path.legs.length === 0)) return { outcome: "no-route", places, problem: { at: "destination", message: "Start and destination are the same place." } };
+      return { outcome: "routed", places, routes: routed.trip.paths };
     },
 
     saved: () => store.savedRoutes.all(),

@@ -74,6 +74,14 @@ describe("Plans.route", () => {
     for (const key of ["eta", "verdict", "arrival", "marginH"]) expect(json).not.toContain(`"${key}"`);
   });
 
+  it("the same place as start and destination is no route, said at the destination", async () => {
+    const kc = (await plans.route(plan(text("Kansas City, MO"), null))).places.start;
+    if (!kc?.ok) throw new Error("Kansas City, MO does not resolve");
+    for (const same of [plan(text("Temple, TX"), text("Temple, TX")), plan(text("Kansas City, MO"), kc.place.ref), plan(kc.place.ref, kc.place.ref)]) {
+      expect(await plans.route(same)).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "Start and destination are the same place." } });
+    }
+  });
+
   it("keeps to the line chosen at a stop", async () => {
     const answer = routed(await plans.route(plan(text("Taylor, TX"), text("North Little Rock, AR"), [{ kind: "node", fraId: WYE, railroad: "UP" }])));
     for (const route of answer.routes) {

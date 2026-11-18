@@ -1419,8 +1419,18 @@ input[aria-invalid="true"] {
 .map-search-box:focus-within {
   box-shadow: 0 0 0 2px var(--route), var(--shadow-1);
 }
+.map-search .suggestions {
+  max-height: min(360px, calc(100vh - 140px));
+}
 .map-search .suggestions li {
+  flex-direction: column;
+  gap: 4px;
+}
+.search-line {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 6px;
 }
 .search-name {
   flex: 1;
@@ -1466,7 +1476,8 @@ input[aria-invalid="true"] {
   top: 22px;
   left: 50%;
   transform: translateX(-50%);
-  width: 280px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
   padding: 8px 8px 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1492,6 +1503,10 @@ input[aria-invalid="true"] {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.found-actions .btn {
+  flex: 1 1 auto;
+  padding: 0 8px;
 }
 /* Route pills and turn-back discs: map markers over deck.gl's canvas (which sits at z-index 2). */
 .route-mark {

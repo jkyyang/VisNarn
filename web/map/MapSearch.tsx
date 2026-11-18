@@ -109,9 +109,15 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
                 choose(suggestion);
               }}
             >
-              <span className="search-name">{suggestion.label}</span>
-              <span className="type-chip">{TYPE_CHIPS[suggestion.source]}</span>
-              <Railroads place={suggestion} />
+              <span className="search-line">
+                <span className="search-name">{suggestion.label}</span>
+                <span className="type-chip">{TYPE_CHIPS[suggestion.source]}</span>
+              </span>
+              <span className="search-line muted small">
+                {/* "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070"; a city's "City" is the chip already. */}
+                {suggestion.detail !== TYPE_CHIPS[suggestion.source] && suggestion.detail}
+                <Railroads place={suggestion} />
+              </span>
             </li>
           ))}
         </ul>
