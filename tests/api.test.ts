@@ -197,7 +197,7 @@ describe("Route screen: plan a route", () => {
     await t.api("PUT /api/assumptions", { body: { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } } });
     try {
       const answer = await t.api("POST /api/route", { body: plan(text("Houston, TX"), text("Pasco, WA")) });
-      expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No track reaches here from the stop before." } });
+      expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
     } finally {
       await t.api("PUT /api/assumptions", { body: DEFAULT_ASSUMPTIONS });
     }
