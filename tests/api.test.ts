@@ -9,6 +9,7 @@ import type { Res, Route } from "../shared/api.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
 import type { FraId, PlaceRef, ShopId } from "../shared/places.ts";
 import type { FullPlan, Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../shared/plans.ts";
+import { haversineKm, type LngLat } from "../shared/geo.ts";
 import { DEFAULT_INCLUDE } from "../shared/railroads.ts";
 import { startTestApp, type TestApp } from "./harness.ts";
 
@@ -128,8 +129,9 @@ describe("server", () => {
         },
         "PUT /api/saved-routes/:routeId": () => s.api("PUT /api/saved-routes/:routeId", { params: { routeId }, body: { ...draft, name: "EXAMPLE smoke 2" } }),
         "DELETE /api/saved-routes/:routeId": () => s.api("DELETE /api/saved-routes/:routeId", { params: { routeId } }),
+        "POST /api/track": () => s.api("POST /api/track", { body: { paths: [[[-97.34, 31.09], [-97.3, 31.1]]] } }),
       };
-      expect(Object.keys(calls)).toHaveLength(19);
+      expect(Object.keys(calls)).toHaveLength(20);
       for (const [route, call] of Object.entries(calls)) {
         const answer = await (call as () => Promise<unknown>)().catch((error: Error) => `${route} failed: ${error.message}`);
         expect(answer, route).not.toEqual(expect.stringMatching(/ failed: /));
@@ -337,5 +339,41 @@ describe("restart", () => {
     } finally {
       await second.close();
     }
+  });
+});
+
+describe("Real tracks: routes drawn on the surveyed track", () => {
+  const lengthKm = (path: LngLat[]) => path.slice(1).reduce((km, [lon, lat], i) => km + haversineKm(path[i][0], path[i][1], lon, lat), 0);
+
+  it("each leg follows the track through every node, as long as the track km, and comes back in the order sent", async () => {
+    const [route] = routed(await t.api("POST /api/route", { body: TAYLOR_TO_NLR })).routes;
+    const paths = route.legs.map((leg) => leg.path);
+    const drawn = await t.api("POST /api/track", { body: { paths } });
+    expect(drawn).toHaveLength(paths.length);
+    drawn.forEach((line, i) => {
+      const nodes = paths[i];
+      expect(line[0]).toEqual(nodes[0]);
+      expect(line.at(-1)).toEqual(nodes.at(-1));
+      // Every node, in order: the track line only adds the points between them.
+      let at = -1;
+      for (const node of nodes) {
+        const next = line.findIndex((p, j) => j > at && p[0] === node[0] && p[1] === node[1]);
+        expect(next).toBeGreaterThan(at);
+        at = next;
+      }
+      expect(at).toBe(line.length - 1);
+      expect(line.length).toBeGreaterThan(3 * nodes.length);
+    });
+    const km = route.legs.reduce((sum, leg) => sum + leg.km, 0);
+    const drawnKm = drawn.reduce((sum, line) => sum + lengthKm(line), 0);
+    expect(Math.abs(drawnKm - km) / km).toBeLessThan(0.005);
+    // Node to node, the same route cuts the curves.
+    expect(paths.reduce((sum, path) => sum + lengthKm(path), 0)).toBeLessThan(0.98 * km);
+  });
+
+  it("a step no single segment joins (two far-apart points) stays straight, and a malformed point is refused", async () => {
+    const straight: LngLat[] = [[-97.34, 31.09], [-92.27, 34.76]];
+    expect(await t.api("POST /api/track", { body: { paths: [straight] } })).toEqual([straight]);
+    await expect(t.api("POST /api/track", { body: { paths: [[[-97.34]]] as unknown as LngLat[][] } })).rejects.toMatchObject({ kind: "invalid", field: "paths[0][0]" });
   });
 });

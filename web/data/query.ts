@@ -15,8 +15,8 @@ import { useCallback, useRef, useSyncExternalStore } from "react";
 import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, type Route } from "../../shared/api.ts";
 import { AppError, type AppErrorKind } from "../../shared/app.ts";
 
-/** Routes that change nothing on the server. Two of them are POSTs because their input is a document. */
-export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve">;
+/** Routes that change nothing on the server. Three of them are POSTs because their input is a document. */
+export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/track">;
 export type WriteRoute = Exclude<Route, ReadRoute>;
 
 export type QueryState<T> =

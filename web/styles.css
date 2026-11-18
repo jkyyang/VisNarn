@@ -1385,6 +1385,114 @@ input[aria-invalid="true"] {
 .maplibregl-ctrl-attrib {
   font-size: 10px;
 }
+/* The search box: top left, clear of the layers button (top right) and the legend and credits (bottom left). */
+.map-search {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 380px;
+  max-width: calc(100% - 240px);
+  z-index: 6;
+}
+.map-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 4px 0 14px;
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 22px;
+  box-shadow: var(--shadow-1);
+}
+.map-search-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+}
+.map-search-box:focus-within {
+  box-shadow: 0 0 0 2px var(--route), var(--shadow-1);
+}
+.map-search .suggestions li {
+  align-items: center;
+}
+.search-name {
+  flex: 1;
+  min-width: 0;
+}
+.search-rr {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.type-chip {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+.map-search-problem {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  background: var(--panel);
+  color: var(--risk);
+  border-radius: 8px;
+  box-shadow: var(--shadow-1);
+  font-size: 13px;
+}
+/* The found place: a dot on the spot, its card just under it. Over the route marks, under the map buttons. */
+.found-pin {
+  z-index: 5;
+}
+.found-dot {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--route);
+  border: 3px solid var(--panel);
+  box-shadow: var(--shadow-1);
+}
+.found-card {
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  padding: 8px 8px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: default;
+}
+.found-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.found-head strong {
+  flex: 1;
+  min-width: 0;
+}
+.found-head .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 /* Route pills and turn-back discs: map markers over deck.gl's canvas (which sits at z-index 2). */
 .route-mark {
   z-index: 3;
@@ -1583,8 +1691,17 @@ input[aria-invalid="true"] {
     column-gap: 8px;
     font-size: 11px;
   }
-  .pick-prompt {
+  /* Full width at the top, up to the layers button. */
+  .map-search {
     top: 12px;
+    left: 12px;
+    right: 68px;
+    width: auto;
+    max-width: none;
+  }
+  /* Under the search box. */
+  .pick-prompt {
+    top: 64px;
     bottom: auto;
     left: 12px;
     right: 68px;

@@ -22,7 +22,7 @@ import type { FraId, Waypoint } from "../shared/places.ts";
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 const LAYER_URL = "https://services.arcgis.com/xOi1kZaI0eWDREZv/ArcGIS/rest/services/NTAD_North_American_Rail_Network_Lines/FeatureServer/0";
 /** The files `npm run data` writes that the app uses (and git tracks). */
-const DATA_FILES = ["graph.bin", "graph_meta.json", "basemap_mainline.geojson"];
+const DATA_FILES = ["graph.bin", "graph_meta.json", "track.bin", "basemap_mainline.geojson"];
 const VERSION_FILE = "data/source-version.json";
 const SHOPS_CSV = "docs/shops/marmon-rail-shops-public.csv";
 const LOG_FILE = join(homedir(), "Library/Logs/visnarn-network-update.log");

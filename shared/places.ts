@@ -67,7 +67,10 @@ export interface PlaceSuggestion {
   label: string;
   /** "Your shop · EX-NLR-01", "SPLC 668240", "City", "FRA node 358070". */
   detail: string;
-  source: "shop" | "code" | "city" | "node";
+  /** Which list it came from; a network node says what it is: yard track, a junction of railroads, or neither. */
+  source: "shop" | "code" | "city" | "yard" | "junction" | "node";
+  /** Railroads with track there, as resolving the place finds them. */
+  railroads: Railroad[];
 }
 
 export interface PlaceProblem {

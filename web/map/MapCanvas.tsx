@@ -1,13 +1,16 @@
 /**
  * The heavy half of the map: MapLibre, the deck.gl overlay, the route pills, the layer card, zoom,
- * fit, legend. Loaded lazily by ./MapStage.tsx, which is the only importer.
+ * fit, legend, the search box. Loaded lazily by ./MapStage.tsx, which is the only importer.
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
+import type { PlaceSuggestion } from "../../shared/places.ts";
 import type { Mainline } from "../data/basemap.ts";
+import { usePlace } from "../data/hooks.ts";
+import { useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
@@ -17,10 +20,11 @@ import { FitBounds } from "./FitBounds.tsx";
 import { networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
+import { FoundPin, MapSearch } from "./MapSearch.tsx";
 import type { MapContentProps, MapFocus } from "./MapStage.tsx";
-import { RealTracks } from "./RealTracks.tsx";
+import { REAL_TRACKS_MIN_ZOOM, RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
-import { NETWORK_BOUNDS } from "./scene.ts";
+import { NETWORK_BOUNDS, routePaths, withRoutePaths } from "./scene.ts";
 
 export interface MapLayerChoice {
   basemap: BasemapKind;
@@ -75,6 +79,9 @@ const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.
  * from here in the screen (about 700 km) is nearly all day or all night.
  */
 export const AUTO_DARK_ZOOM = 7;
+
+/** A place found with the search box is shown this close: its yard and the lines through it. */
+const FOUND_ZOOM = 12;
 
 /** Flies to one junction when the screen asks for it. Renders nothing; must be a child of the map. */
 function FlyTo({ focus }: { focus: MapFocus | undefined }) {
@@ -141,8 +148,18 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const root = useRef<HTMLDivElement>(null);
   const colors = useThemeColors(root, look.base);
   const [zoom, setZoom] = useState(3);
+  const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
+  const resolution = usePlace(chosen?.ref ?? null, "shop");
+  const found = chosen && resolution.status === "ready" && !resolution.stale ? resolution.data : null;
   const [fitNonce, setFitNonce] = useState(0);
-  const scene = content?.scene ?? null;
+  const given = content?.scene ?? null;
+  // With Real tracks on, the routes follow the surveyed track and the real lines replace the Class I
+  // network where the tiles have them; with it off, both are drawn node to node, like the network layer.
+  const asked = useMemo(() => (layers.tracks && given ? routePaths(given) : []), [layers.tracks, given]);
+  const onTrack = useTrackPaths(asked.length ? asked : null);
+  const trackPaths = layers.tracks && onTrack.status === "ready" && !onTrack.stale ? onTrack.data : null;
+  const scene = useMemo(() => (given && trackPaths ? withRoutePaths(given, trackPaths) : given), [given, trackPaths]);
+  const networkShown = layers.network && !(layers.tracks && zoom >= REAL_TRACKS_MIN_ZOOM);
   const picking = !!content?.onPick;
   const latest = useRef(content);
   latest.current = content;
@@ -151,8 +168,8 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     const drawn = scene ? sceneLayers(scene, colors, zoom) : [];
     // The network dims under a route (and under the shops), so that is what the eye finds.
     const dimmed = scene?.kind === "shops" || (scene?.kind === "route" && scene.selected !== null);
-    return [network && networkLayer(network, layers.network, dimmed, colors), ...drawn];
-  }, [network, layers.network, scene, colors, zoom]);
+    return [network && networkLayer(network, networkShown, dimmed, colors), ...drawn];
+  }, [network, networkShown, scene, colors, zoom]);
   const watchCamera = (map: Pick<MapLibreMap, "getCenter">) => {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
@@ -165,7 +182,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
 
   return (
-    <div className="map-canvas" ref={root}>
+    <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"}>
       <MapGL
         initialViewState={INITIAL_VIEW}
         maxBounds={PAN_BOUNDS}
@@ -200,15 +217,18 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           }}
         />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
-        <CornerLegend {...legendFor(scene, layers.network)} />
+        <CornerLegend {...legendFor(scene, networkShown)} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} />}
         <FlyTo focus={content?.focus} />
+        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
+        {chosen && found?.ok && <FoundPin chosen={chosen} place={found.place} actions={content?.placeActions ?? []} onClose={() => setChosen(null)} />}
       </MapGL>
+      <MapSearch chosen={chosen} problem={found && !found.ok ? found.problem.message : null} onChoose={setChosen} />
     </div>
   );
 }

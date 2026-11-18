@@ -123,22 +123,30 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   // ---- suggestions (also the candidates of a problem) ----
 
-  const shopSuggestion = (shop: Shop): PlaceSuggestion => ({
-    ref: { kind: "shop", shopId: shop.id },
-    label: shop.name,
-    detail: ["Your shop", ...(shop.example ? ["EXAMPLE"] : []), ...(shop.code ? [shop.code] : [])].join(" · "),
-    source: "shop",
-  });
-  const codeSuggestion = (code: NodeCode): PlaceSuggestion => ({
-    ref: { kind: "code", codeType: code.codeType, code: code.code },
-    label: code.name ?? `${codeSetLabel(code.codeType)} ${code.code}`,
-    detail: `${codeSetLabel(code.codeType)} ${code.code}`,
-    source: "code",
-  });
-  const citySuggestion = (city: City): PlaceSuggestion => ({ ref: { kind: "coord", lon: city.lon, lat: city.lat }, label: city.name, detail: "City", source: "city" });
+  /** Railroads at a suggested place, from the same (memoized) resolution a pick of it gets. */
+  const railroadsAt = (ref: PlaceRef): Railroad[] => {
+    const found = resolve(ref, "position");
+    return found.ok ? found.place.railroads : [];
+  };
+  const shopSuggestion = (shop: Shop): PlaceSuggestion => {
+    const ref: PlaceRef = { kind: "shop", shopId: shop.id };
+    const detail = ["Your shop", ...(shop.example ? ["EXAMPLE"] : []), ...(shop.code ? [shop.code] : [])].join(" · ");
+    return { ref, label: shop.name, detail, source: "shop", railroads: railroadsAt(ref) };
+  };
+  const codeSuggestion = (code: NodeCode): PlaceSuggestion => {
+    const ref: PlaceRef = { kind: "code", codeType: code.codeType, code: code.code };
+    const detail = `${codeSetLabel(code.codeType)} ${code.code}`;
+    return { ref, label: code.name ?? detail, detail, source: "code", railroads: railroadsAt(ref) };
+  };
+  const citySuggestion = (city: City): PlaceSuggestion => {
+    const ref: PlaceRef = { kind: "coord", lon: city.lon, lat: city.lat };
+    return { ref, label: city.name, detail: "City", source: "city", railroads: railroadsAt(ref) };
+  };
   const nodeSuggestion = (fraId: FraId): PlaceSuggestion[] => {
     const node = network.node(fraId);
-    return node ? [{ ref: { kind: "node", fraId, railroad: null }, label: node.near, detail: `FRA node ${fraId}`, source: "node" }] : [];
+    if (!node) return [];
+    const source = node.yard ? "yard" : node.railroads.length > 1 ? "junction" : "node";
+    return [{ ref: { kind: "node", fraId, railroad: null }, label: node.near, detail: `FRA node ${fraId}`, source, railroads: node.railroads }];
   };
 
   const suggest = (text: string, role: PlaceRole, limit: number): PlaceSuggestion[] => {
@@ -233,20 +241,22 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     }
   };
 
+  const resolve = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {
+    if (memoRevision !== store.revision || memo.size > MEMO_LIMIT) {
+      memo.clear();
+      memoRevision = store.revision;
+    }
+    const key = `${role}\u0000${JSON.stringify(ref)}`;
+    let answer = memo.get(key);
+    if (!answer) {
+      answer = compute(ref, role);
+      memo.set(key, answer);
+    }
+    return answer;
+  };
+
   return {
-    resolve(ref, role) {
-      if (memoRevision !== store.revision || memo.size > MEMO_LIMIT) {
-        memo.clear();
-        memoRevision = store.revision;
-      }
-      const key = `${role}\u0000${JSON.stringify(ref)}`;
-      let answer = memo.get(key);
-      if (!answer) {
-        answer = compute(ref, role);
-        memo.set(key, answer);
-      }
-      return answer;
-    },
+    resolve,
     suggest,
     nearest: (lon, lat, withinKm) => network.nearest(lon, lat, withinKm),
   };

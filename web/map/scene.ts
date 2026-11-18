@@ -109,6 +109,34 @@ function sceneRoute(route: RoutePath): SceneRoute {
   return { id: route.strategies[0], legs, chevrons: legs.flatMap((leg) => chevronsAlong(leg.path)), interchanges };
 }
 
+/** A route scene's routes in a fixed order (by id), whichever one is selected. */
+function routesOf(scene: MapScene): SceneRoute[] {
+  if (scene.kind !== "route") return [];
+  const routes = scene.selected ? [scene.selected, ...scene.alternatives] : scene.alternatives;
+  return [...routes].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+}
+
+/** Every leg's path, route by route in a fixed order: selecting another route asks for the same paths again. */
+export function routePaths(scene: MapScene): LngLat[][] {
+  return routesOf(scene).flatMap((route) => route.legs.map((leg) => leg.path));
+}
+
+/**
+ * The scene with its legs drawn along `paths`, given in routePaths order (the same legs on the real
+ * track), and the chevrons placed along them again. Paths that do not fit leave the scene as it was.
+ */
+export function withRoutePaths(scene: MapScene, paths: LngLat[][]): MapScene {
+  if (scene.kind !== "route" || paths.length !== routePaths(scene).length) return scene;
+  let next = 0;
+  const redrawn = new Map(
+    routesOf(scene).map((route) => {
+      const legs = route.legs.map((leg) => ({ ...leg, path: paths[next++] }));
+      return [route, { ...route, legs, chevrons: legs.flatMap((leg) => chevronsAlong(leg.path)) }];
+    }),
+  );
+  return { ...scene, selected: scene.selected && redrawn.get(scene.selected)!, alternatives: scene.alternatives.map((route) => redrawn.get(route)!) };
+}
+
 /** The route whose strategies include `option`, else the router's own (the first). */
 export function chosenRoute(routes: readonly RoutePath[], option: RouteStrategy | null): RoutePath {
   return (option ? routes.find((route) => route.strategies.includes(option)) : undefined) ?? routes[0];

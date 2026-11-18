@@ -4,7 +4,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { assumptionsProblem, loadNetwork } from "../engine/index.ts";
+import { assumptionsProblem, loadNetwork, loadTrackShapes, type TrackShapes } from "../engine/index.ts";
 import { AppError, type Meta } from "../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
 import { RAILROADS } from "../shared/railroads.ts";
@@ -30,12 +30,15 @@ export interface App {
   /** Company node codes: the seam for the company's own codes, with no screen yet. */
   codes: Codes;
   plans: Plans;
+  /** Routes drawn on the real track (the map's Real tracks). */
+  track: TrackShapes;
   /** Stops the routing workers and closes the database. */
   close(): Promise<void>;
 }
 
 export async function createApp(config: Config): Promise<App> {
   const network = loadNetwork(config.networkDir);
+  const track = loadTrackShapes(network, config.networkDir);
   mkdirSync(config.dataDir, { recursive: true, mode: 0o700 });
   const databaseFile = join(config.dataDir, "visnarn.db");
   // Loaded here and not at the top: `--selftest` imports this file and must not touch the database.
@@ -79,6 +82,7 @@ export async function createApp(config: Config): Promise<App> {
     shops,
     codes,
     plans,
+    track,
     async close() {
       await planner.close();
       store.close();

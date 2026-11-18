@@ -179,6 +179,21 @@ describe("createCarRouter().route", () => {
     expect(result).toEqual({ ok: false, noRoute: { kind: "no-path", at: "shop", message: expect.stringContaining("from B to the shop") } });
   });
 
+  it("names the stop, not the next place, when every way into the stop faces away from the rest of the trip", () => {
+    // FRA node 362313 (south Dallas, UP) lies on a branch that dead-ends south of it: from Taylor the car
+    // can only arrive heading south, and Texarkana is back north. Alone, both legs route.
+    const node = network.node(362313 as FraId)!;
+    const dallas: Waypoint = { label: node.near, lon: node.lon, lat: node.lat, fraId: node.fraId, railroad: null };
+    const taylor = city("Taylor, TX");
+    const texarkana: Waypoint = { label: "EXAMPLE Texarkana shop", lon: -94.0116, lat: 33.4423, fraId: null, railroad: null };
+    routed({ a: taylor, b: taylor, stops: [], shop: dallas, rules: rules() });
+    routed({ a: dallas, b: dallas, stops: [], shop: texarkana, rules: rules() });
+    expect(router.route({ a: taylor, b: taylor, stops: [dallas], shop: texarkana, rules: rules() }, "pick")).toEqual({
+      ok: false,
+      noRoute: { kind: "dead-end", at: 0, message: "Stop 1 is reached, but the car cannot go on from it to the shop without turning back outside a yard." },
+    });
+  });
+
   it("answers not-served, naming the waypoint, when coordinates are over 15 km from allowed mainline", () => {
     const desert: Waypoint = { label: "EXAMPLE desert shop", lon: -116.5, lat: 40.0, fraId: null, railroad: null };
     expect(router.route({ ...exampleTrip(), shop: desert }, "pick")).toEqual({

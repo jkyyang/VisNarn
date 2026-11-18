@@ -22,6 +22,7 @@ const EVERY_ROUTE: Record<Route, true> = {
   "POST /api/saved-routes": true,
   "PUT /api/saved-routes/:routeId": true,
   "DELETE /api/saved-routes/:routeId": true,
+  "POST /api/track": true,
 };
 const ROUTES = Object.keys(EVERY_ROUTE) as Route[];
 

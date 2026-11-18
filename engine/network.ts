@@ -98,7 +98,7 @@ export function openNetwork(bin: ArrayBuffer, meta: GraphMeta, version: string):
 const cores = new WeakMap<RailNetwork, RailGraph>();
 
 /**
- * The index-addressed graph behind a network. For engine/trip.ts only: engine/index.ts does not
+ * The index-addressed graph behind a network. For engine/trip.ts and engine/track.ts only: engine/index.ts does not
  * export it, so nothing outside engine/ can reach an index.
  */
 export function coreOf(network: RailNetwork): RailGraph {

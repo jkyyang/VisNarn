@@ -101,7 +101,12 @@ describe("Plans.route", () => {
     const noPath = await plans.route(plan(text("Houston, TX"), text("Pasco, WA")));
     expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No allowed track reaches here from the place before." } });
 
-    for (const answer of [notServed, noPath]) {
+    // A stop on a branch the car can only leave the wrong way: the stop is at fault, not the destination.
+    store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS);
+    const deadEnd = await plans.route(plan(text("Taylor, TX"), { kind: "coord", lon: -94.0116, lat: 33.4423 }, [{ kind: "node", fraId: 362313 as FraId, railroad: null }]));
+    expect(deadEnd).toMatchObject({ outcome: "no-route", problem: { at: 0, message: "The route cannot go on from here without turning back." } });
+
+    for (const answer of [notServed, noPath, deadEnd]) {
       if (answer.outcome !== "no-route") continue;
       expect(answer.problem.message).not.toMatch(/\bA\b|\bB\b|shop/);
     }

@@ -174,7 +174,7 @@ export function stopInsertIndex(start: LonLat, stops: LonLat[], destination: Lon
 }
 
 /** Where a new stop goes: by least detour when every place of the plan is known, else last. */
-function insertIndex(plan: Plan, places: PlanPlaces | null, at: LonLat): number {
+export function insertIndex(plan: Plan, places: PlanPlaces | null, at: LonLat): number {
   const start = places?.start;
   const destination = places?.destination;
   const stops = places?.stops ?? [];

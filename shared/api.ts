@@ -10,6 +10,7 @@
  */
 import type { AppErrorKind, Meta } from "./app.ts";
 import type { Assumptions } from "./assumptions.ts";
+import type { LngLat } from "./geo.ts";
 import type {
   CodeSet, CodeType, ImportReport, ImportRequest, NetworkNode, NodeCode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
 } from "./places.ts";
@@ -50,6 +51,12 @@ export interface Api {
   /** Saving what is already stored changes nothing. */
   "PUT /api/saved-routes/:routeId": Endpoint<SavedRoute, SavedRouteDraft>;
   "DELETE /api/saved-routes/:routeId": Endpoint<null>;
+
+  /**
+   * The same paths drawn along the real track, for the map when Real tracks is on: each step between two
+   * neighbouring network nodes becomes that segment's surveyed line. Paths come back in the order sent.
+   */
+  "POST /api/track": Endpoint<LngLat[][], { paths: LngLat[][] }>;
 }
 
 export type Route = keyof Api;

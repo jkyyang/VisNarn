@@ -67,8 +67,9 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 
 | File | Owns | May import |
 |---|---|---|
-| `index.ts` | the engine's public surface (a list of re-exports) | `./load`, `./network`, `./trip`, `./verdict` |
-| `load.ts` | reading `graph.bin` and `graph_meta.json` from disk; the network version (a hash of the bytes) | `./network`, `node:fs`, `node:crypto` |
+| `index.ts` | the engine's public surface (a list of re-exports) | `./load`, `./network`, `./trip`, `./track`, `./verdict` |
+| `load.ts` | reading `graph.bin` and `graph_meta.json` from disk; the network version (a hash of the bytes); `track.bin` for the server's main thread | `./network`, `./track`, `node:fs`, `node:crypto` |
+| `track.ts` | `TrackShapes.follow`: a node-to-node path redrawn along each segment's surveyed line (`track.bin`), for the map's Real tracks | `./network`, `shared/geo` |
 | `network.ts` | `RailNetwork`: the network by stable id (nodes by FRA id, snapping, city names). `coreOf` is engine-internal | `./core/graph`, `shared/` |
 | `trip.ts` | `Trip`, `createCarRouter().route` (one car, one strategy), `combine` (distinct paths), `tripKey` (cache identity). The only place indexes become stable ids | `./network`, `./core/*`, `shared/` |
 | `verdict.ts` | `judge` (paths + clock + assumptions → options), `travelHours`, `classifyTiming`, `triage`, `assumptionsProblem`. The only place the group policy lives | `./trip` (types), `shared/` |
@@ -172,7 +173,7 @@ Stage 1 has no clock in the page: nothing under `web/` imports `shared/time.ts` 
 | Path | Notes |
 |---|---|
 | `pipeline/run_all.sh`, `download_narn.py`, `build_graph.py`, `export_web_graph.py`, `export_basemap.py`, `places.py` | the producer of `public/data/`; `CLASS1` in `export_web_graph.py` must equal `shared/railroads.ts`, which the engine checks when it loads the network |
-| `public/data/graph.bin`, `graph_meta.json`, `basemap_mainline.geojson` | read by `engine/load.ts` (first two) and by the page (the third) |
+| `public/data/graph.bin`, `graph_meta.json`, `track.bin`, `basemap_mainline.geojson` | read by `engine/load.ts` (first three) and by the page (the last) |
 | `docs/design/*.dc.html` | the canvas mockups |
 
 ## Removed

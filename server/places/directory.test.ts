@@ -158,7 +158,7 @@ describe("Directory.suggest / nearest", () => {
     store.codes.replaceSet({ codeType: "station", label: "Station" }, [code("station", "KANSAS", KANSAS_CITY, "Kansas City yard")], T);
     const forShop = directory.suggest("kansas", "shop", 8);
     expect(forShop.map((s) => s.source)).toEqual(["shop", "code", "city"]);
-    expect(forShop[0]).toEqual({ ref: { kind: "shop", shopId: "s1" }, label: "Kansas City, MO", detail: "Your shop · EXAMPLE · EX-KCY-01", source: "shop" });
+    expect(forShop[0]).toEqual({ ref: { kind: "shop", shopId: "s1" }, label: "Kansas City, MO", detail: "Your shop · EXAMPLE · EX-KCY-01", source: "shop", railroads: expect.arrayContaining(["BNSF"]) });
     // A shop the person added is not marked; one of the EXAMPLE rows is, wherever it is offered or used.
     store.shops.save(shop({ id: "s2" as ShopId, name: "Real Yard Shop", code: "KRS", example: false }));
     expect(directory.suggest("real yard", "shop", 8)[0].detail).toBe("Your shop · KRS");
@@ -170,7 +170,17 @@ describe("Directory.suggest / nearest", () => {
     expect(directory.suggest("kansas", "position", 8).map((s) => s.source)).toEqual(["code", "city", "shop"]);
     expect(directory.suggest("kansas", "position", 1)).toHaveLength(1);
     expect(directory.suggest("  ", "shop", 8)).toEqual([]);
-    expect(directory.suggest("FRA 358070", "position", 8)).toEqual([{ ref: { kind: "node", fraId: TEMPLE, railroad: null }, label: "Temple, TX", detail: "FRA node 358070", source: "node" }]);
+    expect(directory.suggest("FRA 358070", "position", 8)).toEqual([{ ref: { kind: "node", fraId: TEMPLE, railroad: null }, label: "Temple, TX", detail: "FRA node 358070", source: "junction", railroads: ["BNSF", "UP"] }]);
+  });
+
+  it("names what a suggested node is (yard, junction, plain node) and lists the railroads at every suggestion", () => {
+    const { directory } = setup();
+    // Both near Billings, MT, on BNSF only: one on yard track, one on the main line.
+    expect(directory.suggest("FRA 336746", "position", 8)[0]).toMatchObject({ source: "yard", railroads: ["BNSF"] });
+    expect(directory.suggest("FRA 337291", "position", 8)[0]).toMatchObject({ source: "node", railroads: ["BNSF"] });
+    const city = directory.suggest("Temple, TX", "position", 8)[0];
+    expect(city).toMatchObject({ source: "city", railroads: ["BNSF", "UP"] });
+    expect(city.railroads).toEqual(placeOf(directory.resolve(city.ref, "position")).railroads);
   });
 
   it("nearest returns the node within the tolerance with its railroads, else null", () => {

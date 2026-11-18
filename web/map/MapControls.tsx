@@ -61,7 +61,7 @@ export function MapControls(props: MapControlsProps): ReactElement {
               type="button"
               role="checkbox"
               aria-checked={tracksOn}
-              title="OpenRailwayMap tracks, stations and yards"
+              title="OpenStreetMap rail lines, with routes drawn along the track"
               className="layer-tile"
               onClick={() => onLayers({ ...layers, tracks: !layers.tracks })}
             >

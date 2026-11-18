@@ -21,8 +21,11 @@ export interface Trip {
 }
 
 export interface NoRoute {
-  /** "not-served": no allowed railroad has track at that waypoint. "no-path": nothing joins them without reversing outside a yard. */
-  kind: "not-served" | "no-path";
+  /**
+   * "not-served": no allowed railroad has track at that waypoint. "no-path": nothing joins them without reversing outside a yard.
+   * "dead-end": the stop is reached, but every way of reaching it faces away from the next waypoint.
+   */
+  kind: "not-served" | "no-path" | "dead-end";
   /** The waypoint at fault: "a", "b", "shop", or the index of a stop. */
   at: "a" | "b" | "shop" | number;
   message: string;
@@ -148,6 +151,11 @@ export function createCarRouter(network: RailNetwork): CarRouter {
         onward = router.route(onwardPoints, options, start);
       } catch (error) {
         if (!(error instanceof RouteError)) throw error;
+        const roleAt = (point: number): At => (point === onwardPoints.length - 1 ? "shop" : point - 1);
+        if (error.deadEnd) {
+          const message = `${capital(roleOf(roleAt(error.point)))} is reached, but the car cannot go on from it to ${roleOf(roleAt(error.point + 1))} without turning back outside a yard.`;
+          return { ok: false, noRoute: { kind: "dead-end", at: roleAt(error.point), message } };
+        }
         const target = error.point > 0 ? error.point : onwardPoints.length - 1;
         const at: At = target === onwardPoints.length - 1 ? "shop" : target - 1;
         const from: At = target === 1 ? "b" : target - 2;

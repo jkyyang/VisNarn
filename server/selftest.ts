@@ -1,10 +1,12 @@
 /**
  * `node server/main.ts --selftest`: proves, under plain Node rather than vitest's esbuild (which
- * accepts syntax Node refuses), that the server's sources load, a routing worker thread starts, and
- * the EXAMPLE car routes. It touches no database and opens no port.
+ * accepts syntax Node refuses), that the server's sources load, a routing worker thread starts, the
+ * EXAMPLE car routes, and its route draws along the real track (track.bin matches graph.bin). It
+ * touches no database and opens no port.
  */
-import { loadNetwork, type Trip } from "../engine/index.ts";
+import { loadNetwork, loadTrackShapes, type Trip } from "../engine/index.ts";
 import { DEFAULT_ASSUMPTIONS } from "../shared/assumptions.ts";
+import { haversineKm, type LngLat } from "../shared/geo.ts";
 import type { Waypoint } from "../shared/places.ts";
 import type { Config } from "./config.ts";
 import { startRoutePlanner } from "./routing/planner.ts";
@@ -12,6 +14,7 @@ import { startRoutePlanner } from "./routing/planner.ts";
 export async function selfTest(config: Pick<Config, "networkDir">, log: (line: string) => void): Promise<boolean> {
   const started = performance.now();
   const network = loadNetwork(config.networkDir);
+  const track = loadTrackShapes(network, config.networkDir);
   const city = (name: string): Waypoint => {
     const found = network.city(name);
     if (!found) throw new Error(`The network has no city named ${name}.`);
@@ -26,10 +29,20 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
       return false;
     }
     const [path] = routed.trip.paths;
+    // Drawn on the surveyed lines, the route is as long as the track km it was routed on; node to node it is shorter.
+    const drawnKm = path.legs.reduce((km, leg) => km + lengthKm(track.follow(leg.path)), 0);
+    if (Math.abs(drawnKm - path.km) > 0.01 * path.km) {
+      log(`selftest FAILED: the EXAMPLE route drawn on the real track is ${Math.round(drawnKm)} km, not ${Math.round(path.km)} km: track.bin does not fit graph.bin. Run "npm run data".`);
+      return false;
+    }
     const ms = Math.round(performance.now() - started);
     log(`selftest ok: network ${network.version}; EXAMPLE car Temple, TX → North Little Rock, AR routed in a worker thread: ${Math.round(path.km)} km on ${path.railroads.join(", ")} (${ms} ms)`);
     return true;
   } finally {
     await planner.close();
   }
+}
+
+function lengthKm(path: LngLat[]): number {
+  return path.slice(1).reduce((km, [lon, lat], i) => km + haversineKm(path[i][0], path[i][1], lon, lat), 0);
 }

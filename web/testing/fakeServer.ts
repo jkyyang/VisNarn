@@ -111,8 +111,8 @@ function suggest(state: FakeState, q: string, role: PlaceRole): PlaceSuggestion[
   if (!text) return [];
   const shops: PlaceSuggestion[] = state.shops
     .filter((s) => s.name.toLowerCase().includes(text) || s.code?.toLowerCase().includes(text))
-    .map((s) => ({ ref: { kind: "shop", shopId: s.id }, label: s.name, detail: `Your shop${s.code ? ` · ${s.code}` : ""}`, source: "shop" }));
-  const cities: PlaceSuggestion[] = CITIES.filter((c) => c.name.toLowerCase().includes(text)).map((c) => ({ ref: { kind: "text", text: c.name }, label: c.name, detail: "City", source: "city" }));
+    .map((s) => ({ ref: { kind: "shop", shopId: s.id }, label: s.name, detail: `Your shop${s.code ? ` · ${s.code}` : ""}`, source: "shop", railroads: s.place.ok ? s.place.place.railroads : [] }));
+  const cities: PlaceSuggestion[] = CITIES.filter((c) => c.name.toLowerCase().includes(text)).map((c) => ({ ref: { kind: "text", text: c.name }, label: c.name, detail: "City", source: "city", railroads: c.railroads }));
   return (role === "shop" ? [...shops, ...cities] : [...cities, ...shops]).slice(0, 8);
 }
 

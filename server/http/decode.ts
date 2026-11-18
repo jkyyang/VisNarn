@@ -10,6 +10,7 @@
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
+import type { LngLat } from "../../shared/geo.ts";
 import type { CodeType, FraId, ImportRequest, PlaceRef, PlaceRole, ShopDraft, ShopId, UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
@@ -199,6 +200,15 @@ const importRequest: Decoder<ImportRequest> = (value, path) => ({
 
 const role: Decoder<PlaceRole> = oneOf(["position", "shop"] as const);
 
+const lngLat: Decoder<LngLat> = (value, path) => {
+  if (!Array.isArray(value) || value.length !== 2) invalid(path, `${path} must be [longitude, latitude].`);
+  return [inRange(-180, 180)(value[0], `${path}[0]`), inRange(-90, 90)(value[1], `${path}[1]`)];
+};
+
+/** The routes on one map: a few paths of up to a few thousand nodes each. */
+const MAX_PATHS = 100;
+const MAX_PATH_POINTS = 50_000;
+
 /** One decoder per route that has a body: a route added to `Api` without one does not compile. */
 export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R]["body"] } = {
   "PUT /api/assumptions": (json) => assumptions(json, ""),
@@ -210,6 +220,7 @@ export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R][
   "POST /api/route": (json) => plan(json, ""),
   "POST /api/saved-routes": (json) => savedRouteDraft(json, ""),
   "PUT /api/saved-routes/:routeId": (json) => savedRouteDraft(json, ""),
+  "POST /api/track": (json) => ({ paths: field(json, "", "paths", list(list(lngLat, MAX_PATH_POINTS), MAX_PATHS)) }),
 };
 
 /** A query value as a number: "-97.3" → -97.3; missing or not a number → AppError naming the key. */

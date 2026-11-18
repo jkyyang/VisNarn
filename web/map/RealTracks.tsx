@@ -3,11 +3,13 @@ import { OPENFREEMAP_TILES } from "./basemaps.ts";
 
 const SOURCE = "real-tracks";
 
+/** The tiles carry rail from this zoom. From here in the real lines replace the Class I network layer; further out it shows the main lines. */
+export const REAL_TRACKS_MIN_ZOOM = 8;
+
 /**
  * The rail lines of OpenStreetMap as thin vector lines. Raster tiles were stretched between zoom
  * levels and on high-density screens, so their lines went thick and blurry; vector lines are drawn
- * at the screen's own resolution. The tiles carry rail from zoom 8; further out the Class I network
- * layer shows the main lines.
+ * at the screen's own resolution.
  *
  * `dark`: the ground is dark (the night street map or satellite imagery), so the lines are light.
  */

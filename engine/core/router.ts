@@ -76,10 +76,13 @@ export type RouteStart = { continueFrom: RouteEnd } | { headingDeg: number };
 export class RouteError extends Error {
   /** Index, in the points given to `route`, of the point that could not be served or reached; -1 when none. */
   readonly point: number;
+  /** True when `point` is a via point the car reaches but cannot go on from: every way in faces away from the next point. */
+  readonly deadEnd: boolean;
 
-  constructor(message: string, point = -1) {
+  constructor(message: string, point = -1, deadEnd = false) {
     super(message);
     this.point = point;
+    this.deadEnd = deadEnd;
   }
 }
 
@@ -340,6 +343,11 @@ export class Router {
         .map((st) => ({ cost: st.cost, steps: st.prefix, heading: st.heading }));
       const hits = [...already, ...this.search(frontier, goals, opt, last ? null : VIA_SLACK_KM)].sort((x, y) => x.cost - y.cost);
       if (!hits.length) {
+        // The car keeps its direction through a via point. If the next point is reachable from the via
+        // point facing either way, the via point is what blocks (a node on a dead-end branch, 2026-11-17).
+        if (i > 0 && this.search(this.firstStarts(from, null, opt), goals, opt, null).length) {
+          throw new RouteError(`${from.label} is reached, but the car cannot go on toward ${to.label} without reversing outside a yard.`, i, true);
+        }
         throw new RouteError(
           `No route from ${from.label} to ${to.label} with the railroads allowed, without reversing outside a yard.`,
           i + 1,

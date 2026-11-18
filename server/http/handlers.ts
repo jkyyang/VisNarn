@@ -42,4 +42,6 @@ export const handlers: Handlers = {
   "POST /api/saved-routes": ({ body }, { app }) => app.plans.save(body, null),
   "PUT /api/saved-routes/:routeId": ({ params, body }, { app }) => app.plans.save(body, savedRouteId(params.routeId)),
   "DELETE /api/saved-routes/:routeId": ({ params }, { app }) => (app.plans.remove(savedRouteId(params.routeId)), null),
+
+  "POST /api/track": ({ body }, { app }) => body.paths.map((path) => app.track.follow(path)),
 };

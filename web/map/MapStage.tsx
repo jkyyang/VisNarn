@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import type { LngLat } from "../../shared/geo.ts";
+import type { ResolvedPlace } from "../../shared/places.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { mapLook, sunPosition } from "./daylight.ts";
@@ -39,8 +40,15 @@ export interface MapContentProps {
   onSelect?: (target: SceneTarget) => void;
   /** Undo / redo of route changes, shown with the map controls when given. */
   history?: { undo: (() => void) | null; redo: (() => void) | null };
+  /** What a place found with the map's search box can become here: "Set as start", "Add as stop". */
+  placeActions?: PlaceAction[];
   /** Cards laid over the map (the pick prompt on Shops). */
   children?: ReactNode;
+}
+
+export interface PlaceAction {
+  label: string;
+  run: (place: ResolvedPlace) => void;
 }
 
 /** What the screens have asked the map to show; the stage subscribes, the screens publish. */

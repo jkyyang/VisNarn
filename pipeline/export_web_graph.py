@@ -1,4 +1,4 @@
-"""Pack the rail graph into a compact binary for the browser route planner.
+"""Pack the rail graph into compact binaries for the route planner (engine/), which the server runs.
 
 public/data/graph.bin layout (little-endian):
   header: uint32 n_nodes, uint32 n_edges
@@ -10,6 +10,10 @@ public/data/graph.bin layout (little-endian):
 Headings are measured over the first ~0.2 km of track geometry, so the router can tell a
 through move or a gentle diverging move from a reversal (trains can't reverse at a switch).
 public/data/graph_meta.json: railroad bit order, subdivision names, FRA node ids, places.
+
+public/data/track.bin: each edge's surveyed line, for drawing a route on the real track (engine/track.ts):
+  uint32 n_edges   uint32[n_edges+1] index of each edge's first point   float32[n_points*2] lon,lat
+Only the points between an edge's two nodes, from u toward v, thinned to within SHAPE_M of the NARN line.
 """
 import json
 import math
@@ -18,6 +22,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import shapely
+from shapely.geometry import LineString
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
@@ -29,6 +35,7 @@ BIT = {c: 1 << i for i, c in enumerate(CLASS1 + ["regional", "short line"])}
 YARD = 1
 PASSENGER_OWNED = 2
 HEADING_KM = 0.2
+SHAPE_M = 2.0
 
 
 def heading(p, q):
@@ -48,6 +55,13 @@ def leaving_heading(coords):
     return heading(coords[0], coords[-1])
 
 
+def points_between(coords):
+    """The line's points between its two ends, dropping those within SHAPE_M of the line without them."""
+    c = math.cos(math.radians(coords[0][1]))  # metres the same both ways, for the tolerance
+    line = shapely.simplify(LineString([(x * c, y) for x, y in coords]), SHAPE_M / 111_320)
+    return [(x / c, y) for x, y in line.coords[1:-1]]
+
+
 G = pickle.load(open(ROOT / "data/processed/rail_graph.pkl", "rb"))
 ids = list(G.nodes)
 idx = {n: i for i, n in enumerate(ids)}
@@ -58,6 +72,7 @@ E = G.number_of_edges()
 u, v = np.zeros(E, np.uint32), np.zeros(E, np.uint32)
 km, mask, sd = np.zeros(E, np.float32), np.zeros(E, np.uint8), np.zeros(E, np.uint16)
 head_u, head_v, flags = np.zeros(E, np.uint16), np.zeros(E, np.uint16), np.zeros(E, np.uint8)
+shape_first, shape_points = [0], []
 for i, (a, b, d) in enumerate(G.edges(data=True)):
     m = sum(BIT[c] for c in d["carriers"])
     u[i], v[i], km[i], mask[i] = idx[a], idx[b], d["km"], m
@@ -68,6 +83,8 @@ for i, (a, b, d) in enumerate(G.edges(data=True)):
     # build_graph stores geometry from min(node id) to max(node id); orient it a -> b.
     coords = d["geom"] if a < b else d["geom"][::-1]
     head_u[i], head_v[i] = leaving_heading(coords), leaving_heading(coords[::-1])
+    shape_points += points_between(coords)
+    shape_first.append(len(shape_points))
     passenger = d["owner"] in PASSENGER
     flags[i] = (YARD if d["net"] == "Y" else 0) | (PASSENGER_OWNED if passenger else 0)
     if d["net"] == "M":
@@ -81,7 +98,10 @@ with open(out / "graph.bin", "wb") as fh:
     fh.write(b"\0" * pad)
     for arr in (u, v, km, mask, sd, head_u, head_v, flags):
         fh.write(arr.tobytes())
+with open(out / "track.bin", "wb") as fh:
+    fh.write(np.array([E, *shape_first], np.uint32).tobytes())
+    fh.write(np.array(shape_points, np.float32).tobytes())
 json.dump({"railroads": CLASS1, "pad": pad, "subdivs": subdivs, "fra_ids": ids,
            "places": {k: list(p) for k, p in PLACES.items()}},
           open(out / "graph_meta.json", "w"), separators=(",", ":"))
-print(len(ids), "nodes", E, "edges", len(subdivs), "subdivisions, pad", pad)
+print(len(ids), "nodes", E, "edges", len(subdivs), "subdivisions, pad", pad, len(shape_points), "track shape points")

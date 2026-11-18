@@ -12,7 +12,7 @@ import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } fro
 import { MapContent } from "../../map/MapStage.tsx";
 import { chosenRoute, planScene, type SceneTarget } from "../../map/scene.ts";
 import { RoutePanel } from "./RoutePanel.tsx";
-import { isFull, usePlanSession } from "./session.ts";
+import { insertIndex, isFull, usePlanSession } from "./session.ts";
 
 const NO_SHOPS: ShopView[] = [];
 
@@ -86,6 +86,11 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
           clickMap(lon, lat, km, places).catch((error: unknown) => setClickError(error instanceof Error ? error.message : "The click could not be placed."));
         }}
         onSelect={onSelect}
+        placeActions={[
+          { label: "Set as start", run: (found) => dispatch({ type: "setPlace", field: "start", ref: found.ref }) },
+          { label: "Add as stop", run: (found) => dispatch({ type: "addStop", ref: found.ref, index: insertIndex(plan, places, found) }) },
+          { label: "Set as destination", run: (found) => dispatch({ type: "setPlace", field: "destination", ref: found.ref }) },
+        ]}
         history={{
           undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,
           redo: session.plan.future.length ? () => dispatch({ type: "redo" }) : null,
