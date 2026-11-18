@@ -11,7 +11,7 @@ import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
 import type { LngLat } from "../../shared/geo.ts";
-import type { CodeType, FraId, ImportRequest, PlaceRef, PlaceRole, ShopDraft, ShopId, UploadSource } from "../../shared/places.ts";
+import { SHOP_TEXT_MAX, type CodeType, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
@@ -153,8 +153,8 @@ const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
 });
 
 const shopDraft: Decoder<ShopDraft> = (value, path) => ({
-  name: field(value, path, "name", text(200)),
-  code: field(value, path, "code", nullable(text(200))),
+  name: field(value, path, "name", text(SHOP_TEXT_MAX)),
+  code: field(value, path, "code", nullable(text(SHOP_TEXT_MAX))),
   location: field(value, path, "location", placeRef),
 });
 

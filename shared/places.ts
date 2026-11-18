@@ -126,6 +126,9 @@ export interface Shop {
  * the map, coordinates, or text such as a node code to look up); saving resolves it once and stores
  * the node or coordinates it came to.
  */
+/** Longest shop name or code, the same through the shop form and a file import: longer text breaks map labels. */
+export const SHOP_TEXT_MAX = 200;
+
 export interface ShopDraft {
   name: string;
   code: string | null;

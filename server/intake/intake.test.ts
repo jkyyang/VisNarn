@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
+import { SHOP_TEXT_MAX } from "../../shared/places.ts";
 import { exampleShops } from "./example.ts";
 import { openSource, readCodes, readShops, type RecordSource } from "./intake.ts";
 
@@ -68,6 +69,16 @@ describe("readShops / readCodes", () => {
     expect(byCoords.lines).toEqual([2, 3, 4]);
     expect(await refusal(() => readShops(csv("name,city\nA,B\n", "shops.csv")))).toMatch(/^invalid: shops\.csv has no location columns/);
     expect(await refusal(() => readShops(csv("shop,lon,lat\nA,1,2\n", "shops.csv")))).toMatch(/^invalid: shops\.csv has no column "name"/);
+  });
+
+  it("holds shop names and codes to the shop form's length limit", async () => {
+    const long = "n".repeat(SHOP_TEXT_MAX + 1);
+    const ok = "n".repeat(SHOP_TEXT_MAX);
+    const { issues } = await readShops(csv(`name,code,lon,lat\n${long},EX-A,-90.2,38.6\nEXAMPLE B,${long},-90.2,38.6\n${ok},${ok},-90.2,38.6\n`));
+    expect(issues.map((i) => [i.row, i.message])).toEqual([
+      [0, `The shop name is longer than ${SHOP_TEXT_MAX} characters.`],
+      [1, `The shop code is longer than ${SHOP_TEXT_MAX} characters.`],
+    ]);
   });
 
   it("accepts code, name, fra_id and code, name, lon, lat", async () => {
