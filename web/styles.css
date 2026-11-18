@@ -777,7 +777,7 @@ input[aria-invalid="true"] {
 .route-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 44px;
   padding: 6px 12px;
   border: 0;
@@ -798,15 +798,32 @@ input[aria-invalid="true"] {
 }
 .route-row-rr {
   display: flex;
-  flex-wrap: wrap;
+  flex: none;
   gap: 4px;
 }
 .route-row-km {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
 .route-row.is-selected .route-row-km {
   font-weight: 600;
+}
+.ix-chip {
+  flex: none;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
 }
 .turn-chip {
   flex: none;

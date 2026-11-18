@@ -314,7 +314,7 @@ function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackI
 
 // ---- routes ----
 
-/** One row per route: its railroads, km and interchanges, and ↩ when it turns back. Click to select. */
+/** One row per route, always one line: its railroads, km, ⇄ interchanges and ↩ turn-backs. Click to select. */
 function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (id: RouteStrategy) => void }): ReactElement {
   return (
     <section className="route-rows" aria-label="Routes">
@@ -328,10 +328,14 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
                 <RailroadChip key={railroad} railroad={railroad} />
               ))}
             </span>
-            <span className="route-row-km">
-              {fmtKmShort(route.km)}
-              {route.interchanges > 0 && ` · ${interchangesWord(route.interchanges)}`}
-            </span>
+            <span className="route-row-km">{fmtKmShort(route.km)}</span>
+            {route.interchanges > 0 && (
+              // A short chip, not the word, so the row stays one line on a phone.
+              <span className="ix-chip" title={interchangesWord(route.interchanges)}>
+                <span aria-hidden="true">⇄{route.interchanges}</span>
+                <span className="visually-hidden">{interchangesWord(route.interchanges)}</span>
+              </span>
+            )}
             {turns > 0 && (
               <span className="turn-chip" title={route.turnBacks.map((t) => t.at.near).join(", ")}>
                 <span aria-hidden="true">↩{turns > 1 ? turns : ""}</span>

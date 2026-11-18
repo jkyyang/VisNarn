@@ -68,7 +68,10 @@ describe("Route planner", () => {
     const [pick, shortest] = routeRows();
     expect(pick).toHaveAttribute("aria-pressed", "true");
     expect(pick).toHaveTextContent("1,046 km");
-    expect(shortest).toHaveTextContent("839 km · 1 interchange");
+    // One line on a phone: km plus a short ⇄ chip; the word is only for screen readers and the tooltip.
+    expect(shortest).toHaveAccessibleName("BNSF UP 839 km 1 interchange");
+    expect(within(shortest).queryByText(/interchange/, { ignore: ".visually-hidden, script, style" })).toBeNull();
+    expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
     expect(fake.state.lastPlan).toEqual({ start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "shop", shopId: "shop-ex-1" }, include: DEFAULT_INCLUDE });
