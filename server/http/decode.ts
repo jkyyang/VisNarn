@@ -112,7 +112,7 @@ const list =
 
 const railroad: Decoder<Railroad> = oneOf(RAILROADS);
 
-const codeTypeOf: Decoder<CodeType> = nonEmpty(64);
+const codeTypeOf: Decoder<CodeType> = visible(nonEmpty(64));
 
 // ---- domain values ----
 
@@ -229,7 +229,7 @@ export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R][
   "POST /api/shops": (json) => shopDraft(json, ""),
   "PUT /api/shops/:shopId": (json) => shopDraft(json, ""),
   "POST /api/shops/import": (json) => importRequest(json, ""),
-  "POST /api/codes/import": (json) => ({ ...importRequest(json, ""), codeType: field(json, "", "codeType", codeTypeOf), label: field(json, "", "label", text(200)) }),
+  "POST /api/codes/import": (json) => ({ ...importRequest(json, ""), codeType: field(json, "", "codeType", codeTypeOf), label: field(json, "", "label", visible(text(200))) }),
   "POST /api/route": (json) => plan(json, ""),
   "POST /api/saved-routes": (json) => savedRouteDraft(json, ""),
   "PUT /api/saved-routes/:routeId": (json) => savedRouteDraft(json, ""),

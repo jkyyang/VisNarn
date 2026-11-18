@@ -88,9 +88,13 @@ export async function readCodes(source: RecordSource, codeType: CodeType): Promi
   records.forEach((record, row) => {
     const issue = (message: string) => issues.push({ row, line: record.line, message });
     const code = record.cells.code ?? "";
+    // SQLite cuts text at a NUL, so two such codes would collide on the unique key; refuse them like shop text.
     if (!code) issue("The code is empty.");
+    else if (UNSEEN.test(code)) issue("The code holds control or invisible characters.");
+    const name = record.cells.name || null;
+    if (name && UNSEEN.test(name)) issue("The code name holds control or invisible characters.");
     const location = locationOf(record, null, issue, "Give the code an fra_id, or lon and lat.");
-    items.push({ code, name: record.cells.name || null, location });
+    items.push({ code, name, location });
   });
   return parsed(source, records, items, issues);
 }

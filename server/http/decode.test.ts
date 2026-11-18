@@ -73,6 +73,8 @@ describe("decodeBody", () => {
   it("reads imports and shops", () => {
     const source = { kind: "csv", fileName: "EXAMPLE shops.csv", text: "name\n1" };
     expect(decodeBody["POST /api/codes/import"]({ source, commit: false, codeType: "splc", label: "SPLC" })).toEqual({ source, commit: false, codeType: "splc", label: "SPLC" });
+    expect(refusal(() => decodeBody["POST /api/codes/import"]({ source, commit: true, codeType: "q\u202eb", label: "SPLC" }))).toMatch(/^invalid codeType: .*invisible/);
+    expect(refusal(() => decodeBody["POST /api/codes/import"]({ source, commit: true, codeType: "splc", label: "Hello\u0000World" }))).toMatch(/^invalid label: .*invisible/);
     expect(refusal(() => decodeBody["POST /api/shops/import"]({ source: { ...source, kind: "xlsx" }, commit: true }))).toMatch(/^invalid source\.kind: /);
     expect(decodeBody["POST /api/shops"]({ name: "EXAMPLE shop", code: null, location: { kind: "text", text: "" } })).toEqual({
       name: "EXAMPLE shop",

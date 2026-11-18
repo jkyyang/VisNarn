@@ -89,6 +89,15 @@ describe("readShops / readCodes", () => {
     ]);
   });
 
+  it("reports a code or code name with control or invisible characters instead of storing a cut value", async () => {
+    const { issues } = await readCodes(csv("code,name,lon,lat\nA\u0000B,,-90.37,40.95\nA\u0000C,,-94.58,39.1\nEX-C,EX\u200bC,-94.58,39.1\nEX-D,EXAMPLE D,-94.58,39.1\n"), "splc");
+    expect(issues.map((i) => [i.row, i.message])).toEqual([
+      [0, "The code holds control or invisible characters."],
+      [1, "The code holds control or invisible characters."],
+      [2, "The code name holds control or invisible characters."],
+    ]);
+  });
+
   it("accepts code, name, fra_id and code, name, lon, lat", async () => {
     const { items, issues } = await readCodes(csv("code,name,fra_id,lon,lat\n668240,Temple,358070,,\n668241,,,-97.3,31.1\n668242,Nowhere,,,\n668243,,12a,,\n"), "splc");
     expect(items.slice(0, 2)).toEqual([
