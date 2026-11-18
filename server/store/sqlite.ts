@@ -6,7 +6,7 @@
  *   shops        (id PK, name, code UNIQUE NULL, location_json, example, updated_at)
  *   code_sets    (code_type PK, label, imported_at)
  *   node_codes   (code_type, code, name NULL, location_json, PRIMARY KEY (code_type, code))
- *   saved_routes (id PK, name, plan_json, option NULL)                          since schema 2
+ *   saved_routes (id PK, name, plan_json, option NULL, route_string)            since schema 2; route_string since 3
  *
  * Dormant since schema 2, kept because they hold user data: batches, batch_rows, route_fixes and the
  * 'import_profile' settings key. Nothing reads or writes them.
@@ -76,6 +76,9 @@ const MIGRATIONS: string[] = [
   `,
   `
   CREATE TABLE saved_routes (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan_json TEXT NOT NULL, option TEXT);
+  `,
+  `
+  ALTER TABLE saved_routes ADD COLUMN route_string TEXT NOT NULL DEFAULT '';
   `,
 ];
 
@@ -157,6 +160,7 @@ export function openStore(file: string): Store {
     plan: planOf(row.plan_json),
     // A value this version does not know reads as "no choice": the router's own route.
     option: (ROUTE_STRATEGIES as readonly unknown[]).includes(row.option) ? (row.option as RouteStrategy) : null,
+    routeString: String(row.route_string),
   });
 
   const setting = <T>(key: string): T | null => {
@@ -261,9 +265,9 @@ export function openStore(file: string): Store {
       save: (route) => {
         // ON CONFLICT DO UPDATE, not REPLACE: the row keeps its rowid, so its place among same-named routes.
         db.prepare(
-          `INSERT INTO saved_routes (id, name, plan_json, option) VALUES (?, ?, ?, ?)
-           ON CONFLICT (id) DO UPDATE SET name = excluded.name, plan_json = excluded.plan_json, option = excluded.option`,
-        ).run(route.id, route.name, json(route.plan), route.option);
+          `INSERT INTO saved_routes (id, name, plan_json, option, route_string) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET name = excluded.name, plan_json = excluded.plan_json, option = excluded.option, route_string = excluded.route_string`,
+        ).run(route.id, route.name, json(route.plan), route.option, route.routeString);
         wrote(null);
       },
       remove: (id) => {

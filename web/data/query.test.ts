@@ -125,7 +125,7 @@ describe("callApi", () => {
       return new Response("null", { status: 200 });
     }) as typeof fetch;
     await callApi("http://127.0.0.1:1", "GET /api/places/suggest", { query: { q: "Tem ple", role: "shop" } });
-    const draft: SavedRouteDraft = { name: "EXAMPLE", plan: { start: { kind: "text", text: "a" }, stops: [], destination: { kind: "text", text: "b" }, include: DEFAULT_INCLUDE }, option: null };
+    const draft: SavedRouteDraft = { name: "EXAMPLE", plan: { start: { kind: "text", text: "a" }, stops: [], destination: { kind: "text", text: "b" }, include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
     await callApi("", "PUT /api/saved-routes/:routeId", { params: { routeId: "r/1" }, body: draft });
     expect(seen[0].url).toBe("http://127.0.0.1:1/api/places/suggest?q=Tem+ple&role=shop");
     expect(seen[1].url).toBe("/api/saved-routes/r%2F1");

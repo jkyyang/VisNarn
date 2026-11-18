@@ -38,6 +38,7 @@ const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedR
   name,
   plan: { start: { kind: "text", text: "Kansas City, MO" }, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }], destination: { kind: "shop", shopId: "s1" as ShopId }, include: DEFAULT_INCLUDE },
   option: null,
+  routeString: "BNSF-[Temple, TX]-UP",
   ...over,
 });
 const code = (c: string, over: Partial<NodeCode> = {}): NodeCode => ({ codeType: "splc", code: c, name: null, location: { fraId: 358070 as FraId, railroad: null }, ...over });
@@ -126,10 +127,27 @@ describe("Store", () => {
     migrated.savedRoutes.save(route("r1", "KC → Chicago"));
     expect(migrated.savedRoutes.all()).toHaveLength(1);
     const check = new DatabaseSync(file);
-    expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "2" });
+    expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "3" });
     expect(check.prepare("SELECT id FROM batches").all()).toEqual([{ id: "b1" }]);
     expect(check.prepare("SELECT key FROM settings WHERE key = 'import_profile'").get()).toEqual({ key: "import_profile" });
     check.close();
+  });
+
+  it("opens a schema 2 file: a route saved before route strings reads with an empty one", () => {
+    const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
+    folders.push(dir);
+    const file = join(dir, "visnarn.db");
+    openStore(file).close();
+    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+    const raw = new DatabaseSync(file);
+    raw.exec(`ALTER TABLE saved_routes DROP COLUMN route_string;
+      UPDATE meta SET value = '2' WHERE key = 'schema_version';
+      INSERT INTO saved_routes (id, name, plan_json, option) VALUES ('r1', 'KC → Chicago', '${JSON.stringify(route("r1", "x").plan)}', NULL);`);
+    raw.close();
+
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.savedRoutes.get("r1" as SavedRouteId)).toEqual(route("r1", "KC → Chicago", { routeString: "" }));
   });
 
   it("revision goes up on every write and on no read", () => {

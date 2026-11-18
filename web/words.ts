@@ -6,6 +6,7 @@ import type { PlaceResolution } from "../shared/places.ts";
 import type { PlanPlaces } from "../shared/plans.ts";
 import type { Line } from "../shared/railroads.ts";
 import type { RoutePath, TurnBack } from "../shared/route.ts";
+import { isPlaceName } from "../shared/routeString.ts";
 import { fmtCompass, fmtKmShort, fmtSub } from "./format.ts";
 
 /**
@@ -47,12 +48,11 @@ export function pillText(route: RoutePath, selected: RoutePath): string {
 }
 
 const labelOf = (place: PlaceResolution | null) => (place?.ok ? shortPlace(place.place.label) : "");
-/** A clicked track point with no town of its own is named by distance ("250 km from Chicago, IL"): not a name to save under. */
-const unnamed = (label: string) => /^[\d,.]+ km from /.test(label);
 
 /** "Kansas City → Chicago via Galesburg": the name a new saved route starts with. */
 export function routeName(places: PlanPlaces): string {
-  const stops = places.stops.map(labelOf).filter((label) => label && !unnamed(label));
+  // A clicked point named by its distance to a city is no name to save under.
+  const stops = places.stops.map(labelOf).filter((label) => label && isPlaceName(label));
   return `${labelOf(places.start)} → ${labelOf(places.destination)}${stops.length ? ` via ${stops.join(", ")}` : ""}`;
 }
 

@@ -126,6 +126,7 @@ describe("Plans: saved routes", () => {
     name,
     plan: { start: text("Kansas City, MO"), stops: [], destination: text("Chicago, IL"), include: DEFAULT_INCLUDE },
     option: null,
+    routeString: "BNSF",
     ...over,
   });
 

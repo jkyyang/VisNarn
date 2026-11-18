@@ -98,7 +98,7 @@ describe("server", () => {
     try {
       let shopId = "" as ShopId;
       let routeId = "" as SavedRouteId;
-      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { start: text("Taylor, TX"), stops: [], destination: text("Waco, TX"), include: DEFAULT_INCLUDE }, option: null };
+      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { start: text("Taylor, TX"), stops: [], destination: text("Waco, TX"), include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/meta": () => s.api("GET /api/meta"),
@@ -155,7 +155,7 @@ describe("server", () => {
         ]),
       );
       expect(await s.api("GET /api/saved-routes")).toEqual([]);
-      const saved = await s.api("POST /api/saved-routes", { body: { name: "Taylor → NLR", plan: TAYLOR_TO_NLR, option: null } });
+      const saved = await s.api("POST /api/saved-routes", { body: { name: "Taylor → NLR", plan: TAYLOR_TO_NLR, option: null, routeString: "" } });
       expect((await s.api("GET /api/meta")).exampleOnly).toBe(false);
       await s.api("DELETE /api/saved-routes/:routeId", { params: { routeId: saved.id } });
       expect((await s.api("GET /api/meta")).exampleOnly).toBe(true);
@@ -197,7 +197,7 @@ describe("Route screen: plan a route", () => {
     await t.api("PUT /api/assumptions", { body: { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } } });
     try {
       const answer = await t.api("POST /api/route", { body: plan(text("Houston, TX"), text("Pasco, WA")) });
-      expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No allowed track reaches here from the place before." } });
+      expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No track reaches here from the stop before." } });
     } finally {
       await t.api("PUT /api/assumptions", { body: DEFAULT_ASSUMPTIONS });
     }
@@ -224,7 +224,7 @@ describe("Route screen: plan a route", () => {
 
 describe("Route screen: saved routes", () => {
   it("saves, lists by name, saves unchanged, replaces, removes; an unknown id is not-found and a blank name invalid", async () => {
-    const draft = (name: string): SavedRouteDraft => ({ name, plan: TAYLOR_TO_NLR, option: "shortest" });
+    const draft = (name: string): SavedRouteDraft => ({ name, plan: TAYLOR_TO_NLR, option: "shortest", routeString: "BNSF-[Fort Worth, TX]-UP" });
     const zulu = await t.api("POST /api/saved-routes", { body: draft("zulu → somewhere") });
     const alpha = await t.api("POST /api/saved-routes", { body: draft("Alpha → somewhere") });
     expect(alpha).toMatchObject({ name: "Alpha → somewhere", option: "shortest", plan: TAYLOR_TO_NLR });
@@ -265,7 +265,7 @@ describe("Shops screen", () => {
     await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE at sea", code: null, location: { kind: "coord", lon: -90, lat: 25 } } })).rejects.toMatchObject({
       kind: "invalid",
       field: "location",
-      message: expect.stringMatching(/15 km/),
+      message: "No track near -90, 25.",
     });
     await expect(s.api("POST /api/shops", { body: { name: "", code: null, location: { kind: "text", text: "Waco, TX" } } })).rejects.toMatchObject({ kind: "invalid", field: "name" });
     await expect(s.api("POST /api/shops", { body: { name: "EXAMPLE copy", code: "ex-nlr-01", location: { kind: "text", text: "Waco, TX" } } })).rejects.toMatchObject({
@@ -316,7 +316,7 @@ describe("restart", () => {
   it("a new server on the same data folder has the shops, the saved routes and the routing rules; routes are worked out again", async () => {
     const first = await startTestApp();
     const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
-    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id }, include: DEFAULT_INCLUDE }, option: null } });
+    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id }, include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" } });
     const mine: Assumptions = { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, interchangePenaltyKm: 300 } };
     await first.api("PUT /api/assumptions", { body: mine });
     // The user deletes every EXAMPLE shop: they must not come back on the next start.

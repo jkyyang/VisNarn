@@ -72,6 +72,16 @@ describe("plan session", () => {
     expect(planReducer(s, { type: "removeStop", index: 5 })).toBe(s);
   });
 
+  it("reverse swaps start and destination, runs the stops the other way keeping each chosen carrier, and can be undone", () => {
+    const s = run(planned(), { type: "addStop", ref: node(1), index: 0 }, { type: "addStop", ref: node(2), index: 1 }, { type: "setLine", index: 1, railroad: "UP" });
+    const back = planReducer(s, { type: "reverse" });
+    expect(back.plan.present.start).toEqual(CHICAGO);
+    expect(back.plan.present.destination).toEqual(KC);
+    expect(back.plan.present.stops).toEqual([{ kind: "node", fraId: 2, railroad: "UP" }, node(1)]);
+    expect(planReducer(back, { type: "reverse" }).plan.present).toEqual(s.plan.present);
+    expect(planReducer(back, { type: "undo" }).plan.present).toEqual(s.plan.present);
+  });
+
   it("clear empties the plan and can be undone", () => {
     const s = run(planned(), { type: "addStop", ref: node(1), index: 0 }, { type: "clear" });
     expect(s.plan.present).toEqual(EMPTY_PLAN);

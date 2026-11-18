@@ -166,6 +166,7 @@ const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
   name: field(value, path, "name", name(120)),
   plan: field(value, path, "plan", fullPlan),
   option: field(value, path, "option", nullable(oneOf(ROUTE_STRATEGIES))),
+  routeString: field(value, path, "routeString", text(5_000)),
 });
 
 const shopDraft: Decoder<ShopDraft> = (value, path) => ({

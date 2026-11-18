@@ -28,7 +28,7 @@ test.describe("Shops", () => {
     await expect(save).toBeDisabled();
     const location = form.getByRole("combobox", { name: "Location" });
     await location.fill("-140, 70");
-    await expect(form).toContainText("-140, 70 is more than 15 km from any Class I main line.");
+    await expect(form).toContainText("No track near -140, 70.");
     await expect(save).toBeDisabled();
     await location.fill("-97.34, 31.10");
     await expect(form).toContainText(/On the network · BNSF/);
@@ -75,7 +75,7 @@ test.describe("Shops", () => {
 
     const preview = card.getByRole("region", { name: "Import preview" });
     await expect(preview).toContainText("test-shops.csv · 2 ready · 1 not saved");
-    await expect(preview.getByRole("list", { name: "Rows to fix before saving" })).toHaveText("Line 4: -140, 10 is more than 15 km from any Class I main line.");
+    await expect(preview.getByRole("list", { name: "Rows to fix before saving" })).toHaveText("Line 4: No track near -140, 10.");
     // A preview saves nothing.
     await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Omaha test shop" })).toHaveCount(0);
 

@@ -309,7 +309,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     const id = (method === "PUT" ? parts[2] : `route-${state.nextId++}`) as SavedRouteId;
     const existing = state.savedRoutes.find((r) => r.id === id);
     if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "This saved route does not exist any more. It may have been deleted.");
-    const saved: SavedRoute = { id, name, plan: draft.plan, option: draft.option };
+    const saved: SavedRoute = { id, name, plan: draft.plan, option: draft.option, routeString: draft.routeString };
     state.savedRoutes = existing ? state.savedRoutes.map((r) => (r.id === id ? saved : r)) : [...state.savedRoutes, saved];
     return saved;
   }

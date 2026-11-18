@@ -46,9 +46,9 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
     else clickPlace(target.ref, target.position, places);
   };
 
-  const onSave = async (name: string) => {
+  const onSave = async (name: string, routeString: string) => {
     if (!isFull(plan) || !chosen) return;
-    const route = await saveRoute({ name, plan, option: chosen.strategies[0] }, screen.saved);
+    const route = await saveRoute({ name, plan, option: chosen.strategies[0], routeString }, screen.saved);
     if (screen.saved) return;
     // The session keeps its undo history under the new id; the URL now names the saved route.
     dispatch({ type: "saved", id: route.id });

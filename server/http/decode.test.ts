@@ -44,8 +44,8 @@ describe("decodeBody", () => {
     expect(refusal(() => decodeBody["POST /api/route"]("not an object"))).toMatch(/^invalid null: /);
   });
 
-  it("reads a saved route: a name, both ends, a known option or none", () => {
-    const draft = { name: "  KC → Chicago  ", plan, option: "shortest" };
+  it("reads a saved route: a name, both ends, a known option or none, and its route string", () => {
+    const draft = { name: "  KC → Chicago  ", plan, option: "shortest", routeString: "BNSF-[Chicago, IL]-CSXT" };
     expect(decodeBody["POST /api/saved-routes"](draft)).toEqual({ ...draft, name: "KC → Chicago" });
     expect(decodeBody["PUT /api/saved-routes/:routeId"]({ ...draft, option: null })).toMatchObject({ option: null });
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, name: "  " }))).toMatch(/^invalid name: /);
@@ -56,6 +56,7 @@ describe("decodeBody", () => {
     expect(decodeBody["POST /api/saved-routes"]({ ...draft, name: "Kansas City 🚂 Chicago" }).name).toBe("Kansas City 🚂 Chicago");
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, option: "fastest" }))).toMatch(/^invalid option: .*no-turn-backs/);
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, plan: { ...plan, start: null } }))).toMatch(/^invalid plan\.start: /);
+    expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: undefined }))).toMatch(/^invalid routeString: /);
   });
 
   it("reads assumptions in their three groups and refuses a number that is not finite", () => {

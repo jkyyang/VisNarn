@@ -158,5 +158,17 @@ export const ROUTES: Record<string, PathSpec[]> = {
     },
   ],
   "Red Deer, AB > Calgary, AB": [{ strategies: ["pick", "shortest", "fewest-interchanges", "no-turn-backs"], km: 152, legs: [{ railroad: "CPKC", points: [[-113.81, 52.27], [-113.9, 51.7], [-114.07, 51.05]], subdivisions: ["RED DEER"] }], turnBacks: [] }],
+  // BNSF hands over to CN at a point with no named place near (as the real network does west of Chicago).
+  "Kansas City, MO > Chicago, IL": [
+    {
+      strategies: ["pick", "shortest", "fewest-interchanges", "no-turn-backs"],
+      km: 703,
+      legs: [
+        { railroad: "BNSF", points: [[-94.58, 39.1], [-93.07, 39.78], [-91.36, 40.62], [-90.37, 40.95], [-88.27, 41.77]], subdivisions: ["MARCELINE", "CHILLICOTHE"] },
+        { railroad: "CN", points: [[-88.27, 41.77], [-87.63, 41.88]], subdivisions: ["JOLIET"] },
+      ],
+      turnBacks: [],
+    },
+  ],
   "Omaha, NE > North Platte, NE": [{ strategies: ["pick", "shortest", "fewest-interchanges", "no-turn-backs"], km: 450, legs: [{ railroad: "UP", points: [[-95.94, 41.26], [-97.6, 41.1], [-99.08, 40.7], [-100.77, 41.12]], subdivisions: ["LANE", "KEARNEY"] }], turnBacks: [] }],
 };

@@ -82,8 +82,8 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     await clickTemple(page, planned);
-    const lines = page.getByRole("radiogroup", { name: "Line at stop 1" });
-    await expect(lines.getByRole("radio", { name: "Any" })).toHaveAttribute("aria-checked", "true");
+    const lines = page.getByRole("radiogroup", { name: "Next carrier at stop 1" });
+    await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"UP"'));
     await lines.getByRole("radio", { name: "UP" }).click();
     await answered;
@@ -95,7 +95,11 @@ test.describe("Route planner", () => {
     await expect(page).toHaveURL(/\?option=/);
     const chosen = (await pressedRow(page).textContent()) ?? "";
     await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Taylor → North Little Rock via Temple");
-    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    const save = page.getByRole("form", { name: "Save route" });
+    await save.getByRole("button", { name: "Save" }).click();
+    // This route changes railroad where no named place is near: saving asks first.
+    await expect(save.getByRole("alert")).toContainText("Railroad change with no place name");
+    await save.getByRole("button", { name: "Save anyway" }).click();
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
     await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
     const savedAt = new URL(page.url()).pathname;
@@ -134,7 +138,12 @@ test.describe("Route planner", () => {
     await expect(legend(page)).toHaveText(["UP", "Short line"]);
 
     await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Baton Rouge → Ville Platte");
-    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    const save = page.getByRole("form", { name: "Save route" });
+    await save.getByRole("button", { name: "Save" }).click();
+    // UP hands over to the short line where no named place is near: saving asks first, and only Save anyway saves.
+    await expect(save.getByRole("alert")).toContainText("Railroad change with no place name");
+    await expect(page).not.toHaveURL(/\/route\/saved\//);
+    await save.getByRole("button", { name: "Save anyway" }).click();
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
     await page.reload();
     await expect(shortLines).toBeChecked();
@@ -151,7 +160,7 @@ test.describe("Route planner", () => {
     const plan = { start: { kind: "text", text: "Taylor, TX" }, stops: [{ kind: "text", text: "Temple, TX" }], destination: { kind: "text", text: "North Little Rock, AR" } };
     const answer = (await (await request.post("/api/route", { data: plan })).json()) as PlannedRoute;
     test.skip(answer.outcome !== "routed" || !answer.routes[0].turnBacks.length, "This network build has no turn-back on that route; the jsdom test covers the mark.");
-    const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null } })).json()) as { id: string };
+    const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null, routeString: "" } })).json()) as { id: string };
 
     await page.goto(`/route/saved/${saved.id}`);
     await expect(routeRows(page).first()).toContainText("turn-back");
@@ -162,5 +171,51 @@ test.describe("Route planner", () => {
     await expect(page.getByRole("tooltip")).toContainText(/ (N|NE|E|SE|S|SW|W|NW) → /);
     await expect(legend(page).last()).toHaveText("↩Turn-back");
     await request.delete(`/api/saved-routes/${saved.id}`);
+  });
+
+  test("Kansas City → Chicago: the route string; the next carrier chosen at a junction is marked; saved and reopened the same; reversed", async ({ page }) => {
+    await page.goto("/route");
+    await planRoute(page, "Kansas City, MO", "Chicago, IL");
+    const string = page.getByRole("region", { name: "Route string" });
+    await expect(string).toContainText("Planned route — not a clearance or schedule");
+    // Carriers and [our own place names] only: never a made-up junction code.
+    const shape = /^(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line)( – \[[^\]]+\] – (BNSF|UP|CSXT|NS|CN|CPKC|regional|short line))*$/;
+    await expect(string.locator(".route-string-text")).toHaveText(shape);
+
+    // FRA node 412783 in Chicago, where BNSF, UP, NS and CN meet: NS takes the car on there.
+    await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 412783");
+    await page.getByRole("option", { name: /FRA node 412783/ }).click();
+    await page.getByRole("button", { name: "Add as stop" }).click();
+    const lines = page.getByRole("radiogroup", { name: "Next carrier at stop 1" });
+    await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+    const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"NS"'));
+    await lines.getByRole("radio", { name: "NS", exact: true }).click();
+    await answered;
+    await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
+    await expect(string.locator(".route-string-text")).toHaveText(/ – NS$/);
+    await expect(string.locator(".route-string-text")).toHaveText(shape);
+    const sections = page.getByRole("list", { name: "Sections" });
+    await expect(sections.locator(".section--interchange").filter({ hasText: "→ NS" })).toContainText("you chose");
+    const planned = (await string.locator(".route-string-text").textContent()) ?? "";
+    await keepScreenshot(page, "route-string");
+
+    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Kansas City → Chicago, NS at Chicago");
+    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
+    const savedAt = new URL(page.url()).pathname;
+    await page.goto(savedAt);
+    await expect(string.locator(".route-string-text")).toHaveText(planned);
+    await expect(string).not.toContainText("Saved as");
+    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Reverse route" }).click();
+    await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue(/^Chicago/);
+    await expect(page.getByRole("combobox", { name: "Destination" })).toHaveValue(/^Kansas City/);
+    await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
+    await expect(string.locator(".route-string-text")).toHaveText(/^NS – /);
+    await expect(string.locator(".route-string-text")).toHaveText(shape);
+
+    // Delete it again, so the other tests start from no saved routes.
+    await page.request.delete(`/api/saved-routes/${savedAt.split("/").pop()}`);
   });
 });

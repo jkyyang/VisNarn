@@ -44,6 +44,7 @@ describe("Route planner", () => {
       name: "EXAMPLE Omaha → North Platte",
       plan: { start: { kind: "text", text: "Omaha, NE" }, stops: [], destination: { kind: "text", text: "North Platte, NE" }, include: DEFAULT_INCLUDE },
       option: null,
+      routeString: "",
     });
     openPage("/route");
     expect(field("Start")).toHaveValue("");
@@ -88,20 +89,57 @@ describe("Route planner", () => {
     await waitFor(() => expect(stopRows()).toHaveLength(1));
   });
 
-  it("where two railroads meet, the stop offers Any | BNSF | UP; the choice is sent, and Undo puts Any back", async () => {
+  it("where two railroads meet, the stop offers the next carrier: Router's pick | BNSF | UP; the choice is sent, and Undo puts Router's pick back", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    const lines = await screen.findByRole("radiogroup", { name: "Line at stop 1" });
-    expect(within(lines).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Any", "BNSF", "UP"]);
-    expect(within(lines).getByRole("radio", { name: "Any" })).toHaveAttribute("aria-checked", "true");
+    const lines = await screen.findByRole("radiogroup", { name: "Next carrier at stop 1" });
+    expect(within(lines).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Router's pick", "BNSF", "UP"]);
+    expect(within(lines).getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
 
     await user.click(within(lines).getByRole("radio", { name: "UP" }));
     await waitFor(() => expect(fake.state.lastPlan?.stops).toEqual([{ kind: "node", fraId: 358070, railroad: "UP" }]));
     expect(screen.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(screen.getByRole("radio", { name: "Any" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("shows the chosen route as a route string, carriers and junctions only, marked as a plan, not a clearance or schedule", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    const string = screen.getByRole("region", { name: "Route string" });
+    expect(string).toHaveTextContent("BNSF");
+    expect(string).not.toHaveTextContent("–");
+    expect(string).toHaveTextContent("Planned route — not a clearance or schedule");
+
+    await user.click(routeRows()[1]);
+    await waitFor(() => expect(screen.getByRole("region", { name: "Route string" })).toHaveTextContent("BNSF – [Fort Worth, TX] – UP"));
+    expect(within(screen.getByRole("list", { name: "Sections" })).getByText("router's pick")).toBeInTheDocument();
+  });
+
+  it("a railroad change with no place name: Save warns first and saves only on Save anyway; Reverse route flips the ends", async () => {
+    const user = userEvent.setup();
+    openPage("/route");
+    await user.type(field("Start"), "Kansas City, MO{Enter}");
+    await user.type(field("Destination"), "Chicago, IL{Enter}");
+    const string = await screen.findByRole("region", { name: "Route string" });
+    expect(string).toHaveTextContent(/^BNSF – \[\d+ km from [^\]]+\] – CN/);
+    expect(within(screen.getByRole("list", { name: "Sections" })).getByText("no place name")).toBeInTheDocument();
+
+    const save = screen.getByRole("form", { name: "Save route" });
+    await user.click(within(save).getByRole("button", { name: "Save" }));
+    expect(within(save).getByRole("alert")).toHaveTextContent(/Railroad change with no place name: \d+ km from/);
+    expect(fake.state.savedRoutes).toEqual([]);
+    await user.click(within(save).getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(fake.state.savedRoutes).toHaveLength(1));
+    expect(fake.state.savedRoutes[0].routeString).toMatch(/^BNSF-\[\d+ km from [^\]]+\]-CN$/);
+
+    const there = fake.state.lastPlan;
+    await user.click(screen.getByRole("button", { name: "Reverse route" }));
+    expect(field("Start")).toHaveValue("Chicago, IL");
+    expect(field("Destination")).toHaveValue("Kansas City, MO");
+    await waitFor(() => expect(fake.state.lastPlan).toMatchObject({ start: there?.destination, destination: there?.start }));
   });
 
   it("Class I is always on; ticking Short lines plans again with short lines included, and Undo unticks it", async () => {
@@ -178,6 +216,7 @@ describe("Route planner", () => {
       name: "EXAMPLE Kansas City → gone shop",
       plan: { start: { kind: "shop", shopId: "shop-ex-2" as ShopId }, stops: [], destination: { kind: "shop", shopId: "shop-gone" as ShopId }, include: DEFAULT_INCLUDE },
       option: null,
+      routeString: "",
     });
     openPage("/route/saved/route-9");
     await waitFor(() => expect(field("Destination")).toHaveAttribute("aria-invalid", "true"));

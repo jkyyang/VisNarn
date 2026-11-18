@@ -65,7 +65,7 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
     save(draft, id) {
       const name = draft.name.trim();
       if (!name) throw new AppError("invalid", "Give the route a name.", "name");
-      const next: SavedRoute = { id: id ?? (randomUUID() as SavedRouteId), name, plan: draft.plan, option: draft.option };
+      const next: SavedRoute = { id: id ?? (randomUUID() as SavedRouteId), name, plan: draft.plan, option: draft.option, routeString: draft.routeString };
       if (id !== null) {
         const known = store.savedRoutes.get(id) ?? unknown();
         if (canonical(known) === canonical(next)) return known;

@@ -41,6 +41,8 @@ export type PlanAction =
   | { type: "setInclude"; include: TrackIncluded }
   /** Undoable. */
   | { type: "clear" }
+  /** Destination becomes the start and the stops run the other way. Undoable. */
+  | { type: "reverse" }
   | { type: "pick"; field: PlanField | null }
   | { type: "missed" }
   /** Adopt the id after the first save; the history stays. */
@@ -131,6 +133,8 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
       return push(session, { ...plan, include: action.include });
     case "clear":
       return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
+    case "reverse":
+      return push(session, { ...plan, start: plan.destination, stops: [...stops].reverse(), destination: plan.start });
     case "pick":
       return { ...session, pick: action.field, missed: false };
     case "missed":
