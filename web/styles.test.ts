@@ -8,4 +8,20 @@ describe("styles.css", () => {
   it("has no date or time input selectors", () => {
     expect(css).not.toMatch(/type="(datetime-local|date|time)"/);
   });
+
+  // jsdom has no layout, so this reads the rule: a nowrap "DRAFT-UTLX-ECH" made the shop table wider than a 360 px card and clipped Edit.
+  it("lets a shop code wrap on a phone so each row's Edit stays visible", () => {
+    const start = css.indexOf("@media (max-width: 640px)");
+    expect(start).toBeGreaterThan(-1);
+    let depth = 0;
+    let end = css.indexOf("{", start);
+    do {
+      if (css[end] === "{") depth++;
+      if (css[end] === "}") depth--;
+      end++;
+    } while (depth > 0 && end < css.length);
+    const phone = css.slice(start, end);
+    const rule = /\.shop-table td\.mono\s*\{([^}]*)\}/.exec(phone);
+    expect(rule?.[1]).toMatch(/white-space:\s*normal/);
+  });
 });

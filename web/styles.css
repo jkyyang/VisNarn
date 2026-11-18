@@ -1732,6 +1732,12 @@ input[aria-invalid="true"] {
     padding-left: 5px;
     padding-right: 5px;
   }
+  /* A long code breaks after a hyphen ("DRAFT-" / "UTLX-ECH"), so each row's Edit stays inside a 360 px card.
+     9ch plus the cell padding (a table cell's min-width counts it) keeps "EX-BHM-01" whole. */
+  .shop-table td.mono {
+    white-space: normal;
+    min-width: calc(9ch + 10px);
+  }
   .import-row {
     flex-wrap: wrap;
   }

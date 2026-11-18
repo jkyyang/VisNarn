@@ -1,7 +1,7 @@
 /**
  * `node server/main.ts --selftest`: proves, under plain Node rather than vitest's esbuild (which
  * accepts syntax Node refuses), that the server's sources load, a routing worker thread starts, the
- * EXAMPLE route plans, and it draws draws along the real track (track.bin matches graph.bin). It
+ * EXAMPLE route plans, and it draws along the real track (track.bin matches graph.bin). It
  * touches no database and opens no port.
  */
 import { loadNetwork, loadTrackShapes, type Trip } from "../engine/index.ts";
