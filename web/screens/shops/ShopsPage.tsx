@@ -357,6 +357,8 @@ function useImport<T>(run: (request: ImportRequest) => Promise<ImportReport<T>>)
     setError(null);
     setSaved(null);
     if (!file) return;
+    // Drop the last file's preview first: if this file fails, Save must not write the old one.
+    setPreview(null);
     setBusy(true);
     try {
       const text = await readFileText(file);

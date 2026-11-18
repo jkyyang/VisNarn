@@ -208,4 +208,19 @@ describe("Shops screen", () => {
     expect(await screen.findByText("Shop at Omaha")).toBeInTheDocument();
     expect(fake.state.shops).toHaveLength(8);
   });
+
+  it("a second file that fails replaces the first file's preview, so Save cannot write the old file", async () => {
+    const user = userEvent.setup();
+    openPage("/shops");
+    const card = await screen.findByRole("region", { name: "Import shop list" });
+    const csv = "name,lon,lat\nShop at Omaha,-95.94,41.26\n";
+    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([csv], "good.csv", { type: "text/csv" }));
+    expect(await within(card).findByRole("region", { name: "Import preview" })).toHaveTextContent("good.csv · 1 ready");
+
+    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([""], "empty.csv", { type: "text/csv" }));
+    expect(await within(card).findByRole("alert")).toBeInTheDocument();
+    expect(within(card).queryByRole("region", { name: "Import preview" })).not.toBeInTheDocument();
+    expect(within(card).queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();
+    expect(fake.state.shops).toHaveLength(6);
+  });
 });

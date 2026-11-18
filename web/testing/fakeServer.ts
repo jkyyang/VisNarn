@@ -278,7 +278,10 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
 
   if (route === "GET /api/shops") return state.shops;
   if (route === "POST /api/shops/import") {
-    const report = readShopCsv(state, (anyBody.source as { text: string }).text);
+    const source = anyBody.source as { fileName: string; text: string };
+    // As the real server: an empty file is refused, not previewed as zero rows.
+    if (!source.text.trim()) throw new HttpError(400, "invalid", `${source.fileName} is empty.`, "source");
+    const report = readShopCsv(state, source.text);
     if (anyBody.commit) state.shops.push(...report.ready);
     return { ...report, committed: !!anyBody.commit };
   }
