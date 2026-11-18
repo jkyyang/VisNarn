@@ -107,7 +107,7 @@ describe("Plans.route", () => {
 
     store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["UP"] } });
     const noPath = await plans.route(plan(text("Houston, TX"), text("Pasco, WA")));
-    expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No allowed track reaches here from the place before." } });
+    expect(noPath).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No track reaches here from the stop before." } });
 
     // A stop on a branch the car can only leave the wrong way: the stop is at fault, not the destination.
     store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS);

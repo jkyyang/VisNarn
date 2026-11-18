@@ -57,7 +57,7 @@ describe("Shops screen", () => {
     expect(save).toBeDisabled();
 
     await user.type(within(form).getByRole("textbox", { name: "Location" }), "-140, 70");
-    expect(await within(form).findByText("-140, 70 is more than 15 km from any Class I main line.")).toBeInTheDocument();
+    expect(await within(form).findByText("No track near -140, 70.")).toBeInTheDocument();
     expect(save).toBeDisabled();
 
     const location = within(form).getByRole("textbox", { name: "Location" });
@@ -160,7 +160,7 @@ describe("Shops screen", () => {
 
     const preview = await within(card).findByRole("region", { name: "Import preview" });
     expect(preview).toHaveTextContent("shops.csv · 2 ready · 1 not saved");
-    expect(within(preview).getByRole("list", { name: "Rows to fix before saving" })).toHaveTextContent("Line 4: -140, 10 is more than 15 km from any Class I main line.");
+    expect(within(preview).getByRole("list", { name: "Rows to fix before saving" })).toHaveTextContent("Line 4: No track near -140, 10.");
     expect(fake.state.shops).toHaveLength(6);
 
     await user.click(within(preview).getByRole("button", { name: "Save 2 shops" }));

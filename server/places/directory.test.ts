@@ -123,7 +123,7 @@ describe("Directory.resolve", () => {
   it("coordinates over 15 km from mainline are off-network; a deleted shop is removed", () => {
     const { store, directory } = setup();
     const sea = problemOf(directory.resolve({ kind: "coord", lon: -90, lat: 25 }, "position"));
-    expect(sea).toMatchObject({ kind: "off-network", message: expect.stringMatching(/more than 15 km from any Class I main line/) });
+    expect(sea).toMatchObject({ kind: "off-network", message: "No track near -90, 25." });
     store.shops.save(shop({ location: { lon: -90, lat: 25 }, name: "EXAMPLE at sea" }));
     expect(problemOf(directory.resolve({ kind: "shop", shopId: "s1" as ShopId }, "shop")).message).toMatch(/^The shop EXAMPLE at sea: /);
     store.shops.remove("s1" as ShopId);
@@ -134,8 +134,8 @@ describe("Directory.resolve", () => {
   it("a node ref with a railroad keeps it; railroads lists every railroad with track there", () => {
     const { directory } = setup();
     expect(placeOf(directory.resolve({ kind: "node", fraId: TEMPLE, railroad: "UP" }, "position"))).toMatchObject({ fraId: TEMPLE, railroad: "UP", railroads: ["BNSF", "UP"] });
-    expect(problemOf(directory.resolve({ kind: "node", fraId: TEMPLE, railroad: "CSXT" }, "position"))).toMatchObject({ kind: "off-network", message: expect.stringMatching(/CSXT has no track at FRA node 358070/) });
-    expect(problemOf(directory.resolve({ kind: "node", fraId: 1 as FraId, railroad: null }, "position")).kind).toBe("removed");
+    expect(problemOf(directory.resolve({ kind: "node", fraId: TEMPLE, railroad: "CSXT" }, "position"))).toMatchObject({ kind: "off-network", message: "CSXT has no track at Temple, TX." });
+    expect(problemOf(directory.resolve({ kind: "node", fraId: 1 as FraId, railroad: null }, "position"))).toMatchObject({ kind: "removed", message: "No track found for that code." });
   });
 
   it("answers change after a shop or code set is saved (memo follows store.revision)", () => {
@@ -256,7 +256,7 @@ describe("Shops / Codes", () => {
     });
     expect(report.ready.map((s) => s.name)).toEqual(["EXAMPLE ok"]);
     expect(report.issues.map((i) => [i.line, i.message])).toEqual([
-      [3, expect.stringMatching(/more than 15 km/)],
+      [3, "No track near -90, 25."],
       [4, expect.stringMatching(/No place called "NO-SUCH-CODE"/)],
       [5, expect.stringMatching(/repeats the code EX-1 from line 2/)],
     ]);

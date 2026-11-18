@@ -18,7 +18,7 @@
  *
  * Anything that does not resolve is a PlaceProblem, shown at the place it is about; a plan with one is not routed.
  */
-import { MAX_SNAP_KM, type City, type RailNetwork } from "../../engine/index.ts";
+import type { City, RailNetwork } from "../../engine/index.ts";
 import { round5 } from "../../shared/geo.ts";
 import type {
   FraId, NetworkNode, NodeCode, NodeLocation, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
@@ -60,9 +60,9 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   const atNode = (ref: PlaceRef, fraId: FraId, railroad: Railroad | null, how: Omit<PlaceMatch, "confidence" | "snapKm">, label?: string): PlaceResolution => {
     const node = network.node(fraId);
-    if (!node) return problem("removed", `FRA node ${fraId} is not in this network file.`);
+    if (!node) return problem("removed", "No track found for that code.");
     if (railroad && !node.railroads.includes(railroad)) {
-      return problem("off-network", `${railroad} has no track at FRA node ${fraId} (${node.near}). Track there: ${node.railroads.join(", ") || "none"}.`);
+      return problem("off-network", `${railroad} has no track at ${node.near}.`);
     }
     return {
       ok: true,
@@ -84,7 +84,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     const snap = network.snap(lon, lat);
     if (!snap) {
       const what = label ? `${label} (${round5(lon)}, ${round5(lat)})` : `${round5(lon)}, ${round5(lat)}`;
-      return problem("off-network", `${what} is more than ${MAX_SNAP_KM} km from any Class I main line.`);
+      return problem("off-network", `No track near ${what}.`);
     }
     return {
       ok: true,

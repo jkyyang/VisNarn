@@ -95,12 +95,12 @@ function resolve(state: FakeState, ref: PlaceRef, role: PlaceRole): PlaceResolut
       return problem("unknown", `There is no code set "${ref.codeType}" yet, so ${ref.code} cannot be found.`);
     case "node": {
       const n = NODES.find((x) => x.fraId === ref.fraId);
-      if (!n) return problem("unknown", `FRA node ${ref.fraId} is not on this network.`);
+      if (!n) return problem("unknown", "No track found for that code.");
       return resolved(ref, n.near, [n.lon, n.lat], "node", n.railroads, n.fraId, ref.railroad);
     }
     case "coord": {
       const city = nearestCity(ref.lon, ref.lat, 60);
-      if (!city) return problem("off-network", `${ref.lon}, ${ref.lat} is more than 15 km from any Class I main line.`);
+      if (!city) return problem("off-network", `No track near ${ref.lon}, ${ref.lat}.`);
       return resolved(ref, `${round5(ref.lat)}, ${round5(ref.lon)} (near ${city.name})`, [ref.lon, ref.lat], "coordinates", city.railroads);
     }
   }
