@@ -10,6 +10,7 @@
  */
 import { Worker } from "node:worker_threads";
 import { combine, tripKey, type RouteResult, type Routed, type Trip } from "../../engine/index.ts";
+import { createCache } from "../../shared/cache.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Job, JobResult, WorkerData } from "./protocol.ts";
 
@@ -24,6 +25,10 @@ export interface RoutePlanner {
 
 /** About 100 MB of answers: a regional route has ~400 points, a continental one ~1,500. */
 const CACHE_POINTS = 2_000_000;
+/** And at most this many, however small: every unroutable trip is one answer too. */
+const CACHE_ANSWERS = 20_000;
+
+const pointsOf = (result: RouteResult) => (result.ok ? 1 + result.path.legs.reduce((n, leg) => n + leg.path.length, 0) : 1);
 
 /** One (trip, strategy) search: queued, then running on a worker, then cached. */
 interface Search {
@@ -50,31 +55,11 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
   const threads: Thread[] = [];
   const queue: Search[] = [];
   const inFlight = new Map<string, Search>();
-  const cache = new Map<string, { result: RouteResult; points: number }>();
-  let cachedPoints = 0;
+  const cache = createCache<string, RouteResult>({ maxEntries: CACHE_ANSWERS, maxSize: CACHE_POINTS, sizeOf: pointsOf });
   let nextId = 1;
   let closed = false;
 
   const searchKey = (trip: Trip, strategy: RouteStrategy) => `${tripKey(options.networkVersion, trip)}\u0000${strategy}`;
-
-  const cached = (key: string): RouteResult | undefined => {
-    const entry = cache.get(key);
-    if (!entry) return undefined;
-    cache.delete(key);
-    cache.set(key, entry);
-    return entry.result;
-  };
-
-  const remember = (key: string, result: RouteResult) => {
-    const points = result.ok ? 1 + result.path.legs.reduce((n, leg) => n + leg.path.length, 0) : 1;
-    cache.set(key, { result, points });
-    cachedPoints += points;
-    for (const [oldest, entry] of cache) {
-      if (cachedPoints <= CACHE_POINTS || oldest === key) break;
-      cache.delete(oldest);
-      cachedPoints -= entry.points;
-    }
-  };
 
   const spawn = (): Thread => {
     const data: WorkerData = { networkDir: options.networkDir };
@@ -84,7 +69,7 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
       if (!search || search.id !== answer.id) return;
       finish(thread);
       if ("result" in answer) {
-        remember(search.key, answer.result);
+        cache.set(search.key, answer.result);
         search.resolve(answer.result);
       } else {
         // Waypoints only, no car: a search holds coordinates and ids, never a report.
@@ -157,7 +142,7 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
       const waiting: Search[] = [];
       for (const strategy of ROUTE_STRATEGIES) {
         const key = searchKey(trip, strategy);
-        const hit = cached(key);
+        const hit = cache.get(key);
         if (hit) {
           known.set(strategy, hit);
           continue;

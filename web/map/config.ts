@@ -63,3 +63,14 @@ export const DECK_PICK_RADIUS_PX = 8;
 
 /** The phone layout: matches the @media (max-width: 640px) rules in web/styles.css. */
 export const PHONE_QUERY = "(max-width: 640px)";
+
+/**
+ * MapLibre's tile cache, per source: tiles kept after they leave the screen, so zooming or panning
+ * back shows them at once. MapLibre sizes it as the tiles a screen holds times five zoom levels;
+ * this caps that on a large screen (a 256 px raster tile takes about 0.35 MB of graphics memory, and
+ * Satellite at night draws three raster sources).
+ */
+export const TILE_CACHE_MAX_TILES = 200;
+
+/** Spare tile textures MapLibre may keep for reuse, per tile size; the rest are freed when the map is idle. */
+export const SPARE_TILE_TEXTURES = 32;

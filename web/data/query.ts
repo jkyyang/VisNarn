@@ -13,6 +13,7 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, type Route } from "../../shared/api.ts";
 import { APP_ERROR_KINDS, AppError } from "../../shared/app.ts";
+import { createCache } from "../../shared/cache.ts";
 
 /** Routes that change nothing on the server. Three of them are POSTs because their input is a document. */
 export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/track">;
@@ -98,7 +99,8 @@ interface Entry {
   controller: AbortController | null;
   /** Set by a write: the answer may be out of date and is fetched again on next use. */
   invalid: boolean;
-  dropTimer: ReturnType<typeof setTimeout> | null;
+  /** When the last component showing it went away (epoch ms). */
+  idleSince: number;
 }
 
 export interface QueryCache {
@@ -115,11 +117,18 @@ export interface QueryCache {
 
 const IDLE: QueryState<never> = { status: "idle" };
 const LOADING: QueryState<never> = { status: "loading" };
-/** How long an answer nobody shows is kept, so going back to a screen shows it at once. */
+/**
+ * Answers nobody shows are kept a while, so going back to a screen shows them at once: for up to
+ * KEEP_MS, and at most IDLE_ANSWERS of them (typed text leaves one per keystroke).
+ */
 const KEEP_MS = 60_000;
+export const IDLE_ANSWERS = 50;
 
 export function createQueryCache(transport: Transport): QueryCache {
-  const entries = new Map<string, Entry>();
+  /** The reads some component shows now. */
+  const live = new Map<string, Entry>();
+  const idle = createCache<string, Entry>({ maxEntries: IDLE_ANSWERS });
+  const all = () => [...live.values(), ...idle.values()];
 
   const notify = (entry: Entry) => entry.listeners.forEach((listener) => listener());
   const setState = (entry: Entry, state: QueryState<unknown>) => {
@@ -157,14 +166,14 @@ export function createQueryCache(transport: Transport): QueryCache {
     keyOf,
     subscribe(route, request, listener) {
       const key = keyOf(route, request);
-      let entry = entries.get(key);
+      let entry = live.get(key);
       if (!entry) {
-        entry = { route, request, state: IDLE, listeners: new Set(), controller: null, invalid: true, dropTimer: null };
-        entries.set(key, entry);
+        const kept = idle.get(key);
+        idle.delete(key);
+        entry = kept && Date.now() - kept.idleSince <= KEEP_MS ? kept : { route, request, state: IDLE, listeners: new Set(), controller: null, invalid: true, idleSince: 0 };
+        live.set(key, entry);
       }
       const current = entry;
-      if (current.dropTimer) clearTimeout(current.dropTimer);
-      current.dropTimer = null;
       current.listeners.add(listener);
       if (current.invalid && !current.controller) load(current);
       return () => {
@@ -177,31 +186,31 @@ export function createQueryCache(transport: Transport): QueryCache {
           if (current.state.status === "loading") current.state = IDLE;
           else if (current.state.status === "ready" && current.state.stale) current.state = { ...current.state, stale: false };
         }
-        current.dropTimer = setTimeout(() => {
-          if (current.listeners.size === 0 && entries.get(key) === current) entries.delete(key);
-        }, KEEP_MS);
+        // Unless the cache was cleared meanwhile.
+        if (live.get(key) !== current) return;
+        current.idleSince = Date.now();
+        live.delete(key);
+        idle.set(key, current);
       };
     },
     state(key) {
-      return entries.get(key)?.state ?? IDLE;
+      return (live.get(key) ?? idle.get(key))?.state ?? IDLE;
     },
     read(route, request) {
       return transport(route, request, new AbortController().signal);
     },
     async write(route, request) {
       const answer = await transport(route, request, new AbortController().signal);
-      for (const entry of entries.values()) {
+      for (const entry of all()) {
         entry.invalid = true;
         if (entry.listeners.size > 0) load(entry);
       }
       return answer;
     },
     clear() {
-      for (const entry of entries.values()) {
-        entry.controller?.abort();
-        if (entry.dropTimer) clearTimeout(entry.dropTimer);
-      }
-      entries.clear();
+      for (const entry of live.values()) entry.controller?.abort();
+      live.clear();
+      idle.clear();
     },
   };
 }

@@ -17,6 +17,7 @@
  * Anything that does not resolve is a PlaceProblem, shown at the place it is about; a plan with one is not routed.
  */
 import type { City, RailNetwork } from "../../engine/index.ts";
+import { createCache } from "../../shared/cache.ts";
 import { isLngLat, plainMinus, round5 } from "../../shared/geo.ts";
 import type {
   FraId, NetworkNode, NodeLocation, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
@@ -32,8 +33,8 @@ export interface Directory {
   nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
 }
 
-/** A memo past this size is dropped whole: typed text (one entry per keystroke) must not grow it forever. */
-const MEMO_LIMIT = 20_000;
+/** Resolved places kept: typed text adds one per keystroke, so the least recently used go first. */
+const MEMO_ENTRIES = 20_000;
 /** Places offered when typed text matches none. */
 const CANDIDATES = 5;
 /** Suggestions listed under a place input. */
@@ -48,7 +49,7 @@ const COORD_TEXT = /^(-?\d{1,3}(?:\.\d+)?)\s*(?:,|;|\s)\s*(-?\d{1,3}(?:\.\d+)?)$
 const inNorthAmerica = (lon: number, lat: number) => lon >= -170 && lon <= -50 && lat >= 14 && lat <= 84;
 
 export function createDirectory(network: RailNetwork, store: Store): Directory {
-  const memo = new Map<string, PlaceResolution>();
+  const memo = createCache<string, PlaceResolution>({ maxEntries: MEMO_ENTRIES });
   let memoRevision = -1;
 
   const problem = (kind: PlaceProblem["kind"], message: string, candidates: PlaceSuggestion[] = []): PlaceResolution => ({
@@ -209,7 +210,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   };
 
   const resolve = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {
-    if (memoRevision !== store.revision || memo.size > MEMO_LIMIT) {
+    if (memoRevision !== store.revision) {
       memo.clear();
       memoRevision = store.revision;
     }

@@ -14,7 +14,7 @@ import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
-import { NightLights } from "./DayNight.tsx";
+import { BasemapStyle, NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
 import { FoundPin } from "./FoundPin.tsx";
@@ -22,7 +22,10 @@ import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from ".
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
-import { AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM } from "./config.ts";
+import {
+  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES,
+  TILE_CACHE_MAX_TILES,
+} from "./config.ts";
 import type { MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
@@ -116,6 +119,24 @@ function CornerLegend(props: Parameters<typeof Legend>[0]) {
   return createPortal(<Legend {...props} />, box);
 }
 
+/**
+ * MapLibre 4 keeps the texture of every raster tile it drops, to reuse for the next one, and never
+ * frees any: after a basemap switch or a long zoom it held over 300 (about 220 MB of graphics
+ * memory at 1440 × 900). Once the map is idle, all but SPARE_TILE_TEXTURES of each size are freed.
+ */
+function FreeSpareTextures() {
+  const map = useMap().current?.getMap();
+  useEffect(() => {
+    if (!map) return;
+    const free = () => {
+      for (const spare of Object.values(map.painter._tileTextures)) for (const texture of spare.splice(SPARE_TILE_TEXTURES)) texture.destroy();
+    };
+    map.on("idle", free);
+    return () => void map.off("idle", free);
+  }, [map]);
+  return null;
+}
+
 /** The controls need the map instance for zoom, so they live inside the map. */
 function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactElement {
   const map = useMap().current;
@@ -170,16 +191,16 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     watchCamera(event.target);
   };
   const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
+  // The first style; every later one is put on by <BasemapStyle>.
+  const [firstStyle] = useState(() => basemapStyle(layers.basemap, darkStreets));
 
   return (
     <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"} data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}>
       <MapGL
         initialViewState={initialView(props.coveredLeft)}
         maxBounds={PAN_BOUNDS}
-        // `zoom` changes only when a move ends, so the style never swaps in the middle of a zoom.
-        mapStyle={basemapStyle(layers.basemap, darkStreets)}
-        // Map ↔ Satellite ↔ dark share nothing, so load each style clean instead of diffing into it.
-        styleDiffing={false}
+        mapStyle={firstStyle}
+        maxTileCacheSize={TILE_CACHE_MAX_TILES}
         attributionControl={false}
         cursor={picking ? "crosshair" : undefined}
         // Every click places something, so a double click must not also zoom.
@@ -208,11 +229,14 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
             }
           }}
         />
+        {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
+        <BasemapStyle style={basemapStyle(layers.basemap, darkStreets)} />
+        <FreeSpareTextures />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
         <CornerLegend {...legendFor(scene, networkClasses)} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
-        {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
+        {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} coveredLeft={props.coveredLeft} />}
         <FlyTo focus={content?.focus} coveredLeft={props.coveredLeft} />
         <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />

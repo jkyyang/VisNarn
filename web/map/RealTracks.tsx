@@ -1,5 +1,5 @@
 import { Layer, Source, type LineLayer } from "react-map-gl/maplibre";
-import { OPENFREEMAP_TILES } from "./basemaps.ts";
+import { OPENFREEMAP_TILES, STREET_SOURCE } from "./basemaps.ts";
 
 const SOURCE = "real-tracks";
 /** Near white on a dark ground, dark grey on a light one: MapLibre paint needs literal colours. */
@@ -14,14 +14,14 @@ const TRACK_ON_LIGHT = "#3c4043";
  *
  * `dark`: the ground is dark (the night street map or satellite imagery), so the lines are light.
  */
-export function realTrackLayers(dark: boolean): LineLayer[] {
+export function realTrackLayers(dark: boolean, source = SOURCE): LineLayer[] {
   const color = dark ? TRACK_ON_DARK : TRACK_ON_LIGHT;
   return [
     {
       // OpenMapTiles sets `service` on yard, siding, spur and crossover track only.
       id: "real-tracks-service",
       type: "line",
-      source: SOURCE,
+      source,
       "source-layer": "transportation",
       filter: ["all", ["==", ["get", "class"], "rail"], ["has", "service"]],
       paint: {
@@ -34,7 +34,7 @@ export function realTrackLayers(dark: boolean): LineLayer[] {
     {
       id: "real-tracks-main",
       type: "line",
-      source: SOURCE,
+      source,
       "source-layer": "transportation",
       filter: ["all", ["==", ["get", "class"], "rail"], ["!", ["has", "service"]]],
       paint: {
@@ -48,8 +48,12 @@ export function realTrackLayers(dark: boolean): LineLayer[] {
 /**
  * Drawn over the basemap and under deck.gl's canvas (the network and the route). react-map-gl
  * re-adds a <Source> and its layers after every style load, which keeps them across basemap switches.
+ *
+ * `onStreets`: the street map is shown, whose own source already loads these tiles; the lines are
+ * drawn from it instead of loading and keeping every tile twice.
  */
-export function RealTracks({ dark }: { dark: boolean }) {
+export function RealTracks({ dark, onStreets }: { dark: boolean; onStreets: boolean }) {
+  if (onStreets) return <>{realTrackLayers(dark, STREET_SOURCE).map((layer) => <Layer key={layer.id} {...layer} />)}</>;
   return (
     <Source id={SOURCE} type="vector" url={OPENFREEMAP_TILES}>
       {realTrackLayers(dark).map((layer) => (

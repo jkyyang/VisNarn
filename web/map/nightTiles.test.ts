@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { subsolarPoint } from "./daylight.ts";
-import { NIGHT_GROUND_RGB, nightBucket, nightFactor, nightShade, nightTileUrl, parseNightTileUrl, TILE_PX } from "./nightTiles.ts";
+import { NIGHT_GROUND_RGB, nightBucket, nightFactor, nightShade, nightTileKind, nightTileUrl, parseNightTileUrl, sunRange, TILE_PX } from "./nightTiles.ts";
 
 const at = (iso: string) => new Date(iso);
 
@@ -16,13 +16,13 @@ function tileUnder(lon: number, lat: number, z: number) {
   return { z, ...tileAt(lon, lat, z) };
 }
 
-/** A made-up opaque night picture, different in every pixel, standing in for Black Marble. */
+/** A made-up opaque night picture, different in every pixel and never black, standing in for Black Marble. */
 function fakeBlackMarble(): Uint8ClampedArray {
   const pixels = new Uint8ClampedArray(TILE_PX * TILE_PX * 4);
   for (let k = 0; k < pixels.length; k += 4) {
     pixels[k] = (k >> 2) % 251;
     pixels[k + 1] = (k >> 3) % 253;
-    pixels[k + 2] = (k >> 4) % 255;
+    pixels[k + 2] = 16 + ((k >> 4) % 240);
     pixels[k + 3] = 255;
   }
   return pixels;
@@ -99,6 +99,59 @@ describe("a night tile", () => {
     for (let k = 0; k < shaded.length; k += 4 * 997) {
       expect([shaded[k], shaded[k + 1], shaded[k + 2], shaded[k + 3]]).toEqual([...NIGHT_GROUND_RGB, 255]);
     }
+  });
+});
+
+describe("tiles that skip the pixel maths", () => {
+  it("are exact: a day tile would have been clear, a night tile the night picture itself", () => {
+    const night = fakeBlackMarble();
+    for (const iso of ["2026-11-17T23:00:00Z", "2026-06-21T12:00:00Z"]) {
+      for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < 8; y++) {
+          const kind = nightTileKind(3, x, y, at(iso), false);
+          if (kind === "twilight") continue;
+          const shaded = nightShade(3, x, y, at(iso), night, false);
+          if (kind === "day") expect(alphas(shaded).every((a) => a === 0), `${iso} 3/${x}/${y}`).toBe(true);
+          else expect(shaded, `${iso} 3/${x}/${y}`).toEqual(night);
+        }
+      }
+    }
+  });
+
+  it("are most tiles from zoom 5 in: only the band from low sun (20° up) to full night runs the pixel maths", () => {
+    const kinds = { day: 0, night: 0, twilight: 0 };
+    for (let x = 0; x < 32; x++) for (let y = 0; y < 32; y++) kinds[nightTileKind(5, x, y, at("2026-11-17T23:00:00Z"), false)]++;
+    expect(kinds.twilight / 1024).toBeLessThan(0.5);
+    expect(kinds.day).toBeGreaterThan(0);
+    expect(kinds.night).toBeGreaterThan(0);
+  });
+
+  it("know the sun's lowest and highest point over a tile, also where it is overhead inside it", () => {
+    const when = at("2026-11-17T23:00:00Z");
+    const [lon, lat] = subsolarPoint(when);
+    const under = tileUnder(lon, lat, 2);
+    const [, high] = sunRange(under.z, under.x, under.y, when);
+    expect(high).toBeCloseTo(90, 5);
+    const opposite = tileUnder(lon > 0 ? lon - 180 : lon + 180, -lat, 2);
+    expect(sunRange(opposite.z, opposite.x, opposite.y, when)[0]).toBeCloseTo(-90, 5);
+  });
+
+  it("in Night mode are all the night picture", () => {
+    expect(nightTileKind(KANSAS.z, KANSAS.x, KANSAS.y, at("2026-11-17T18:15:00Z"), true)).toBe("night");
+  });
+});
+
+describe("along 180°", () => {
+  it("Black Marble's black no-data strip is drawn as its night ocean, so no dark line shows where the world repeats", () => {
+    const night = fakeBlackMarble();
+    // As GIBS sends the westmost tile: its edge pixel dim, then black.
+    for (let j = 0; j < TILE_PX; j++) {
+      night.set([3, 3, 7], j * TILE_PX * 4);
+      night.set([0, 0, 0], (j * TILE_PX + 1) * 4);
+    }
+    const shaded = nightShade(3, 0, 2, at("2026-11-18T08:00:00Z"), night, true);
+    expect([...shaded.slice(0, 8)]).toEqual([...NIGHT_GROUND_RGB, 255, ...NIGHT_GROUND_RGB, 255]);
+    expect([...shaded.slice(8, 12)]).toEqual([...night.slice(8, 12)]);
   });
 });
 

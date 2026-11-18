@@ -5,7 +5,9 @@
  *
  * The tiles come through a MapLibre protocol (`earthnight://z/x/y?t=…&m=…`), so they sit in the
  * basemap under the place names and under deck.gl's rail lines and route, like any raster layer.
- * The pixel maths is pure and runs in tests; only `loadNightTile` needs a browser.
+ * Most tiles are wholly day (one clear pixel) or wholly night (the Black Marble picture as it is);
+ * only tiles in the twilight band, and along 180° where Black Marble has no data, run the pixel maths.
+ * The maths is pure and runs in tests; only `loadNightTile` needs a browser.
  */
 import type { AddProtocolAction } from "maplibre-gl";
 import { blackMarbleTile } from "../data/blackMarble.ts";
@@ -24,6 +26,14 @@ const WARM_HALF_WIDTH_DEG = 5;
 const WARM_RGB = [0xff, 0x8a, 0x3d] as const;
 /** Black Marble's own night ocean: what the night side shows when its tile cannot be fetched. */
 export const NIGHT_GROUND_RGB = [0x04, 0x05, 0x0f] as const;
+
+/**
+ * Black Marble has no data in a strip along 180°, where its tiles meet: black, with a dim edge. Every
+ * real pixel is at least as bright as its night ocean (NIGHT_GROUND_RGB); these are darker, in blue
+ * at most half of it.
+ */
+const isNoData = (rgba: Uint8ClampedArray, k: number) =>
+  rgba[k] <= NIGHT_GROUND_RGB[0] && rgba[k + 1] <= NIGHT_GROUND_RGB[1] && rgba[k + 2] <= NIGHT_GROUND_RGB[2] / 2;
 
 /** The sun moves about 2.5° of longitude in 10 minutes: the night tiles are redrawn that often. */
 const NIGHT_REFRESH_MS = 600_000;
@@ -50,7 +60,8 @@ export const nightTileUrl = (mode: NightTileMode, bucket: number): string => `${
 
 /**
  * One 256 px web-mercator tile of the night overlay, as RGBA. `night` is the Black Marble tile's
- * pixels (opaque RGBA), or null to paint the night side plain dark. Where the sun is up the pixels
+ * pixels (opaque RGBA), or null to paint the night side plain dark; its "no data" pixels are painted
+ * that way too, so no dark line shows where the world repeats at 180°. Where the sun is up the pixels
  * are fully transparent, so the basemap underneath shows; `forceNight` makes every pixel night.
  *
  * Per pixel, with n the night factor, s the low-sun dimming and w the warm band:
@@ -88,8 +99,9 @@ export function nightShade(z: number, x: number, y: number, when: Date | number,
       // Under half a step of 8-bit alpha: leave the pixel clear.
       if (alpha < 0.002) continue;
       const k = (j * TILE_PX + i) * 4;
+      const noData = !night || isNoData(night, k);
       for (let c = 0; c < 3; c++) {
-        const lit = night ? night[k + c] : NIGHT_GROUND_RGB[c];
+        const lit = noData ? NIGHT_GROUND_RGB[c] : night[k + c];
         out[k + c] = (lit * n * (1 - w) + WARM_RGB[c] * w) / alpha;
       }
       out[k + 3] = alpha * 255;
@@ -98,10 +110,50 @@ export function nightShade(z: number, x: number, y: number, when: Date | number,
   return out;
 }
 
-const hasAlpha = (pixels: Uint8ClampedArray) => {
-  for (let k = 3; k < pixels.length; k += 4) if (pixels[k] !== 0) return true;
-  return false;
-};
+/** The latitude, in radians, of the top edge of tile row `y` when the world is `n` tiles high. */
+const rowLat = (n: number, y: number) => Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n)));
+
+/**
+ * The lowest and highest sun over a tile, in degrees: exact, from its edges, plus the points under
+ * and opposite the sun when they fall inside. Along an edge of fixed latitude the sun is highest
+ * where the longitude is the sun's; along one of fixed longitude, at one latitude worked out below.
+ */
+export function sunRange(z: number, x: number, y: number, when: Date | number): [number, number] {
+  const n = 2 ** z;
+  const west = (x / n) * 360 - 180;
+  const east = ((x + 1) / n) * 360 - 180;
+  const north = rowLat(n, y);
+  const south = rowLat(n, y + 1);
+  const [sunLon, dec] = subsolarPoint(when);
+  const d = dec * RAD;
+  const sinAlt = (lat: number, lon: number) => Math.sin(lat) * Math.sin(d) + Math.cos(lat) * Math.cos(d) * Math.cos((lon - sunLon) * RAD);
+  const inLon = (lon: number) => [-360, 0, 360].map((k) => lon + k).filter((l) => l >= west && l <= east);
+  const inLat = (lat: number) => lat >= south && lat <= north;
+  const lons = [west, east, ...inLon(sunLon), ...inLon(sunLon + 180)];
+  const points: [number, number][] = [];
+  for (const lon of lons) {
+    for (const lat of [south, north]) points.push([lat, lon]);
+    // On a meridian the height is R·cos(lat − peak): highest at `peak`, lowest half a turn away.
+    const peak = Math.atan2(Math.sin(d), Math.cos(d) * Math.cos((lon - sunLon) * RAD));
+    for (const lat of [peak, peak - Math.PI, peak + Math.PI]) if (inLat(lat)) points.push([lat, lon]);
+  }
+  const heights = points.map(([lat, lon]) => Math.asin(Math.min(1, Math.max(-1, sinAlt(lat, lon)))) / RAD);
+  return [Math.min(...heights), Math.max(...heights)];
+}
+
+/**
+ * What one tile needs. "day": clear (the sun is high enough over all of it that no pixel would show).
+ * "night": the Black Marble picture itself (night everywhere, no twilight colours). "twilight": the
+ * pixel maths.
+ */
+export function nightTileKind(z: number, x: number, y: number, when: Date | number, forceNight: boolean): "day" | "night" | "twilight" {
+  if (forceNight) return "night";
+  const [low, high] = sunRange(z, x, y, when);
+  if (low >= LOW_SUN_DEG) return "day";
+  // Below both the twilight and the warm band.
+  if (high <= Math.min(TWILIGHT_NIGHT_DEG, WARM_PEAK_DEG - WARM_HALF_WIDTH_DEG)) return "night";
+  return "twilight";
+}
 
 /**
  * What a night tile URL asks for. The format is ours (see `nightTileUrl`), so anything else is a
@@ -130,9 +182,20 @@ let warned = false;
 const aborted = () => new DOMException("The night tile is no longer needed.", "AbortError");
 
 /**
- * MapLibre's loader for `earthnight://` tiles (register it with `addProtocol`). Tiles wholly in
- * daylight are answered without a download. If Black Marble cannot be reached, the night side is
- * still dark, without its lights.
+ * MapLibre copies a tile's picture into a texture as soon as it gets it and never closes the
+ * picture; closed right after that, its memory is freed now instead of whenever it is collected.
+ */
+function handOver(image: ImageBitmap): { data: ImageBitmap } {
+  setTimeout(() => image.close(), 0);
+  return { data: image };
+}
+
+/** A day tile: one clear pixel, stretched over the tile. */
+const clearTile = () => createImageBitmap(new ImageData(1, 1));
+
+/**
+ * MapLibre's loader for `earthnight://` tiles (register it with `addProtocol`). If Black Marble
+ * cannot be reached, the night side is still dark, without its lights.
  */
 export const loadNightTile: AddProtocolAction = async (params, abortController) => {
   const tile = parseNightTileUrl(params.url);
@@ -140,21 +203,21 @@ export const loadNightTile: AddProtocolAction = async (params, abortController) 
   const forceNight = tile.mode === "night";
   // Shade for the middle of the 10-minute slot: never more than 5 minutes out.
   const when = tile.bucket + NIGHT_REFRESH_MS / 2;
-  let pixels = nightShade(tile.z, tile.x, tile.y, when, null, forceNight);
-  if (hasAlpha(pixels)) {
-    try {
-      const night = await pixelsOf(await blackMarbleTile(tile.z, tile.x, tile.y));
-      if (abortController.signal.aborted) throw aborted();
-      pixels = nightShade(tile.z, tile.x, tile.y, when, night, forceNight);
-    } catch (error) {
-      if (abortController.signal.aborted) throw aborted();
-      // Once: offline, every tile would say the same.
-      if (!warned) console.warn("Night lights unavailable; the night side is drawn plain dark.", error);
-      warned = true;
-    }
+  const kind = nightTileKind(tile.z, tile.x, tile.y, when, forceNight);
+  if (kind === "day") return handOver(await clearTile());
+  let png: Blob | null = null;
+  try {
+    png = await blackMarbleTile(tile.z, tile.x, tile.y);
+  } catch (error) {
+    // Once: offline, every tile would say the same.
+    if (!warned) console.warn("Night lights unavailable; the night side is drawn plain dark.", error);
+    warned = true;
   }
   if (abortController.signal.aborted) throw aborted();
+  const atDateLine = tile.x === 0 || tile.x === 2 ** tile.z - 1;
+  if (png && kind === "night" && !atDateLine) return handOver(await createImageBitmap(png));
+  const pixels = nightShade(tile.z, tile.x, tile.y, when, png ? await pixelsOf(png) : null, forceNight);
+  if (abortController.signal.aborted) throw aborted();
   // MapLibre's raster shader expects premultiplied colour, as it gets from its own PNG decoding.
-  const image = await createImageBitmap(new ImageData(pixels, TILE_PX, TILE_PX), { premultiplyAlpha: "premultiply" });
-  return { data: image };
+  return handOver(await createImageBitmap(new ImageData(pixels, TILE_PX, TILE_PX), { premultiplyAlpha: "premultiply" }));
 };

@@ -4,7 +4,7 @@ import type { Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { SavedRouteDraft } from "../../shared/plans.ts";
-import { callApi, createQueryCache, type QueryState, type Transport } from "./query.ts";
+import { callApi, createQueryCache, IDLE_ANSWERS, type QueryState, type Transport } from "./query.ts";
 
 interface Call {
   route: Route;
@@ -82,6 +82,24 @@ describe("query cache", () => {
     await flush();
     expect(cache.state(key)).toEqual({ status: "ready", data: ["before", "after"], stale: false });
     stop();
+  });
+
+  it("keeps at most IDLE_ANSWERS answers nobody shows: the least recently shown are asked again", async () => {
+    const { calls, transport } = fakeTransport();
+    const cache = createQueryCache(transport);
+    const ask = (q: number) => cache.subscribe("GET /api/places/suggest", { query: { q: String(q), role: "shop" } }, () => {});
+    for (let q = 0; q <= IDLE_ANSWERS; q++) {
+      const stop = ask(q);
+      calls[q].resolve([q]);
+      await flush();
+      stop();
+    }
+    expect(calls).toHaveLength(IDLE_ANSWERS + 1);
+    // The newest is shown at once; the oldest was dropped and is fetched again.
+    ask(IDLE_ANSWERS)();
+    expect(calls).toHaveLength(IDLE_ANSWERS + 1);
+    ask(0)();
+    expect(calls).toHaveLength(IDLE_ANSWERS + 2);
   });
 
   it("an error keeps a retry that asks again", async () => {

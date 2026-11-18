@@ -4,9 +4,10 @@
  * NASA's city lights and a soft edge where the sun is setting or rising.
  */
 import { addProtocol, RasterTileSource, type LayerSpecification, type StyleSpecification } from "maplibre-gl";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { BLACK_MARBLE_ATTRIBUTION, BLACK_MARBLE_MAX_ZOOM } from "../data/blackMarble.ts";
+import { carryOwnLayers, firstLabelLayer } from "./basemaps.ts";
 import { AUTO_DARK_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
 import { loadNightTile, NIGHT_PROTOCOL, nightBucket, nightTileUrl, TILE_PX, type NightTileMode } from "./nightTiles.ts";
 
@@ -30,11 +31,6 @@ const ramp = (z0: number, o0: number, z1: number, o1: number) => ["interpolate",
 function lightsOpacity(mode: NightTileMode, satellite: boolean) {
   if (satellite) return ramp(8, 1, 12, 0.8);
   return mode === "night" ? ramp(6, 0.95, 11, 0.3) : ramp(7, 1, 11, 0.35);
-}
-
-/** Under the place names, so towns stay labelled: the first text layer of whatever style is loaded. */
-function firstLabelLayer(style: StyleSpecification): string | undefined {
-  return style.layers.find((layer) => layer.type === "symbol" || layer.id === "labels")?.id;
 }
 
 /** Place names over the night side: bright text on a dark halo, so they read on black and on city lights. */
@@ -108,8 +104,11 @@ export function NightLights({ mode, now, satellite }: { mode: NightTileMode | "o
   useEffect(() => {
     if (!map) return;
     ensureProtocol();
+    /** The layers `ensure` last saw; until the style changes there is nothing more to do. */
+    let seen = "";
     const ensure = () => {
-      // Undefined until the style has loaded; "style.load" calls again then.
+      if (map.getLayersOrder().join() === seen) return;
+      // Undefined until the style has loaded; "styledata" calls again then.
       const style = map.getStyle();
       if (!style) return;
       const source = map.getSource(LIGHTS_ID);
@@ -127,12 +126,33 @@ export function NightLights({ mode, now, satellite }: { mode: NightTileMode | "o
       paintLabels(map, style, shown);
       paintOcean(map, style, mode === "auto");
       if (shown) map.setPaintProperty(LIGHTS_ID, "raster-opacity", lightsOpacity(opacityMode, satellite));
+      seen = map.getLayersOrder().join();
     };
     ensure();
-    // A basemap switch replaces the whole style, this layer with it.
-    map.on("style.load", ensure);
-    return () => void map.off("style.load", ensure);
+    // A switch to or from Satellite replaces the whole style, this layer with it; a switch between
+    // the street maps keeps the layer but brings place names of their own. Each change of style says
+    // so with "styledata" (as do many smaller ones, which `seen` passes over).
+    map.on("styledata", ensure);
+    return () => void map.off("styledata", ensure);
   }, [map, mode, shown, tiles, opacityMode, satellite]);
 
+  return null;
+}
+
+/**
+ * Puts the basemap style on the map. The light and dark street maps draw the same tiles in other
+ * colours, so a switch between them (Auto, zooming in past AUTO_DARK_ZOOM at night) changes only
+ * the paint and the place names: the tiles on screen, the shaded relief and the night tiles stay. A
+ * switch to or from Satellite loads the new style clean.
+ */
+export function BasemapStyle({ style }: { style: string | StyleSpecification }) {
+  const map = useMap().current?.getMap();
+  const shown = useRef(style);
+  useEffect(() => {
+    if (!map || style === shown.current) return;
+    const streets = typeof style === "string" && typeof shown.current === "string";
+    shown.current = style;
+    map.setStyle(style, streets ? { diff: true, transformStyle: carryOwnLayers } : { diff: false });
+  }, [map, style]);
   return null;
 }

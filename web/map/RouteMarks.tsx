@@ -76,16 +76,17 @@ export function RouteMarks(props: { scene: RouteScene; onSelect: (target: SceneT
       frame = 0;
       setPlaced(scene.pills.length || scene.turnBacks.length ? layout(instance, scene) : { pills: [], turns: [] });
     };
-    // At most once a frame while the map moves.
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(update);
     };
     update();
-    instance.on("move", schedule);
+    // Placed again when a move ends: while it lasts the marks ride along with the map where they
+    // are, and the frames go to drawing (a layout projects every point of every route).
+    instance.on("moveend", schedule);
     instance.on("resize", schedule);
     instance.on("load", schedule);
     return () => {
-      instance.off("move", schedule);
+      instance.off("moveend", schedule);
       instance.off("resize", schedule);
       instance.off("load", schedule);
       if (frame) cancelAnimationFrame(frame);

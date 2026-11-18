@@ -73,6 +73,20 @@ export function networkLayers(network: Mainline, drawn: readonly NetworkClass[],
   );
 }
 
+/**
+ * deck.gl redraws a layer's data whenever it is a new array. The big arrays derived from a scene are
+ * made once per scene, so a zoom step (which builds the layers again) does not redraw the routes.
+ */
+function once<K extends object, V>(): (key: K, make: () => V) => V {
+  const made = new WeakMap<K, V>();
+  return (key, make) => {
+    if (!made.has(key)) made.set(key, make());
+    return made.get(key)!;
+  };
+}
+const stopPinsOf = once<ScenePin[], ScenePin[]>();
+const alternativeLegsOf = once<SceneRoute[], AltLeg[]>();
+
 type Leg = SceneRoute["legs"][number];
 type Chevron = SceneRoute["chevrons"][number];
 type Interchange = SceneRoute["interchanges"][number];
@@ -135,7 +149,7 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
     }),
     new TextLayer<ScenePin>({
       id: LAYER.pinGlyphs,
-      data: pins.filter((pin) => pin.kind === "stop"),
+      data: stopPinsOf(pins, () => pins.filter((pin) => pin.kind === "stop")),
       getPosition: (pin) => pin.position,
       getText: (pin) => pin.glyph,
       getSize: 11,
@@ -157,7 +171,7 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
 export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number): LayersList {
   if (scene.kind === "shops") return pinLayers(scene.pins, colors);
 
-  const alternatives: AltLeg[] = scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id })));
+  const alternatives = alternativeLegsOf(scene.alternatives, () => scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id }))));
   return [
     new PathLayer<AltLeg>({
       id: LAYER.alternativesCasing,
