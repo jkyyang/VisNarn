@@ -74,14 +74,14 @@ function locationOf(record: RawRecord, issue: (message: string) => void): PlaceR
   const lat = record.cells.lat ?? "";
   if (fra) {
     if (/^\d{1,9}$/.test(fra)) return { kind: "node", fraId: Number(fra) as FraId, railroad: null };
-    issue(`The fra_id "${fra}" is not a whole number.`);
+    issue(`The fra_id "${fra}" must be a whole number.`);
     return { kind: "text", text: "" };
   }
   if (lon || lat) {
     const x = Number(plainMinus(lon));
     const y = Number(plainMinus(lat));
     if (lon && lat && isLngLat(x, y)) return { kind: "coord", lon: x, lat: y };
-    issue(`"${lon}, ${lat}" is not a longitude and latitude (such as -92.27, 34.77).`);
+    issue(`"${lon}, ${lat}" cannot be read as a longitude and latitude (such as -92.27, 34.77).`);
     return { kind: "text", text: "" };
   }
   issue("Give the shop an fra_id, or lon and lat.");

@@ -2,7 +2,7 @@ import { Layer, Source, type LineLayer } from "react-map-gl/maplibre";
 import { OPENFREEMAP_TILES } from "./basemaps.ts";
 
 const SOURCE = "real-tracks";
-/** The night theme's --fg and the day theme's --fg2: MapLibre paint takes colours, not CSS variables. */
+/** The night theme's --fg and the day theme's --fg2: MapLibre paint needs literal colours. */
 const TRACK_ON_DARK = "#e8eaed";
 const TRACK_ON_LIGHT = "#3c4043";
 

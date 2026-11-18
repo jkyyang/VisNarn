@@ -67,7 +67,7 @@ beforeAll(async () => {
   origin = started.url;
   server = started.child;
   // The page asks for "/api/…" on its own origin; here that origin is the test server. jsdom's
-  // AbortSignal is not one Node's fetch accepts, so a superseded read simply finishes unheard.
+  // AbortSignal is not one Node's fetch accepts, so a superseded read finishes unheard.
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const target = url.startsWith("/api/") ? origin + url : url.startsWith(origin) ? url : null;

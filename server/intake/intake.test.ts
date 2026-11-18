@@ -73,7 +73,7 @@ describe("readShops", () => {
     ]);
     expect(issues.map((i) => [i.line, i.message])).toEqual([
       [4, expect.stringMatching(/fra_id, or lon and lat/)],
-      [5, expect.stringMatching(/"12a" is not a whole number/)],
+      [5, expect.stringMatching(/"12a" must be a whole number/)],
     ]);
   });
 });

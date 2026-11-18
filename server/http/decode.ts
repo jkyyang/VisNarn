@@ -199,7 +199,7 @@ export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R][
   "POST /api/track": (json) => ({ paths: field(json, "", "paths", list(list(lngLat, MAX_PATH_POINTS), MAX_PATHS)) }),
 };
 
-/** A query value as a number: "-97.3" → -97.3; missing or not a number → AppError naming the key. */
+/** A query value as a number: "-97.3" → -97.3; missing or malformed → AppError naming the key. */
 function queryNumber(query: URLSearchParams, key: string, min: number, max: number): number {
   const raw = query.get(key);
   return inRange(min, max)(raw === null || raw.trim() === "" ? undefined : Number(raw), key);

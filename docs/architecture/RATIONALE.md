@@ -44,7 +44,7 @@ network has between them, and your own shops. This page says why the code has th
 2. **One resolver, on the server** (`server/places/directory.ts`). Free text goes through lists in an
    order fixed per role; a bare number is never an FRA id. A second resolver in the browser would be a
    second copy of this policy.
-3. **Routes are derived, not stored.** Ask again and you get the same answer; there is nothing to
+3. **Routes are derived.** Ask again and you get the same answer; there is nothing to
    invalidate. The planner keys its cache by network version, points and track included.
 4. **Domain types are the wire types.** `shared/api.ts` types the handler table, the decoders and the
    client from one `Api` table, so there is no DTO layer.

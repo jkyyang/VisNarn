@@ -44,3 +44,4 @@ rm ~/Library/LaunchAgents/com.visnarn.network-update.plist
 
 - `free-port.mjs`: frees the app's port (`VISNARN_PORT`, default 5173) before `npm run dev` and `npm start`.
 - `architecture.test.ts`: the import rules between areas (`shared`, `engine`, `server`, `web`), run by `npm test`.
+- `copy.test.ts`: the wording rules for UI strings, messages, docs, comments and test names, run by `npm test`.

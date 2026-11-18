@@ -5,7 +5,7 @@ Read [RATIONALE.md](RATIONALE.md) for why.
 
 ## Areas
 
-Six areas (区域). An arrow means "may import".
+Six areas. An arrow means "may import".
 
 ```
 web ──► shared ◄── engine ◄── server ◄── scripts
@@ -158,6 +158,7 @@ Two screens: Route (the planner) and Shops.
 | `update-network.ts` | the weekly network update (`npm run data:update`, run by `launchd/`): rebuild in a temporary copy, check, then replace `public/data` | `engine/index.ts`, `server/selftest`, `server/intake/csv`, `shared/` |
 | `free-port.mjs` | frees the app's port before `npm run dev` and `npm start` | `node:` only |
 | `architecture.test.ts` | the import rules the compiler cannot check; the ban on parameter properties and enums in Node-run code | `node:fs` |
+| `copy.test.ts` | the wording rules for UI strings, messages, docs, comments and test names: no em dash aside, no "not a ..." | `node:fs` |
 
 ## `tests/`
 

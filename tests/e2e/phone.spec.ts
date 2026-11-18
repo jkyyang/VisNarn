@@ -16,7 +16,7 @@ test("Phone: map on top, then the places, the routes and the sections in one col
   expect(mapBox?.width ?? 0).toBeGreaterThan(380);
 
   await expect(page.getByRole("navigation", { name: "Mode" }).getByRole("link")).toHaveText([/^Route/, /^Shops/]);
-  // The one honesty cue that stays on a phone: the shops are made up.
+  // The one cue that stays on a phone: the shops are made up.
   await expect(page.getByText("EXAMPLE DATA")).toBeVisible();
 
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");

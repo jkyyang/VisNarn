@@ -41,7 +41,7 @@ describe("decodeBody", () => {
     expect(route({ places: "none" })).toMatch(/^invalid places: /);
     expect(route({ places: [null] })).toMatch(/^invalid places: .*at least 2/);
     expect(route({ places: Array.from({ length: 53 }, () => plan.places[1]) })).toMatch(/^invalid places: .*more than 52/);
-    expect(refusal(() => decodeBody["POST /api/route"]("not an object"))).toMatch(/^invalid null: /);
+    expect(refusal(() => decodeBody["POST /api/route"]("plain text"))).toMatch(/^invalid null: /);
   });
 
   it("reads a saved route: a name, its places with none empty, a known option or none, and its route string", () => {

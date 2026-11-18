@@ -48,6 +48,5 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 OpenFreeMap vector styles (OpenStreetMap data) for the map and the Real tracks overlay, Esri World Imagery for
 satellite, NASA Black Marble for night lights.
 
-## Known limits
-Shortest-distance routing is the model; the railroads' real operating plan can differ. A typed coordinate snaps to
-nearby mainline.
+## Routing
+Routes follow track distance and the carriers you choose. A typed coordinate snaps to nearby mainline.

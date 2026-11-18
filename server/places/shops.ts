@@ -54,7 +54,7 @@ export function createShops(store: Store, directory: Directory): Shops {
 
     save(draft, id) {
       const before = id ? store.shops.get(id) : null;
-      if (id && !before) throw new AppError("not-found", "This shop does not exist any more. It may have been deleted.");
+      if (id && !before) throw new AppError("not-found", "This shop no longer exists.");
       // An edited EXAMPLE shop stays labelled EXAMPLE until it is deleted.
       const ready = prepare(draft, id ?? (randomUUID() as ShopId), before?.example ?? false);
       if (!("shop" in ready)) throw new AppError("invalid", ready.message, ready.field);
@@ -63,7 +63,7 @@ export function createShops(store: Store, directory: Directory): Shops {
     },
 
     remove(id) {
-      if (!store.shops.remove(id)) throw new AppError("not-found", "This shop does not exist any more. It may have been deleted.");
+      if (!store.shops.remove(id)) throw new AppError("not-found", "This shop no longer exists.");
     },
 
     async import({ source, commit }) {

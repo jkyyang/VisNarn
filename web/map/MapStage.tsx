@@ -125,7 +125,7 @@ export function MapStageProvider(props: { network: Mainline | null; children: Re
 function NoMap(): ReactElement {
   return (
     <div className="no-map" role="note">
-      The map couldn't start in this browser. Places can still be typed.
+      The map could not start in this browser. Type places in the panel.
     </div>
   );
 }

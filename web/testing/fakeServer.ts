@@ -279,7 +279,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     const draft = body as ShopDraft;
     const id = method === "PUT" ? parts[2] : `shop-${state.nextId++}`;
     const existing = state.shops.find((s) => s.id === id);
-    if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "That shop is not in Your shops any more.");
+    if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "This shop no longer exists.");
     const holder = draft.code ? state.shops.find((s) => s.code === draft.code && s.id !== id) : undefined;
     if (holder) throw new HttpError(409, "conflict", `The shop "${holder.name}" already has the code ${draft.code}. Give each shop its own code.`, "code");
     const view = shopView(state, id, draft, false);
@@ -301,13 +301,13 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     if (!name) throw new HttpError(400, "invalid", "Give the route a name.", "name");
     const id = (method === "PUT" ? parts[2] : `route-${state.nextId++}`) as SavedRouteId;
     const existing = state.savedRoutes.find((r) => r.id === id);
-    if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "This saved route does not exist any more. It may have been deleted.");
+    if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "This saved route no longer exists.");
     const saved: SavedRoute = { id, name, plan: draft.plan, option: draft.option, routeString: draft.routeString };
     state.savedRoutes = existing ? state.savedRoutes.map((r) => (r.id === id ? saved : r)) : [...state.savedRoutes, saved];
     return saved;
   }
   if (method === "DELETE" && parts[1] === "saved-routes" && parts.length === 3) {
-    if (!state.savedRoutes.some((r) => r.id === parts[2])) throw new HttpError(404, "not-found", "This saved route does not exist any more. It may have been deleted.");
+    if (!state.savedRoutes.some((r) => r.id === parts[2])) throw new HttpError(404, "not-found", "This saved route no longer exists.");
     state.savedRoutes = state.savedRoutes.filter((r) => r.id !== parts[2]);
     return null;
   }

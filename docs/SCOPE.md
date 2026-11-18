@@ -1,4 +1,4 @@
-# VisNARN — v1 scope (draft, 2026-11-16)
+# VisNARN: v1 scope (draft, 2026-11-16)
 
 Status: **proposed**, waiting for answers to the questions in "Step 0". Nothing here is agreed with the team yet.
 
@@ -10,12 +10,12 @@ We want to flag cars that may **arrive before prep ends**, early enough to act.
 A local tool that reads a CSV export of cars heading to our shops, estimates arrival with an
 **uncertainty band fitted from our own history**, and lists the cars whose prep may end too late, most at risk first.
 
-## Step 0 — questions before any more build work (calendar time, not build time)
+## Step 0: questions before any more build work (calendar time)
 Ask the data owner:
 1. **Do we already have an ETA?** Does Synapse/CPS store a railroad- or Railinc-provided ETA, or past arrival/placement events per car?
    If yes, v1 becomes "existing ETA vs prep end + a fitted shop-delivery delay", and most routing work is not needed.
 2. **What does a car position look like?** 10–20 masked rows: location code, code type (SPLC / FSAC / station name + state / internal / FRA node), reporting railroad, timestamp with time zone.
-   Car location messages often give *last station + destination*, not a *next node*. Confirm that "next node" really exists.
+   Car location messages often give the last station and the destination. Confirm that a next node exists.
 3. **Is there a station master table** (CSM / FSAC / SPLC with lat/lon) in Synapse/CPS? (Railinc CSM is licensed; do not rebuild it from public data.)
 4. **Shop list:** shop code, name, location, serving railroad (and short line, if any).
 5. **Where does prep_end live,** and which event counts as "arrived at shop" (arrival at serving yard, constructive placement, or actual placement)?
@@ -37,7 +37,7 @@ Timebox: one day per week at most, so the Troubleshooting Card is not slowed dow
 
 ## In scope for v1
 - Done: Class I graph, railroad-aware router with via points, batch CSV in/out (`src/lib`).
-- **Honesty fixes (small, do now):**
+- **Label fixes (small, do now):**
   - Stop calling the current window "earliest/latest arrival". Today both bounds use one fixed speed; it only covers where the car is between A and B. Label it "estimate at placeholder speed" until M2.
   - Time zones: reject or explicitly parse timestamps without an offset (currently read in the browser's local zone).
   - Every output shows which assumptions produced it ("placeholder" or "calibrated on N trips").

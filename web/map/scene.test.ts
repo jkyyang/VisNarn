@@ -62,7 +62,7 @@ describe("planScene", () => {
     const squares = scene.pins.filter((p) => p.kind === "shop");
     expect(squares.length).toBeGreaterThan(0);
     for (const square of squares) expect(square.shopId).not.toBeNull();
-    // The destination is the EXAMPLE shop at North Little Rock, typed as a city: it is not a square too.
+    // The destination is the EXAMPLE shop at North Little Rock, typed as a city: it has no square.
     const usedAsEnd = planScene({ planned: { ...oneRoute, places: oneRoute.places.with(-1, { ok: true, place: { ...shopPlace("North Little Rock, AR") } }) }, option: null, shops });
     expect(usedAsEnd.pins.filter((p) => p.kind === "shop").map((p) => p.label)).not.toContain("North Little Rock, AR");
   });

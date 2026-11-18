@@ -148,7 +148,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
       .sort((x, y) => Number(!startsWith(x, lower)) - Number(!startsWith(y, lower)))
       .map(shopSuggestion);
     const cities = network.cities(q, limit).map(citySuggestion);
-    // Only the explicit "FRA 358070" form: Enter picks the first suggestion, and a bare number is not a node id.
+    // Only the explicit "FRA 358070" form: Enter picks the first suggestion, and a bare number never names a node.
     const fra = FRA_TEXT.exec(q)?.[1] ?? null;
     const nodes = fra ? nodeSuggestion(Number(fra) as FraId) : [];
     const ordered = role === "shop" ? [...shops, ...cities, ...nodes] : [...cities, ...shops, ...nodes];
@@ -168,7 +168,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     if (pair) {
       const [x, y] = [Number(pair[1]), Number(pair[2])];
       const [lon, lat] = inNorthAmerica(x, y) ? [x, y] : inNorthAmerica(y, x) ? [y, x] : [x, y];
-      if (!isLngLat(lon, lat)) return problem("unknown", `"${ref.text}" is not a longitude and latitude.`);
+      if (!isLngLat(lon, lat)) return problem("unknown", `"${ref.text}" cannot be read as a longitude and latitude.`);
       return atCoordinates(ref, lon, lat, { method: "coordinates" });
     }
 

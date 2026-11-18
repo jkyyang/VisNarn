@@ -2,8 +2,7 @@
  * How the page talks to the server. INTERNAL to web/data: components use the named hooks and
  * actions in ./hooks.ts and never see a route, a URL or `fetch`.
  *
- * The model is deliberately small. The server owns the truth; the page keeps a throwaway copy of
- * the answers it is showing.
+ * The server owns the truth; the page keeps a throwaway copy of the answers it is showing.
  * - A read is cached by route + request. Components showing the same thing share one request.
  * - There are no optimistic updates. A write is awaited, and when it succeeds every cached answer is
  *   marked stale and the ones on screen are fetched again. On loopback that costs milliseconds and
@@ -37,7 +36,7 @@ const isAbort = (error: unknown) => error instanceof DOMException && error.name 
 
 function asAppError(error: unknown): AppError {
   if (error instanceof AppError) return error;
-  return new AppError("internal", "Something went wrong while talking to the server. Try again.");
+  return new AppError("internal", "The request failed. Try again.");
 }
 
 /**
@@ -58,7 +57,7 @@ export async function callApi<R extends Route>(origin: string, route: R, request
     });
   } catch (error) {
     if (isAbort(error) || signal?.aborted) throw error;
-    throw new AppError("internal", "The server on this laptop did not answer. Is it running? Start it with npm run dev.");
+    throw new AppError("internal", "The server on this laptop did not answer. Start it with npm run dev.");
   }
   const text = await response.text();
   const json = text ? safeJson(text) : null;

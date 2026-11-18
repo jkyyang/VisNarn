@@ -1,6 +1,6 @@
 /**
  * EXAMPLE data for page tests: six shops and made-up track between a few cities.
- * Not company data, and never imported by the app.
+ * Made-up rows; only tests import it.
  */
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, NetworkNode } from "../../shared/places.ts";

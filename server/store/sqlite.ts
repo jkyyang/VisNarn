@@ -78,7 +78,7 @@ const MIGRATIONS: string[] = [
 
 type Row = Record<string, unknown>;
 
-// Not a static import: vitest 2's module runner does not know prefix-only built-ins and fails to load "sqlite".
+// Imported on demand: vitest 2's module runner does not know prefix-only built-ins and fails to load "sqlite".
 const { DatabaseSync } = process.getBuiltinModule("node:sqlite") as typeof import("node:sqlite");
 
 /**

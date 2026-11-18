@@ -58,7 +58,7 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
   const key = bounds?.join();
 
   useEffect(() => {
-    // A route that is already there when the map opens is simply where the map starts.
+    // A route that is already there when the map opens is where the map starts.
     const first = !mounted.current;
     const jump = first || matchMedia("(prefers-reduced-motion: reduce)").matches;
     mounted.current = true;

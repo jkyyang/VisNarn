@@ -132,11 +132,11 @@ const aborted = () => new DOMException("The night tile is no longer needed.", "A
 /**
  * MapLibre's loader for `earthnight://` tiles (register it with `addProtocol`). Tiles wholly in
  * daylight are answered without a download. If Black Marble cannot be reached, the night side is
- * still dark, just without its lights.
+ * still dark, without its lights.
  */
 export const loadNightTile: AddProtocolAction = async (params, abortController) => {
   const tile = parseNightTileUrl(params.url);
-  if (!tile) throw new Error(`Not a night tile: ${params.url}`);
+  if (!tile) throw new Error(`Unknown night tile: ${params.url}`);
   const forceNight = tile.mode === "night";
   // Shade for the middle of the 10-minute slot: never more than 5 minutes out.
   const when = tile.bucket + NIGHT_REFRESH_MS / 2;

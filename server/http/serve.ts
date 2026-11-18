@@ -227,7 +227,7 @@ function sendJson(res: ServerResponse, status: number, value: unknown): void {
   res.end(body);
 }
 
-/** A file of the built page, or index.html for any path that is not a file (the page routes by URL). */
+/** A file of the built page, or index.html for any path without a file (the page routes by URL). */
 async function staticFile(req: IncomingMessage, res: ServerResponse, pathname: string, root: string): Promise<void> {
   req.resume();
   if (req.method !== "GET" && req.method !== "HEAD") return sendJson(res, 405, envelope("invalid", "Only GET and HEAD are served here."));

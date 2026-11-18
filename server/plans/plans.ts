@@ -3,7 +3,7 @@
  * saved by name. Routing composes two things that can each say "no": the Directory (does every
  * place resolve?) and the route planner (is there a route?).
  *
- * A routed plan is not stored. It is a function of the plan, the stored shops and the network version:
+ * A routed plan is derived from the plan, the stored shops and the network version:
  * ask again and you get the same answer.
  */
 import { randomUUID } from "node:crypto";
@@ -31,7 +31,7 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
   const { store, directory, planner } = parts;
 
   const unknown = (): never => {
-    throw new AppError("not-found", "This saved route does not exist any more. It may have been deleted.");
+    throw new AppError("not-found", "This saved route no longer exists.");
   };
 
   return {

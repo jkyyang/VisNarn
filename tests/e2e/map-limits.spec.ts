@@ -52,7 +52,7 @@ test("the map pans a margin past North America and no further, and stops zooming
   await page.reload();
   await expectMapCanvases(page);
   await zoomOutAndDrag(page, 3000, 3000);
-  // The corner itself: the search box sits over the map from 16 px in, and a click on it is not a click on the map.
+  // The corner itself: the search box sits over the map from 16 px in, and a click on it never reaches the map.
   const northWest = await placeAt(page, 0.004, 0.004);
   expect(northWest.lon).toBeGreaterThanOrEqual(WEST - SLACK_DEG);
   expect(northWest.lat).toBeLessThanOrEqual(NORTH + SLACK_DEG);
