@@ -1,8 +1,9 @@
 /** deck.gl layers for a scene: the Class I network underneath, the scene on top. The only file that knows deck.gl layer classes. */
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
-import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
+import { isClassI } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
+import { lineName } from "../words.ts";
 import type { MapScene, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
 export const LAYER = {
@@ -19,7 +20,6 @@ export const LAYER = {
 
 const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
-const isClassI = (owner: string): owner is Railroad => (RAILROADS as readonly string[]).includes(owner);
 const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 
 const svgUrl = (width: number, height: number, body: string) =>
@@ -68,16 +68,19 @@ type Chevron = SceneRoute["chevrons"][number];
 type Interchange = SceneRoute["interchanges"][number];
 type AltLeg = Leg & { option: SceneRoute["id"] };
 
-/** The selected route: a white casing so it stands out, each section in its railroad's colour, and chevrons for the direction of travel. */
+/** Regional and short-line sections are drawn thinner than Class I, as in the legend. */
+const legWidth = (leg: Leg) => (isClassI(leg.railroad) ? 6 : 4);
+
+/** The selected route: a white casing so it stands out, each section in its line's colour, and chevrons for the direction of travel. */
 function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: number): LayersList {
   return [
-    new PathLayer<Leg>({ id: LAYER.routeCasing, data: route.legs, getPath: (leg) => leg.path, getColor: colors.casing, getWidth: 11, ...ROUND, updateTriggers: { getColor: colors } }),
+    new PathLayer<Leg>({ id: LAYER.routeCasing, data: route.legs, getPath: (leg) => leg.path, getColor: colors.casing, getWidth: (leg) => legWidth(leg) + 5, ...ROUND, updateTriggers: { getColor: colors } }),
     new PathLayer<Leg>({
       id: LAYER.route,
       data: route.legs,
       getPath: (leg) => leg.path,
       getColor: (leg) => colors.rail[leg.railroad],
-      getWidth: 6,
+      getWidth: legWidth,
       ...ROUND,
       // Picked so a click on it reaches the map (a stop there) instead of the grey route underneath.
       pickable: true,
@@ -194,7 +197,7 @@ export function sceneTooltip(info: PickingInfo): { text: string; style: Partial<
   if (!layer || !object) return null;
   if (layer.id === LAYER.interchanges) {
     const x = object as Interchange;
-    return { text: `${x.from} → ${x.to}${x.place ? ` · ${x.place}` : ""}`, style: TOOLTIP_STYLE };
+    return { text: `${lineName(x.from)} → ${lineName(x.to)}${x.place ? ` · ${x.place}` : ""}`, style: TOOLTIP_STYLE };
   }
   if (layer.id === LAYER.pins) return { text: (object as ScenePin).label, style: TOOLTIP_STYLE };
   return null;

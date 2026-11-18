@@ -7,7 +7,7 @@
  */
 import type { LngLat } from "./geo.ts";
 import type { FraId } from "./places.ts";
-import type { Railroad } from "./railroads.ts";
+import type { Line } from "./railroads.ts";
 import type { Instant } from "./time.ts";
 
 /**
@@ -19,12 +19,9 @@ import type { Instant } from "./time.ts";
 export const ROUTE_STRATEGIES = ["pick", "shortest", "fewest-interchanges", "no-turn-backs"] as const;
 export type RouteStrategy = (typeof ROUTE_STRATEGIES)[number];
 
-/** One run on one railroad in one direction (a leg also ends where the car turns back). */
+/** One run on one line in one direction (a leg also ends where the car turns back). */
 export interface Leg {
-  /** With `line`, the Class I that hands the car to that smaller railroad or takes it over. */
-  railroad: Railroad;
-  /** Set when the leg runs on a regional railroad or a short line, not on a Class I. */
-  line?: "regional" | "short line";
+  railroad: Line;
   km: number;
   from: string;
   to: string;
@@ -38,7 +35,7 @@ export interface Leg {
 /** A place where the route reverses direction. Allowed only on yard track; always worth a person's look. */
 export interface TurnBack {
   at: { fraId: FraId; lon: number; lat: number; near: string };
-  railroad: Railroad;
+  railroad: Line;
   arrives: { subdivision: string | null; headingDeg: number };
   leaves: { subdivision: string | null; headingDeg: number };
   /** 0–180. */
@@ -51,7 +48,7 @@ export interface TurnBack {
 export type Milestone =
   | { kind: "turn-back"; kmFromB: number; turnBack: number }
   | { kind: "leg"; kmFromB: number; leg: number }
-  | { kind: "interchange"; kmFromB: number; from: Railroad; to: Railroad; at: string }
+  | { kind: "interchange"; kmFromB: number; from: Line; to: Line; at: string }
   | { kind: "stop"; kmFromB: number; stop: number; label: string }
   | { kind: "shop"; kmFromB: number };
 
@@ -61,7 +58,7 @@ export interface RoutePath<Step = Milestone> {
   /** Real track distance from B to the shop. Routing penalties are not in it. */
   km: number;
   interchanges: number;
-  railroads: Railroad[];
+  railroads: Line[];
   legs: Leg[];
   turnBacks: TurnBack[];
   /** In order; `turnBack`, `leg` and `stop` are indexes into the arrays above and into the report's stops. */

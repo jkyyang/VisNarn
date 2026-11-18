@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { FraId, NodeCode, Shop, ShopId } from "../../shared/places.ts";
 import type { SavedRoute, SavedRouteId } from "../../shared/plans.ts";
 import type { Instant } from "../../shared/time.ts";
@@ -35,7 +36,7 @@ const shop = (over: Partial<Shop> = {}): Shop => ({
 const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedRoute => ({
   id: id as SavedRouteId,
   name,
-  plan: { start: { kind: "text", text: "Kansas City, MO" }, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }], destination: { kind: "shop", shopId: "s1" as ShopId } },
+  plan: { start: { kind: "text", text: "Kansas City, MO" }, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }], destination: { kind: "shop", shopId: "s1" as ShopId }, include: DEFAULT_INCLUDE },
   option: null,
   ...over,
 });

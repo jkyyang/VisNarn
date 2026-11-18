@@ -4,6 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SavedRouteId } from "../../../shared/plans.ts";
+import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
 import { clearQueryCache } from "../../data/query.ts";
 import { installFakeServer, type FakeServer } from "../../testing/fakeServer.ts";
 import { currentPath, openPage } from "../../testing/page.tsx";
@@ -40,7 +41,7 @@ describe("Route planner", () => {
     fake.state.savedRoutes.push({
       id: "route-9" as SavedRouteId,
       name: "EXAMPLE Omaha → North Platte",
-      plan: { start: { kind: "text", text: "Omaha, NE" }, stops: [], destination: { kind: "text", text: "North Platte, NE" } },
+      plan: { start: { kind: "text", text: "Omaha, NE" }, stops: [], destination: { kind: "text", text: "North Platte, NE" }, include: DEFAULT_INCLUDE },
       option: null,
     });
     openPage("/route");
@@ -68,7 +69,7 @@ describe("Route planner", () => {
     expect(shortest).toHaveTextContent("839 km · 1 interchange");
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
-    expect(fake.state.lastPlan).toEqual({ start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "shop", shopId: "shop-ex-1" } });
+    expect(fake.state.lastPlan).toEqual({ start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "shop", shopId: "shop-ex-1" }, include: DEFAULT_INCLUDE });
   });
 
   it("a click on the map adds a stop; Undo takes it away and Redo brings it back", async () => {
@@ -100,6 +101,25 @@ describe("Route planner", () => {
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
     expect(screen.getByRole("radio", { name: "Any" })).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("Class I is always on; ticking Short lines plans again with short lines included, and Undo unticks it", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    const track = screen.getByRole("group", { name: "Track" });
+    expect(within(track).getAllByRole("checkbox").map((box) => [box.parentElement?.textContent, (box as HTMLInputElement).checked])).toEqual([
+      ["Class I", true],
+      ["Regional", false],
+      ["Short lines", false],
+      ["Passenger / commuter lines", true],
+    ]);
+    expect(within(track).getByRole("checkbox", { name: "Class I" })).toBeDisabled();
+
+    await user.click(within(track).getByRole("checkbox", { name: "Short lines" }));
+    await waitFor(() => expect(fake.state.lastPlan?.include).toEqual({ regional: false, shortLine: true, passenger: true }));
+
+    await user.click(screen.getByRole("button", { name: "Undo route change" }));
+    expect(within(track).getByRole("checkbox", { name: "Short lines" })).not.toBeChecked();
   });
 
   it("a pill or a grey route on the map selects that route: the URL and the pressed row follow", async () => {

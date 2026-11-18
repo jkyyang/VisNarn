@@ -1,13 +1,15 @@
-/** The small mark every screen shares: a railroad's colour and code. */
+/** The small mark every screen shares: a line's colour and name. */
 import type { ReactElement } from "react";
-import type { Railroad } from "../../shared/railroads.ts";
+import type { Line } from "../../shared/railroads.ts";
+import { lineColor } from "../theme.ts";
+import { lineName } from "../words.ts";
 
-/** A railroad's colour dot and code. */
-export function RailroadChip(props: { railroad: Railroad }): ReactElement {
+/** A line's colour dot and name: "UP", "Short line". */
+export function RailroadChip(props: { railroad: Line }): ReactElement {
   return (
     <span className="rr-chip" data-railroad={props.railroad}>
-      <span className="rr-swatch" style={{ background: `var(--rr-${props.railroad})` }} aria-hidden="true" />
-      {props.railroad}
+      <span className="rr-swatch" style={{ background: lineColor(props.railroad) }} aria-hidden="true" />
+      {lineName(props.railroad)}
     </span>
   );
 }

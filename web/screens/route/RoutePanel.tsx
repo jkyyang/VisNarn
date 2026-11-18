@@ -6,14 +6,15 @@
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import type { PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ResolvedPlace } from "../../../shared/places.ts";
 import type { PlanField, PlannedRoute, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
-import { RAILROADS, type Railroad } from "../../../shared/railroads.ts";
+import { RAILROADS, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { linkTo } from "../../app/routes.ts";
 import { usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtKmShort } from "../../format.ts";
 import { chosenRoute } from "../../map/scene.ts";
+import { lineColor } from "../../theme.ts";
 import { RailroadChip } from "../../ui/badges.tsx";
-import { interchangesWord, placeProblem, routeName, shortPlace } from "../../words.ts";
+import { interchangesWord, lineName, placeProblem, routeName, shortPlace } from "../../words.ts";
 import { samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
 export interface RoutePanelProps {
@@ -269,6 +270,32 @@ function StopRow(props: { index: number; count: number; stop: PlaceRef; place: R
   );
 }
 
+// ---- track ----
+
+const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; tip: string }[] = [
+  { key: "regional", label: "Regional", tip: "Regional: mid-size railroads" },
+  { key: "shortLine", label: "Short lines", tip: "Short line: small local railroads, often the last mile to a plant" },
+  { key: "passenger", label: "Passenger / commuter lines", tip: "Passenger: lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
+];
+
+/** Which track the route may use: Class I always, the rest when ticked. */
+function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackIncluded) => void }): ReactElement {
+  return (
+    <div className="track-choice" role="group" aria-label="Track">
+      <label title="Class I: the 6 big railroads">
+        <input type="checkbox" checked disabled />
+        Class I
+      </label>
+      {SMALLER_TRACK.map(({ key, label, tip }) => (
+        <label key={key} title={tip}>
+          <input type="checkbox" checked={props.include[key]} onChange={(event) => props.onChange({ ...props.include, [key]: event.target.checked })} />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ---- routes ----
 
 /** One row per route: its railroads, km and interchanges, and ↩ when it turns back. Click to select. */
@@ -316,10 +343,10 @@ function Sections(props: { route: RoutePath; start: string; destination: string 
         if (!leg || leg.km < 0.5) return;
         rows.push({
           key,
-          mark: <span className="section-bar" style={{ background: `var(--rr-${leg.railroad})` }} />,
+          mark: <span className="section-bar" style={{ background: lineColor(leg.railroad) }} />,
           text: (
             <>
-              <span className="strong">{leg.railroad}</span> {fmtKmShort(leg.km)}
+              <span className="strong">{lineName(leg.railroad)}</span> {fmtKmShort(leg.km)}
             </>
           ),
           kind: "leg",
@@ -327,7 +354,7 @@ function Sections(props: { route: RoutePath; start: string; destination: string 
         return;
       }
       case "interchange":
-        rows.push({ key, mark: <span className="section-ring" />, text: `${step.from} → ${step.to} · ${shortPlace(step.at)}`, kind: "interchange" });
+        rows.push({ key, mark: <span className="section-ring" />, text: `${lineName(step.from)} → ${lineName(step.to)} · ${shortPlace(step.at)}`, kind: "interchange" });
         return;
       case "stop":
         rows.push({ key, mark: <StopPin n={step.stop + 1} />, text: shortPlace(step.label), kind: "place" });
@@ -539,6 +566,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
           </ol>
         )}
         {end("destination", "Destination")}
+        <TrackChoice include={plan.include} onChange={(include) => dispatch({ type: "setInclude", include })} />
         <HintLine text={hint}>
           {!empty && (
             <button type="button" className="link-btn" onClick={props.onNew}>

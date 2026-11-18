@@ -3,6 +3,7 @@
  * clock and no car: only places, and the routes the network has between them.
  */
 import type { PlaceRef, PlaceResolution } from "./places.ts";
+import type { TrackIncluded } from "./railroads.ts";
 import type { RoutePath, RouteStrategy } from "./route.ts";
 
 export interface Plan {
@@ -10,6 +11,8 @@ export interface Plan {
   /** Travel order. A clicked node's `railroad` is the line chosen there; null = any. */
   stops: PlaceRef[];
   destination: PlaceRef | null;
+  /** Track beyond the Class I railroads the route may use. */
+  include: TrackIncluded;
 }
 
 /** A plan that can be routed and saved: both ends are set. */
@@ -41,7 +44,7 @@ export type PlannedRoute =
 
 export type SavedRouteId = string & { readonly __brand: "SavedRouteId" };
 
-/** What is saved: the places and the chosen alternative. The route itself is worked out again on open. */
+/** What is saved: the places, the track included and the chosen alternative. The route itself is worked out again on open. */
 export interface SavedRouteDraft {
   name: string;
   plan: FullPlan;

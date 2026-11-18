@@ -2,7 +2,7 @@ import type { Layer, PickingInfo } from "deck.gl";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, ShopView } from "../../shared/places.ts";
-import { RAILROADS } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, RAILROADS, type Line } from "../../shared/railroads.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
@@ -18,10 +18,10 @@ const colors: ThemeColors = {
   route: [26, 115, 232, 255],
   alternative: [154, 160, 166, 255],
   casing: [255, 255, 255, 255],
-  rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255] },
+  rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255] },
 };
 
-const TEMPLE_TO_NLR: Plan = { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "North Little Rock, AR" } };
+const TEMPLE_TO_NLR: Plan = { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "North Little Rock, AR" }, include: DEFAULT_INCLUDE };
 const WITH_WYE: Plan = { ...TEMPLE_TO_NLR, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }] };
 
 let twoRoutes: PlannedRoute;
@@ -175,8 +175,13 @@ describe("layers", () => {
     expect(ids.at(-2)).toBe(LAYER.pins);
     expect(ids.at(-1)).toBe(LAYER.pinGlyphs);
     expect(layers.filter((l) => l.props.pickable).map((l) => l.id)).toEqual([LAYER.alternatives, LAYER.route, LAYER.interchanges, LAYER.pins]);
-    const widths = (id: string) => (layers.find((l) => l.id === id)!.props as unknown as { getWidth: number }).getWidth;
-    expect(widths(LAYER.alternatives)).toBeLessThan(widths(LAYER.route));
+    const width = (id: string, railroad: Line) => {
+      const getWidth = (layers.find((l) => l.id === id)!.props as unknown as { getWidth: number | ((leg: { railroad: Line }) => number) }).getWidth;
+      return typeof getWidth === "number" ? getWidth : getWidth({ railroad });
+    };
+    expect(width(LAYER.alternatives, "UP")).toBeLessThan(width(LAYER.route, "UP"));
+    // Regional and short-line sections are thinner than Class I ones, as in the legend.
+    expect(width(LAYER.route, "short line")).toBeLessThan(width(LAYER.route, "UP"));
   });
 
   it("colours the selected route by railroad, section by section", () => {

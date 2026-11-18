@@ -6,9 +6,9 @@
 import type { Assumptions } from "../shared/assumptions.ts";
 import { haversineKm, round5, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
-import { RAILROADS, type Railroad } from "../shared/railroads.ts";
+import { DEFAULT_INCLUDE, LINES, RAILROADS } from "../shared/railroads.ts";
 import type { Approach, Leg, Milestone, RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
-import { ALL_RAILROADS_MASK, LINES, maskOf, MAX_SNAP_KM, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
+import { maskOf, MAX_SNAP_KM, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
 import { RouteError, Router, turnDeg, type Route, type RouteOptions, type RouteStart } from "./core/router.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 
@@ -51,7 +51,7 @@ const REVERSE_KM = 100;
  * freight-owned way is close in length (core/router.ts PASSENGER_TRACK_COST).
  */
 function trackOf(rules: Trip["rules"]): Track {
-  const include = rules.include ?? { regional: false, shortLine: false, passenger: true };
+  const include = rules.include ?? DEFAULT_INCLUDE;
   const allowedMask = maskOf(rules.allowed) | (include.regional ? 1 << REGIONAL : 0) | (include.shortLine ? 1 << SHORT_LINE : 0);
   return { allowedMask, passenger: include.passenger };
 }
@@ -188,11 +188,10 @@ function describe(
   aNodes: Set<number>,
   track: Track,
 ): RoutePath {
-  const railroadOf = classIRailroads(graph, route);
   const subdivision = (edge: number) => (edge >= 0 ? graph.meta.subdivs[graph.edgeSubdiv[edge]] || null : null);
   const turnBacks: TurnBack[] = route.reversals.map((r) => ({
     at: { fraId: graph.fraId(r.node), lon: round5(graph.lon[r.node]), lat: round5(graph.lat[r.node]), near: r.place },
-    railroad: railroadOf[route.legs.findIndex((leg) => leg.railroad === r.railroad && leg.nodes.includes(r.node))],
+    railroad: r.railroad,
     arrives: { subdivision: subdivision(r.arrivedOn), headingDeg: r.arrivingDeg },
     leaves: { subdivision: subdivision(r.leftOn), headingDeg: r.leavingDeg },
     turnDeg: turnDeg(r.arrivingDeg, r.leavingDeg),
@@ -219,12 +218,11 @@ function describe(
 
   for (const [legIndex, coreLeg] of route.legs.entries()) {
     const rr = LINES.indexOf(coreLeg.railroad);
-    const railroad = railroadOf[legIndex];
-    const line = coreLeg.railroad === "regional" || coreLeg.railroad === "short line" ? { line: coreLeg.railroad } : {};
+    const railroad = coreLeg.railroad;
     // Each core leg is one line, so every leg after the first starts with an interchange. A change of railroad
     // right at B makes no leg of its own: on shared track the approach's railroad is a tie the search broke, not a fact.
     if (legIndex > 0) {
-      steps.push({ kind: "interchange", kmFromB: km, from: railroadOf[legIndex - 1], to: railroad, at: graph.nearestPlace(graph.lon[coreLeg.nodes[0]], graph.lat[coreLeg.nodes[0]]) });
+      steps.push({ kind: "interchange", kmFromB: km, from: route.legs[legIndex - 1].railroad, to: railroad, at: graph.nearestPlace(graph.lon[coreLeg.nodes[0]], graph.lat[coreLeg.nodes[0]]) });
     }
     visit(coreLeg.nodes[0], rr);
     let piece: (typeof legs)[number] | null = null;
@@ -237,7 +235,7 @@ function describe(
         piece = null;
       }
       if (!piece) {
-        piece = { railroad, ...line, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], path: [], nodes: [u] };
+        piece = { railroad, km: 0, from: "", to: "", headingDeg: 0, subdivisions: [], path: [], nodes: [u] };
         steps.push({ kind: "leg", kmFromB: km, leg: legs.length });
         legs.push(piece);
       }
@@ -279,22 +277,6 @@ function describe(
     steps,
     passesA,
   };
-}
-
-/**
- * The Class I railroad named for each core leg. A regional or short-line leg has no Class I of its own, so it
- * names the Class I that hands the car to it or takes it over (the leg before, else the leg after), or, on a
- * route with no Class I at all, the Class I nearest to where the leg starts. Leg.line says the track is not its own.
- */
-function classIRailroads(graph: RailGraph, route: Route): Railroad[] {
-  const own = route.legs.map((leg) => (RAILROADS as readonly string[]).includes(leg.railroad) ? (leg.railroad as Railroad) : null);
-  return own.map((railroad, i) => {
-    const neighbour = railroad ?? own.slice(0, i).reverse().find(Boolean) ?? own.slice(i + 1).find(Boolean);
-    if (neighbour) return neighbour;
-    const start = route.legs[i].nodes[0];
-    const nearest = graph.servingNear(graph.lon[start], graph.lat[start], { allowedMask: ALL_RAILROADS_MASK, passenger: true }, Infinity)[0];
-    return RAILROADS[nearest.line];
-  });
 }
 
 /** Everything known about how a trip can run. `paths[0]` is the router's pick. */

@@ -4,11 +4,15 @@
  */
 import type { PlaceResolution } from "../shared/places.ts";
 import type { PlanPlaces } from "../shared/plans.ts";
+import type { Line } from "../shared/railroads.ts";
 import type { RoutePath, TurnBack } from "../shared/route.ts";
 import { fmtCompass, fmtKmShort, fmtSub } from "./format.ts";
 
 /** "Temple, TX" → "Temple"; "72 km from Jacksonville, FL" → "72 km from Jacksonville". */
 export const shortPlace = (near: string) => near.replace(/,\s*[A-Z]{2}$/, "");
+
+/** "UP", "Regional", "Short line". */
+export const lineName = (line: Line) => (line === "regional" ? "Regional" : line === "short line" ? "Short line" : line);
 
 /** "1 interchange", "2 interchanges". */
 export const interchangesWord = (n: number) => `${n} ${n === 1 ? "interchange" : "interchanges"}`;

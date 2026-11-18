@@ -21,6 +21,7 @@ import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../../shared/assumptions.ts";
 import type { CodeSet, CodeType, NodeCode, NodeLocation, Shop, ShopId } from "../../shared/places.ts";
 import type { FullPlan, SavedRoute, SavedRouteId } from "../../shared/plans.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Instant } from "../../shared/time.ts";
 import type { Store } from "./store.ts";
@@ -144,10 +145,16 @@ export function openStore(file: string): Store {
     location: parse<NodeLocation>(row.location_json),
   });
 
+  const planOf = (text: unknown): FullPlan => {
+    const plan = parse<FullPlan>(text);
+    // A route saved before track could be chosen has no `include`.
+    return { ...plan, include: plan.include ?? DEFAULT_INCLUDE };
+  };
+
   const savedRouteOf = (row: Row): SavedRoute => ({
     id: String(row.id) as SavedRouteId,
     name: String(row.name),
-    plan: parse<FullPlan>(row.plan_json),
+    plan: planOf(row.plan_json),
     // A value this version does not know reads as "no choice": the router's own route.
     option: (ROUTE_STRATEGIES as readonly unknown[]).includes(row.option) ? (row.option as RouteStrategy) : null,
   });

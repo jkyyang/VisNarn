@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, type RefObject } from "react";
-import { RAILROADS, type Railroad } from "../shared/railroads.ts";
+import { LINES, type Line } from "../shared/railroads.ts";
 
 export type RGBA = [number, number, number, number];
 export interface ThemeColors {
@@ -11,8 +11,8 @@ export interface ThemeColors {
   alternative: RGBA;
   /** The white edge under a route line and around rings. */
   casing: RGBA;
-  /** The selected route is drawn in its railroads' colours. */
-  rail: Record<Railroad, RGBA>;
+  /** The selected route is drawn in its lines' colours. */
+  rail: Record<Line, RGBA>;
 }
 
 function hexOf(style: CSSStyleDeclaration, name: string, fallback: string): RGBA {
@@ -23,7 +23,20 @@ function hexOf(style: CSSStyleDeclaration, name: string, fallback: string): RGBA
 
 const mq = () => matchMedia("(prefers-color-scheme: dark)");
 
-const RAIL_FALLBACK: Record<Railroad, string> = { BNSF: "#d0661f", UP: "#b8920f", CSXT: "#2b6cb0", NS: "#6b55b0", CN: "#c0392b", CPKC: "#23866a" };
+const RAIL_FALLBACK: Record<Line, string> = {
+  BNSF: "#d0661f",
+  UP: "#b8920f",
+  CSXT: "#2b6cb0",
+  NS: "#6b55b0",
+  CN: "#c0392b",
+  CPKC: "#23866a",
+  regional: "#5f6368",
+  "short line": "#8d6e63",
+};
+
+/** The CSS colour token of a line: `--rr-UP`, `--rr-short-line`. */
+const lineToken = (line: Line) => `--rr-${line.replace(" ", "-")}`;
+export const lineColor = (line: Line) => `var(${lineToken(line)})`;
 
 /** Tokens as `scope` sees them: the map redefines them for its day or night look (styles.css, `.map[data-look]`). */
 function read(scope?: Element | null): ThemeColors {
@@ -35,7 +48,7 @@ function read(scope?: Element | null): ThemeColors {
     route: hex("--route", "#1a73e8"),
     alternative: hex("--alt-route", "#9aa0a6"),
     casing: hex("--casing", "#ffffff"),
-    rail: Object.fromEntries(RAILROADS.map((r) => [r, hex(`--rr-${r}`, RAIL_FALLBACK[r])])) as Record<Railroad, RGBA>,
+    rail: Object.fromEntries(LINES.map((line) => [line, hex(lineToken(line), RAIL_FALLBACK[line])])) as Record<Line, RGBA>,
   };
 }
 

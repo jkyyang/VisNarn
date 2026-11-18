@@ -113,6 +113,39 @@ test.describe("Route planner", () => {
     await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
   });
 
+  test("ticking Short lines reaches the Ville Platte shop, which only a short line serves; a saved route keeps the tick", async ({ page }) => {
+    await page.goto("/route");
+    const shortLines = page.getByRole("group", { name: "Track" }).getByRole("checkbox", { name: "Short lines" });
+    await expect(shortLines).not.toBeChecked();
+    const firstAnswer = page.waitForResponse((r) => r.url().endsWith("/api/route") && (r.request().postDataJSON() as { destination: unknown }).destination !== null);
+    await page.getByRole("combobox", { name: "Start" }).fill("Baton Rouge, LA");
+    await page.getByRole("combobox", { name: "Start" }).press("Enter");
+    // 1373 Union Tank Car Road, Ville Platte, LA: the end of the short line, 20 km from UP.
+    await page.getByRole("combobox", { name: "Destination" }).fill("-92.271, 30.688");
+    await page.getByRole("combobox", { name: "Destination" }).press("Enter");
+    expect((await (await firstAnswer).json()) as PlannedRoute).toMatchObject({ outcome: "no-route", problem: { at: "destination" } });
+    await expect(routeRows(page)).toHaveCount(0);
+
+    const ticked = nextRoute(page);
+    await shortLines.check();
+    expect((await ticked).outcome).toBe("routed");
+    await expect(routeRows(page).first()).toContainText("Short line");
+    await expect(page.getByRole("list", { name: "Sections" })).toContainText("UP → Short line");
+    await expect(legend(page)).toHaveText(["UP", "Short line"]);
+
+    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Baton Rouge → Ville Platte");
+    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
+    await page.reload();
+    await expect(shortLines).toBeChecked();
+    await expect(routeRows(page).first()).toContainText("Short line");
+
+    await page.getByRole("button", { name: "New" }).click();
+    await page.getByRole("button", { name: "Delete EXAMPLE Baton Rouge → Ville Platte" }).click();
+    await page.getByRole("group", { name: "Delete EXAMPLE Baton Rouge → Ville Platte" }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
+  });
+
   test("a turn-back is an amber mark on the map; hovering it shows where and how the route turns", async ({ page, request }) => {
     // Taylor → Temple (the city) → North Little Rock: the router's own route turns back in Temple yard.
     const plan = { start: { kind: "text", text: "Taylor, TX" }, stops: [{ kind: "text", text: "Temple, TX" }], destination: { kind: "text", text: "North Little Rock, AR" } };

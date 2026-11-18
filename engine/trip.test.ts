@@ -2,7 +2,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { haversineKm, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
-import { RAILROADS, type Railroad } from "../shared/railroads.ts";
+import { RAILROADS, type Line, type Railroad } from "../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RoutePath } from "../shared/route.ts";
 import { loadNetwork } from "./load.ts";
 import { ALL_RAILROADS_MASK } from "./core/graph.ts";
@@ -51,7 +51,7 @@ function pointAtKm(path: RoutePath, km: number): LngLat {
 }
 
 /** The railroad the car is on at a step: the last leg row above it. */
-function railroadAtStep(path: RoutePath, stepIndex: number): Railroad {
+function railroadAtStep(path: RoutePath, stepIndex: number): Line {
   const legRow = path.steps.slice(0, stepIndex).reverse().find((s) => s.kind === "leg");
   if (!legRow || legRow.kind !== "leg") throw new Error("no leg before the step");
   return path.legs[legRow.leg].railroad;
@@ -121,7 +121,8 @@ describe("createCarRouter().route", () => {
     expect(router.route(trip, "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: "shop" } });
     const { path } = routed({ ...trip, rules: { ...rules(), include: { regional: false, shortLine: true, passenger: true } } });
     const last = path.legs[path.legs.length - 1];
-    expect(last).toMatchObject({ line: "short line", railroad: "UP" });
+    expect(last.railroad).toBe("short line");
+    expect(path.steps.find((step) => step.kind === "interchange")).toMatchObject({ from: "UP", to: "short line" });
     expect(haversineKm(villePlatte.lon, villePlatte.lat, ...last.path[last.path.length - 1])).toBeLessThan(1);
   });
 

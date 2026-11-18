@@ -5,7 +5,7 @@
 import { haversineKm, type Bounds, type LngLat } from "../../shared/geo.ts";
 import type { PlaceRef, PlaceResolution, ResolvedPlace, ShopId, ShopView } from "../../shared/places.ts";
 import type { PlannedRoute } from "../../shared/plans.ts";
-import type { Railroad } from "../../shared/railroads.ts";
+import type { Line } from "../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../../shared/route.ts";
 import { pillText } from "../words.ts";
 
@@ -21,13 +21,13 @@ export interface ScenePin {
   shopId: ShopId | null;
 }
 
-/** One route as drawn: a path per leg with its railroad colour, and chevrons along it for the direction of travel. */
+/** One route as drawn: a path per leg with its line colour, and chevrons along it for the direction of travel. */
 export interface SceneRoute {
   id: RouteStrategy;
-  legs: { railroad: Railroad; path: LngLat[] }[];
+  legs: { railroad: Line; path: LngLat[] }[];
   /** Arrowheads at a few zoom spacings: position and bearing. */
   chevrons: { position: LngLat; bearingDeg: number; minZoom: number }[];
-  interchanges: { position: LngLat; from: Railroad; to: Railroad; place: string }[];
+  interchanges: { position: LngLat; from: Line; to: Line; place: string }[];
 }
 
 /** A small rounded label on the map for one route: click to select it. */

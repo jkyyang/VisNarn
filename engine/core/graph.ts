@@ -18,11 +18,8 @@
  */
 import { haversineKm } from "../../shared/geo.ts";
 import type { FraId } from "../../shared/places.ts";
-import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
+import { LINES, RAILROADS, type Railroad } from "../../shared/railroads.ts";
 
-/** Lines the router can run on: each Class I railroad, then every regional railroad, then every short line. */
-export const LINES = [...RAILROADS, "regional", "short line"] as const;
-export type Line = (typeof LINES)[number];
 export const REGIONAL = LINES.indexOf("regional");
 export const SHORT_LINE = LINES.indexOf("short line");
 

@@ -52,7 +52,7 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
 
       // A = B (the engine's precedent for "no next node"): the route may leave the start either way.
       const from = waypoint(start.place);
-      const trip: Trip = { a: from, b: from, stops: stops.map((s) => waypoint(s.place)), shop: waypoint(destination.place), rules: parts.rules() };
+      const trip: Trip = { a: from, b: from, stops: stops.map((s) => waypoint(s.place)), shop: waypoint(destination.place), rules: { ...parts.rules(), include: plan.include } };
       const routed = await planner.plan(trip, "all", { signal });
       if (routed.ok) return { outcome: "routed", places, routes: routed.trip.paths };
       return { outcome: "no-route", places, problem: problemOf(routed.noRoute, trip) };

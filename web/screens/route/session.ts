@@ -7,7 +7,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { haversineKm, type LngLat } from "../../../shared/geo.ts";
 import type { PlaceRef } from "../../../shared/places.ts";
 import type { FullPlan, Plan, PlanField, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
-import type { Railroad } from "../../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import { snapToNetwork } from "../../data/hooks.ts";
 
 type LonLat = { lon: number; lat: number };
@@ -37,6 +37,8 @@ export type PlanAction =
   | { type: "setLine"; index: number; railroad: Railroad | null }
   | { type: "removeStop"; index: number }
   | { type: "moveStop"; from: number; to: number }
+  /** Which track beyond Class I the route may use. */
+  | { type: "setInclude"; include: TrackIncluded }
   /** Undoable. */
   | { type: "clear" }
   | { type: "pick"; field: PlanField | null }
@@ -46,7 +48,7 @@ export type PlanAction =
   | { type: "undo" }
   | { type: "redo" };
 
-export const EMPTY_PLAN: Plan = { start: null, stops: [], destination: null };
+export const EMPTY_PLAN: Plan = { start: null, stops: [], destination: null, include: DEFAULT_INCLUDE };
 
 export function startSession(savedId: SavedRouteId | null, plan: Plan): PlanSession {
   return { savedId, plan: { past: [], present: plan, future: [] }, pick: null, missed: false };
@@ -68,8 +70,16 @@ function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
   }
 }
 
+const sameInclude = (x: TrackIncluded, y: TrackIncluded) => x.regional === y.regional && x.shortLine === y.shortLine && x.passenger === y.passenger;
+
 export function samePlan(x: Plan, y: Plan): boolean {
-  return samePlace(x.start, y.start) && samePlace(x.destination, y.destination) && x.stops.length === y.stops.length && x.stops.every((stop, i) => samePlace(stop, y.stops[i]));
+  return (
+    samePlace(x.start, y.start) &&
+    samePlace(x.destination, y.destination) &&
+    x.stops.length === y.stops.length &&
+    x.stops.every((stop, i) => samePlace(stop, y.stops[i])) &&
+    sameInclude(x.include, y.include)
+  );
 }
 
 export function isFull(plan: Plan): plan is FullPlan {
@@ -117,6 +127,8 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
       next.splice(to, 0, stops[from]);
       return push(session, { ...plan, stops: next });
     }
+    case "setInclude":
+      return push(session, { ...plan, include: action.include });
     case "clear":
       return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
     case "pick":

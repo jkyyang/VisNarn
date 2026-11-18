@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_NETWORK_DIR, loadNetwork } from "../../engine/index.ts";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { FraId, PlaceRef } from "../../shared/places.ts";
 import type { Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { createDirectory } from "../places/directory.ts";
@@ -28,7 +29,7 @@ afterAll(async () => {
 afterEach(() => store.settings.saveAssumptions(DEFAULT_ASSUMPTIONS));
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination });
+const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination, include: DEFAULT_INCLUDE });
 const TAYLOR_TO_NLR = plan(text("Taylor, TX"), text("North Little Rock, AR"));
 /** The Temple wye, where BNSF and UP meet. */
 const WYE = 358070 as FraId;
@@ -84,6 +85,13 @@ describe("Plans.route", () => {
     }
   });
 
+  it("routes over the track the plan includes: Ville Platte's short-line shop only with short lines ticked", async () => {
+    const villePlatte = plan(text("Baton Rouge, LA"), { kind: "coord", lon: -92.271, lat: 30.688 });
+    expect(await plans.route(villePlatte)).toMatchObject({ outcome: "no-route", problem: { at: "destination" } });
+    const answer = routed(await plans.route({ ...villePlatte, include: { ...DEFAULT_INCLUDE, shortLine: true } }));
+    expect(answer.routes[0].legs.at(-1)?.railroad).toBe("short line");
+  });
+
   it("no route is said at the place it breaks, in the plan's words", async () => {
     store.settings.saveAssumptions({ ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, allowed: ["CN"] } });
     const notServed = await plans.route(TAYLOR_TO_NLR);
@@ -103,7 +111,7 @@ describe("Plans.route", () => {
 describe("Plans: saved routes", () => {
   const draft = (name: string, over: Partial<SavedRouteDraft> = {}): SavedRouteDraft => ({
     name,
-    plan: { start: text("Kansas City, MO"), stops: [], destination: text("Chicago, IL") },
+    plan: { start: text("Kansas City, MO"), stops: [], destination: text("Chicago, IL"), include: DEFAULT_INCLUDE },
     option: null,
     ...over,
   });

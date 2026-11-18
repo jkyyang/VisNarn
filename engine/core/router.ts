@@ -17,7 +17,8 @@
  * Because state includes the direction of travel, a route can continue from where the previous one ended
  * (a via point, or the car's A→B approach) without turning back.
  */
-import { LINES, MAX_SNAP_KM, type Line, type Point, type RailGraph, type Track } from "./graph.ts";
+import { LINES, type Line } from "../../shared/railroads.ts";
+import { MAX_SNAP_KM, type Point, type RailGraph, type Track } from "./graph.ts";
 
 export interface Leg {
   railroad: Line;

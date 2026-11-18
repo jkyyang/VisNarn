@@ -1,4 +1,4 @@
-import { RAILROADS, type Railroad } from "./railroads.ts";
+import { RAILROADS, type Railroad, type TrackIncluded } from "./railroads.ts";
 
 /** Where the speed came from. Until it is fitted from car history, every time is shown as a rough estimate. */
 export type EstimateBasis = { kind: "placeholder" } | { kind: "calibrated"; trips: number; scope: "lane" | "region" | "global" };
@@ -14,7 +14,7 @@ export interface Assumptions {
     allowed: Railroad[];
     /** Extra km the router accepts to avoid changing railroad. Adds no time. */
     interchangePenaltyKm: number;
-    /** Track beyond the Class I railroads that routes may use. Missing: passenger-owned track only. */
+    /** Track beyond the Class I railroads: each plan sets its own (Plan.include). Missing: DEFAULT_INCLUDE. */
     include?: TrackIncluded;
   };
   /** Decides when the car arrives on a given route. */
@@ -32,13 +32,6 @@ export interface Assumptions {
     /** A position report older than this, at the batch's "as of" time, is stale. */
     positionAgeH: number;
   };
-}
-
-/** Regional (US Class II) railroads, short lines, and track owned by passenger agencies (Amtrak, Metra, GO, ...). */
-export interface TrackIncluded {
-  regional: boolean;
-  shortLine: boolean;
-  passenger: boolean;
 }
 
 /** Placeholders until they are agreed with the team and fitted from car history. */

@@ -9,13 +9,14 @@ import type { Res, Route } from "../shared/api.ts";
 import { DEFAULT_ASSUMPTIONS, type Assumptions } from "../shared/assumptions.ts";
 import type { FraId, PlaceRef, ShopId } from "../shared/places.ts";
 import type { FullPlan, Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../shared/plans.ts";
+import { DEFAULT_INCLUDE } from "../shared/railroads.ts";
 import { startTestApp, type TestApp } from "./harness.ts";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination });
-const TAYLOR_TO_NLR: FullPlan = { start: text("Taylor, TX"), stops: [], destination: text("EX-NLR-01") };
+const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination, include: DEFAULT_INCLUDE });
+const TAYLOR_TO_NLR: FullPlan = { start: text("Taylor, TX"), stops: [], destination: text("EX-NLR-01"), include: DEFAULT_INCLUDE };
 /** The Temple wye, where BNSF and UP meet. */
 const WYE = 358070 as FraId;
 
@@ -96,7 +97,7 @@ describe("server", () => {
     try {
       let shopId = "" as ShopId;
       let routeId = "" as SavedRouteId;
-      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { start: text("Taylor, TX"), stops: [], destination: text("Waco, TX") }, option: null };
+      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { start: text("Taylor, TX"), stops: [], destination: text("Waco, TX"), include: DEFAULT_INCLUDE }, option: null };
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/meta": () => s.api("GET /api/meta"),
@@ -152,7 +153,7 @@ describe("server", () => {
         ]),
       );
       expect(await s.api("GET /api/saved-routes")).toEqual([]);
-      const saved = await s.api("POST /api/saved-routes", { body: { name: "Taylor → NLR", plan: { start: text("Taylor, TX"), stops: [], destination: text("EX-NLR-01") }, option: null } });
+      const saved = await s.api("POST /api/saved-routes", { body: { name: "Taylor → NLR", plan: TAYLOR_TO_NLR, option: null } });
       expect((await s.api("GET /api/meta")).exampleOnly).toBe(false);
       await s.api("DELETE /api/saved-routes/:routeId", { params: { routeId: saved.id } });
       expect((await s.api("GET /api/meta")).exampleOnly).toBe(true);
@@ -313,7 +314,7 @@ describe("restart", () => {
   it("a new server on the same data folder has the shops, the saved routes and the routing rules; routes are worked out again", async () => {
     const first = await startTestApp();
     const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
-    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id } }, option: null } });
+    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id }, include: DEFAULT_INCLUDE }, option: null } });
     const mine: Assumptions = { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, interchangePenaltyKm: 300 } };
     await first.api("PUT /api/assumptions", { body: mine });
     // The user deletes every EXAMPLE shop: they must not come back on the next start.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_ASSUMPTIONS } from "../../shared/assumptions.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { decodeBody, decodeQuery, savedRouteId } from "./decode.ts";
 
 /** The AppError a decoder throws, as "kind field: message", or "accepted". */
@@ -18,12 +19,18 @@ const plan = {
   start: { kind: "text", text: "Kansas City, MO" },
   stops: [{ kind: "node", fraId: 357961, railroad: "BNSF" }],
   destination: { kind: "shop", shopId: "s1" },
+  include: { regional: false, shortLine: true, passenger: false },
 };
 
 describe("decodeBody", () => {
   it("reads a plan; unknown fields are dropped and an end may be empty", () => {
     expect(decodeBody["POST /api/route"]({ ...plan, extra: "x" })).toEqual(plan);
-    expect(decodeBody["POST /api/route"]({ start: null, stops: [], destination: null })).toEqual({ start: null, stops: [], destination: null });
+    expect(decodeBody["POST /api/route"]({ start: null, stops: [], destination: null, include: DEFAULT_INCLUDE })).toEqual({ start: null, stops: [], destination: null, include: DEFAULT_INCLUDE });
+  });
+
+  it("a plan without the track it includes gets the default; a bad one names its field", () => {
+    expect(decodeBody["POST /api/route"]({ ...plan, include: undefined }).include).toEqual(DEFAULT_INCLUDE);
+    expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, include: { ...plan.include, regional: "yes" } }))).toMatch(/^invalid include\.regional: /);
   });
 
   it("names the field at fault in a plan", () => {
@@ -48,8 +55,6 @@ describe("decodeBody", () => {
 
   it("reads assumptions in their three groups and refuses a number that is not finite", () => {
     expect(decodeBody["PUT /api/assumptions"](JSON.parse(JSON.stringify(DEFAULT_ASSUMPTIONS)))).toEqual(DEFAULT_ASSUMPTIONS);
-    const ticked = { ...DEFAULT_ASSUMPTIONS, routing: { ...DEFAULT_ASSUMPTIONS.routing, include: { regional: true, shortLine: false, passenger: true } } };
-    expect(decodeBody["PUT /api/assumptions"](JSON.parse(JSON.stringify(ticked)))).toEqual(ticked);
     const broken = { ...DEFAULT_ASSUMPTIONS, timing: { ...DEFAULT_ASSUMPTIONS.timing, speedKmPerDay: "fast" } };
     expect(refusal(() => decodeBody["PUT /api/assumptions"](broken))).toMatch(/^invalid timing\.speedKmPerDay: /);
     expect(refusal(() => decodeBody["PUT /api/assumptions"]({ ...DEFAULT_ASSUMPTIONS, routing: { allowed: ["XX"], interchangePenaltyKm: 1 } }))).toMatch(

@@ -9,10 +9,10 @@
  */
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
-import type { Assumptions, EstimateBasis, TrackIncluded } from "../../shared/assumptions.ts";
+import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
 import type { CodeType, FraId, ImportRequest, PlaceRef, PlaceRole, ShopDraft, ShopId, UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
-import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
 
 type RoutesWith<Part extends "body" | "query"> = { [R in Route]: Api[R][Part] extends undefined ? never : R }[Route];
@@ -122,16 +122,27 @@ const placeRef: Decoder<PlaceRef> = (value, path) => {
 /** At most this many stops: a plan is clicked together by hand. */
 const MAX_STOPS = 50;
 
+const trackIncluded: Decoder<TrackIncluded> = (value, path) => ({
+  regional: field(value, path, "regional", boolean),
+  shortLine: field(value, path, "shortLine", boolean),
+  passenger: field(value, path, "passenger", boolean),
+});
+
+/** A plan with no `include` (from before track could be chosen) uses the default. */
+const included: Decoder<TrackIncluded> = (value, path) => field(value, path, "include", nullable(trackIncluded)) ?? DEFAULT_INCLUDE;
+
 const plan: Decoder<Plan> = (value, path) => ({
   start: field(value, path, "start", nullable(placeRef)),
   stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
   destination: field(value, path, "destination", nullable(placeRef)),
+  include: included(value, path),
 });
 
 const fullPlan: Decoder<FullPlan> = (value, path) => ({
   start: field(value, path, "start", placeRef),
   stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
   destination: field(value, path, "destination", placeRef),
+  include: included(value, path),
 });
 
 const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
@@ -152,12 +163,6 @@ const basis: Decoder<EstimateBasis> = (value, path) => {
   return { kind, trips: field(value, path, "trips", wholeNumber), scope: field(value, path, "scope", oneOf(["lane", "region", "global"] as const)) };
 };
 
-const trackIncluded: Decoder<TrackIncluded> = (value, path) => ({
-  regional: field(value, path, "regional", boolean),
-  shortLine: field(value, path, "shortLine", boolean),
-  passenger: field(value, path, "passenger", boolean),
-});
-
 const assumptions: Decoder<Assumptions> = (value, path) => {
   const group = (key: string) => [field(value, path, key, object), at(path, key)] as const;
   const [routing, routingPath] = group("routing");
@@ -167,7 +172,6 @@ const assumptions: Decoder<Assumptions> = (value, path) => {
     routing: {
       allowed: [...new Set(field(routing, routingPath, "allowed", list(railroad, RAILROADS.length * 2)))],
       interchangePenaltyKm: field(routing, routingPath, "interchangePenaltyKm", number),
-      include: field(routing, routingPath, "include", nullable(trackIncluded)) ?? undefined,
     },
     timing: {
       speedKmPerDay: field(timing, timingPath, "speedKmPerDay", number),

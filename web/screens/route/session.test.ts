@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { FraId, PlaceRef, ShopId } from "../../../shared/places.ts";
 import type { SavedRouteId } from "../../../shared/plans.ts";
-import { EMPTY_PLAN, nextTarget, planReducer, startSession, stopInsertIndex, type PlanAction, type PlanSession } from "./session.ts";
+import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
+import { EMPTY_PLAN, nextTarget, planReducer, samePlan, startSession, stopInsertIndex, type PlanAction, type PlanSession } from "./session.ts";
 
 const node = (fraId: number): PlaceRef => ({ kind: "node", fraId: fraId as FraId, railroad: null });
 const shop = (id: string): PlaceRef => ({ kind: "shop", shopId: id as ShopId });
@@ -16,7 +17,7 @@ const stopIds = (s: PlanSession) => s.plan.present.stops.map((stop) => (stop.kin
 describe("plan session", () => {
   it("starts empty, with no history", () => {
     const s = fresh();
-    expect(s.plan.present).toEqual({ start: null, stops: [], destination: null });
+    expect(s.plan.present).toEqual({ start: null, stops: [], destination: null, include: { regional: false, shortLine: false, passenger: true } });
     expect(s.plan.past).toEqual([]);
     expect(s.pick).toBeNull();
   });
@@ -41,7 +42,7 @@ describe("plan session", () => {
 
   it("ignores a node or shop already in the plan, the start and destination too", () => {
     const s = run(
-      startSession(null, { start: node(7), stops: [], destination: shop("s1") }),
+      startSession(null, { ...EMPTY_PLAN, start: node(7), destination: shop("s1") }),
       { type: "addStop", ref: node(1), index: 0 },
       { type: "addStop", ref: { kind: "node", fraId: 1 as FraId, railroad: "UP" }, index: 0 },
     );
@@ -81,12 +82,20 @@ describe("plan session", () => {
   it("undo and redo walk the start, destination and stops; a new change clears redo", () => {
     const s = run(planned(), { type: "addStop", ref: node(1), index: 0 });
     const back = run(s, { type: "undo" }, { type: "undo" });
-    expect(back.plan.present).toEqual({ start: KC, stops: [], destination: null });
+    expect(back.plan.present).toEqual({ ...EMPTY_PLAN, start: KC });
     expect(run(back, { type: "redo" }, { type: "redo" }).plan.present).toEqual(s.plan.present);
     const branched = planReducer(back, { type: "setPlace", field: "destination", ref: node(5) });
     expect(branched.plan.future).toEqual([]);
     expect(planReducer(branched, { type: "redo" })).toBe(branched);
     expect(planReducer(fresh(), { type: "undo" })).toEqual(fresh());
+  });
+
+  it("ticking a track type is one undoable change of plan; the same choice again is none", () => {
+    const ticked = planReducer(planned(), { type: "setInclude", include: { ...DEFAULT_INCLUDE, shortLine: true } });
+    expect(ticked.plan.present.include).toEqual({ regional: false, shortLine: true, passenger: true });
+    expect(samePlan(ticked.plan.present, planned().plan.present)).toBe(false);
+    expect(planReducer(ticked, { type: "undo" }).plan.present.include).toEqual(DEFAULT_INCLUDE);
+    expect(planReducer(ticked, { type: "setInclude", include: { ...ticked.plan.present.include } })).toBe(ticked);
   });
 
   it("saved adopts the id and keeps the history", () => {
