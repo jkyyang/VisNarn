@@ -9,7 +9,7 @@
  *
  * Places are never in a URL: only ids and view choices.
  */
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { ShopId } from "../../shared/places.ts";
 import type { SavedRouteId } from "../../shared/plans.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
@@ -93,7 +93,10 @@ function currentScreen(): Screen {
 
 /** The current screen; re-renders on navigation (history.pushState / popstate through useSyncExternalStore). */
 export function useScreen(): Screen {
-  return useSyncExternalStore(subscribe, currentScreen, () => HOME);
+  const screen = useSyncExternalStore(subscribe, currentScreen, () => HOME);
+  // An unknown or retired link (/cars, /batch) shows HOME, so the address bar names HOME too.
+  useEffect(() => go(screen, { replace: true }), [screen]);
+  return screen;
 }
 
 /** `replace` for view choices that should not add a Back step (picking an alternative). */

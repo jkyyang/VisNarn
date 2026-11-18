@@ -166,6 +166,12 @@ describe("Shops screen", () => {
     }
   });
 
+  it("a link to a shop that is not in the list opens the list at /shops", async () => {
+    openPage("/shops/does-not-exist");
+    expect(await screen.findByText("EX-NLR-01")).toBeInTheDocument();
+    await waitFor(() => expect(currentPath()).toBe("/shops"));
+  });
+
   it("the import preview lists the rows that will not be saved, with why; then saves the rest", async () => {
     const user = userEvent.setup();
     openPage("/shops");

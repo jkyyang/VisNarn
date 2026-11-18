@@ -24,6 +24,13 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     setMissed(false);
   }, [screen.edit]);
 
+  // A link to a shop that is gone (deleted, or never there) opens the list, and the address says so.
+  const unknownShop =
+    shops.status === "ready" && !shops.stale && screen.edit !== null && screen.edit !== "new" && !shops.data.some((shop) => shop.id === screen.edit);
+  useEffect(() => {
+    if (unknownShop) go({ name: "shops", edit: null }, { replace: true });
+  }, [unknownShop]);
+
   useEffect(() => {
     if (!picking) return;
     const onKey = (event: KeyboardEvent) => {

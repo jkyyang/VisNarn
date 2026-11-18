@@ -250,6 +250,15 @@ describe("Route planner", () => {
     expect(screen.queryByRole("list", { name: "Stops" })).not.toBeInTheDocument();
   });
 
+  it("an old or unknown link (/cars, /batch) opens the planner and the address bar says /route", async () => {
+    for (const path of ["/cars", "/cars/new", "/batch", "/nowhere"]) {
+      const page = openPage(path);
+      expect(field("Start")).toHaveValue("");
+      await waitFor(() => expect(currentPath(), path).toBe("/route"));
+      page.unmount();
+    }
+  });
+
   it("the panel says no time, date or verdict anywhere", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
