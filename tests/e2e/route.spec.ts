@@ -181,7 +181,6 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     await planRoute(page, "Kansas City, MO", "Chicago, IL");
     const string = page.getByRole("region", { name: "Route string" });
-    await expect(string).toContainText("Planned route — not a clearance or schedule");
     // Carriers and [our own place names] only: never a made-up junction code.
     const shape = /^(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line)( – \[[^\]]+\] – (BNSF|UP|CSXT|NS|CN|CPKC|regional|short line))*$/;
     await expect(string.locator(".route-string-text")).toHaveText(shape);

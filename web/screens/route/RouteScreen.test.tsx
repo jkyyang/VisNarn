@@ -105,13 +105,12 @@ describe("Route planner", () => {
     expect(screen.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("shows the chosen route as a route string, carriers and junctions only, marked as a plan, not a clearance or schedule", async () => {
+  it("shows the chosen route as a route string, carriers and junctions only", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     const string = screen.getByRole("region", { name: "Route string" });
     expect(string).toHaveTextContent("BNSF");
     expect(string).not.toHaveTextContent("–");
-    expect(string).toHaveTextContent("Planned route — not a clearance or schedule");
 
     await user.click(routeRows()[1]);
     await waitFor(() => expect(screen.getByRole("region", { name: "Route string" })).toHaveTextContent("BNSF – [Fort Worth, TX] – UP"));

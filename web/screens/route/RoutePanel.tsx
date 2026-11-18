@@ -421,13 +421,12 @@ function Sections(props: { route: RoutePath; string: RouteString; start: string;
   );
 }
 
-/** "BNSF – [Kansas City, MO] – UP" and what it is not; on a saved route, the string it was saved with when the router now gives another. */
+/** "BNSF – [Kansas City, MO] – UP"; on a saved route, also the string it was saved with when the router now gives another. */
 function RouteStringRow(props: { string: RouteString; saved: string | null }): ReactElement {
   const compact = compactRouteString(props.string);
   return (
     <section className="route-string" aria-label="Route string">
       <span className="route-string-text">{shownRouteString(props.string)}</span>
-      <span className="plan-chip">Planned route — not a clearance or schedule</span>
       {props.saved && props.saved !== compact && <span className="route-string-saved">Saved as {props.saved}</span>}
     </section>
   );

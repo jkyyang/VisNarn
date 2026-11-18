@@ -906,13 +906,6 @@ input[aria-invalid="true"] {
   font-size: 13px;
   font-weight: 600;
 }
-.plan-chip {
-  padding: 1px 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 11.5px;
-  color: var(--muted);
-}
 .route-string-saved {
   flex-basis: 100%;
   font-family: var(--mono);
@@ -1752,6 +1745,10 @@ input[aria-invalid="true"] {
   }
   .tab[aria-current="page"] {
     padding-bottom: 9px;
+  }
+  /* Edit scrolls the form to the top: leave a gap so the card's edge and heading show. */
+  .shop-form {
+    scroll-margin-top: 12px;
   }
   .map-btn--layers .map-btn-text {
     display: none;
