@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 describe("node server/main.ts --selftest", () => {
-  it("loads the network, starts one routing worker, routes the EXAMPLE car and exits 0", () => {
+  it("loads the network, starts one routing worker, routes the EXAMPLE route and exits 0", () => {
     const run = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "server/main.ts", "--selftest"], {
       cwd: ROOT,
       encoding: "utf8",
@@ -15,7 +15,9 @@ describe("node server/main.ts --selftest", () => {
     });
     expect(run.stderr).toBe("");
     expect(run.status).toBe(0);
-    expect(run.stdout).toMatch(/^selftest ok: network [0-9a-f]{12}; EXAMPLE car .* routed in a worker thread: \d+ km on /);
+    expect(run.stdout).toMatch(/^selftest ok: network [0-9a-f]{12}; EXAMPLE route Taylor, TX to North Little Rock, AR routed in a worker thread: \d+ km on /);
+    // Stage 1 has no car concept, not even in the self-test's output.
+    expect(run.stdout).not.toMatch(/\bcars?\b/i);
   }, 60_000);
 
   it("refuses an unknown option with a plain message and exit code 1", () => {

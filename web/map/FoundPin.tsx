@@ -23,10 +23,13 @@ function CardButton(props: { label: string; className: string; onPress: () => vo
 /** The pin where a found place is, and its card. Must be a child of the map. */
 export function FoundPin(props: { chosen: PlaceSuggestion; place: ResolvedPlace; actions: PlaceAction[]; onClose: () => void }): ReactElement {
   const { chosen, place } = props;
+  const card = useRef<HTMLElement>(null);
+  // A click anywhere on the card stays on the card: on the map it would place a point there.
+  useNativeClick(card, () => {});
   return (
     <Marker longitude={place.lon} latitude={place.lat} anchor="center" className="found-pin">
       <span className="found-dot" aria-hidden="true" />
-      <section className="map-card found-card" aria-label={`Found: ${chosen.label}`}>
+      <section ref={card} className="map-card found-card" aria-label={`Found: ${chosen.label}`}>
         <div className="found-head">
           <strong>{chosen.label}</strong>
           <span className="type-chip">{TYPE_CHIPS[chosen.source]}</span>

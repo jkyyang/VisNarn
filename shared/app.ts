@@ -1,4 +1,4 @@
-/** Two things every part of the app shares that are about the app itself, not about cars or places. */
+/** Two things every part of the app shares that are about the app itself, not about routes or places. */
 import type { Railroad } from "./railroads.ts";
 
 /** What the page needs to know about the server it is talking to. */
@@ -20,8 +20,7 @@ export type AppErrorKind = "invalid" | "not-found" | "conflict" | "internal";
 
 /**
  * A request the application refuses. Server modules throw it; the HTTP layer turns it into a status
- * and the page's data layer turns that back into the same error. A car that cannot be checked is
- * not one of these: it is a CarCheck with outcome "cannot-check".
+ * and the page's data layer turns that back into the same error.
  */
 export class AppError extends Error {
   readonly kind: AppErrorKind;

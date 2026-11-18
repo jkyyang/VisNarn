@@ -2,7 +2,7 @@
  * A route from B to the shop, and what to make of it.
  *
  * Two layers. A RoutePath is track only: it has no clock in it, so it is the same for any speed
- * and can be cached. A RouteOption is that path under the current assumptions and the car's times:
+ * and can be cached. A RouteOption is that path under the current assumptions and given times:
  * the same steps with rough arrival times, and a verdict.
  */
 import type { LngLat } from "./geo.ts";
@@ -19,7 +19,7 @@ import type { Instant } from "./time.ts";
 export const ROUTE_STRATEGIES = ["pick", "shortest", "fewest-interchanges", "no-turn-backs"] as const;
 export type RouteStrategy = (typeof ROUTE_STRATEGIES)[number];
 
-/** One run on one line in one direction (a leg also ends where the car turns back). */
+/** One run on one line in one direction (a leg also ends where the route turns back). */
 export interface Leg {
   railroad: Line;
   km: number;
@@ -40,7 +40,7 @@ export interface TurnBack {
   leaves: { subdivision: string | null; headingDeg: number };
   /** 0–180. */
   turnDeg: number;
-  /** "stub-end": the car leaves over the same segment it arrived on. */
+  /** "stub-end": the route leaves over the same segment it arrived on. */
   track: "yard" | "stub-end";
 }
 
@@ -67,7 +67,7 @@ export interface RoutePath<Step = Milestone> {
   passesA: boolean;
 }
 
-/** Not a forecast range: both ends use the same speed. It only covers where the car is between A and B. */
+/** Not a forecast range: both ends use the same speed. It only covers a start anywhere between A and B. */
 export interface EtaWindow {
   ifAtB: Instant;
   ifJustPastA: Instant;
@@ -84,14 +84,14 @@ export type RouteFlag =
   | { kind: "approach-not-on-track" }
   | { kind: "passes-a-again" }
   | { kind: "stale-position"; ageH: number }
-  /** A and B are the same place, so the car's direction is not known and the route may hide a turn-back. */
+  /** A and B are the same place, so the direction of travel is not known and the route may hide a turn-back. */
   | { kind: "direction-unknown" };
 
 export type TriageGroup = "act-now" | "check-first" | "ok";
 
 export interface Verdict {
   arrival: EtaWindow;
-  /** arrival.ifAtB minus prep end, in hours. Negative: the car can arrive before prep ends. */
+  /** arrival.ifAtB minus prep end, in hours. Negative: arrival can come before prep ends. */
   marginH: number;
   timing: TimingStatus;
   flags: RouteFlag[];
@@ -99,12 +99,12 @@ export interface Verdict {
 }
 
 export interface RouteOption extends RoutePath<RouteStep> {
-  /** Stable while the same car is open: the first strategy that found the path. */
+  /** Stable while the same route is open: the first strategy that found the path. */
   id: RouteStrategy;
   verdict: Verdict;
 }
 
-/** The stretch the car is on, from A to B. Straight line (× 1.2) when the allowed track does not connect them. */
+/** The stretch from A to B. Straight line (× 1.2) when the allowed track does not connect them. */
 export interface Approach {
   onTrack: boolean;
   km: number;

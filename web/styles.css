@@ -525,7 +525,6 @@ kbd {
 }
 input:not([type]),
 input[type="text"],
-input[type="datetime-local"],
 input[inputmode],
 select {
   height: 36px;

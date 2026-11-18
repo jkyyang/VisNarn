@@ -1,7 +1,7 @@
 /**
  * `node server/main.ts --selftest`: proves, under plain Node rather than vitest's esbuild (which
  * accepts syntax Node refuses), that the server's sources load, a routing worker thread starts, the
- * EXAMPLE car routes, and its route draws along the real track (track.bin matches graph.bin). It
+ * EXAMPLE route plans, and it draws draws along the real track (track.bin matches graph.bin). It
  * touches no database and opens no port.
  */
 import { loadNetwork, loadTrackShapes, type Trip } from "../engine/index.ts";
@@ -25,7 +25,7 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
   try {
     const routed = await planner.plan(trip, "pick");
     if (!routed.ok) {
-      log(`selftest FAILED: the EXAMPLE car (Taylor, TX → Temple, TX → North Little Rock, AR) has no route: ${routed.noRoute.message}`);
+      log(`selftest FAILED: the EXAMPLE route Taylor, TX to North Little Rock, AR (via Temple, TX) has no path: ${routed.noRoute.message}`);
       return false;
     }
     const [path] = routed.trip.paths;
@@ -36,7 +36,7 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
       return false;
     }
     const ms = Math.round(performance.now() - started);
-    log(`selftest ok: network ${network.version}; EXAMPLE car Temple, TX → North Little Rock, AR routed in a worker thread: ${Math.round(path.km)} km on ${path.railroads.join(", ")} (${ms} ms)`);
+    log(`selftest ok: network ${network.version}; EXAMPLE route Taylor, TX to North Little Rock, AR routed in a worker thread: ${Math.round(path.km)} km on ${path.railroads.join(", ")} (${ms} ms)`);
     return true;
   } finally {
     await planner.close();
