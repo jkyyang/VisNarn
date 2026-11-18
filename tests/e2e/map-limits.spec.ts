@@ -1,11 +1,14 @@
 /**
- * The map stays on North America: it pans only a margin past it (PAN_BOUNDS in web/map/MapCanvas.tsx,
- * longitude −170 to −20, latitude 5 to 83) and stops zooming out once that margin fills the screen.
+ * The map stays on North America: it pans only a margin past it (PAN_BOUNDS in web/map/config.ts)
+ * and stops zooming out once that margin fills the screen.
  * The page keeps the map instance to itself, so the test reads the map through a click: a click on
  * empty map asks the server for the nearest place at the clicked longitude and latitude.
  */
 import type { Page } from "@playwright/test";
 import { expect, expectMapCanvases, mapRegion, test } from "./app.ts";
+import { PAN_BOUNDS } from "../../web/map/config.ts";
+
+const [[WEST, SOUTH], [EAST, NORTH]] = PAN_BOUNDS;
 
 /** Clicks the map at a fraction of its width and height and returns the place clicked. */
 async function placeAt(page: Page, fx: number, fy: number): Promise<{ lon: number; lat: number }> {
@@ -39,11 +42,11 @@ test("the map pans a margin past North America and no further, and stops zooming
   // Pulled towards the South Atlantic: the bottom edge stops at 5° N, the right edge at 20° W.
   await zoomOutAndDrag(page, -3000, -3000);
   const southEast = await placeAt(page, 0.98, 0.98);
-  expect(southEast.lat).toBeGreaterThanOrEqual(5 - SLACK_DEG);
-  expect(southEast.lon).toBeLessThanOrEqual(-20 + SLACK_DEG);
+  expect(southEast.lat).toBeGreaterThanOrEqual(SOUTH - SLACK_DEG);
+  expect(southEast.lon).toBeLessThanOrEqual(EAST + SLACK_DEG);
   // Fully zoomed out the screen spans at most the 150° between the side limits: the world stays big.
   const west = await placeAt(page, 0.02, 0.5);
-  expect(west.lon).toBeGreaterThanOrEqual(-170 - SLACK_DEG);
+  expect(west.lon).toBeGreaterThanOrEqual(WEST - SLACK_DEG);
 
   // Pulled towards Siberia: the left edge stops at 170° W, the top edge at 83° N.
   await page.reload();
@@ -51,6 +54,6 @@ test("the map pans a margin past North America and no further, and stops zooming
   await zoomOutAndDrag(page, 3000, 3000);
   // The corner itself: the search box sits over the map from 16 px in, and a click on it is not a click on the map.
   const northWest = await placeAt(page, 0.004, 0.004);
-  expect(northWest.lon).toBeGreaterThanOrEqual(-170 - SLACK_DEG);
-  expect(northWest.lat).toBeLessThanOrEqual(83 + SLACK_DEG);
+  expect(northWest.lon).toBeGreaterThanOrEqual(WEST - SLACK_DEG);
+  expect(northWest.lat).toBeLessThanOrEqual(NORTH + SLACK_DEG);
 });

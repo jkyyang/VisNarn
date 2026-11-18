@@ -6,19 +6,13 @@
  * scripts/architecture.test.ts fail if it does): the rest of the app speaks FRA ids and coordinates,
  * through engine/index.ts.
  *
- * Binary layout (little-endian):
- *   uint32 nNodes, uint32 nEdges
- *   float32[nNodes*2] lon,lat        uint8[nNodes] mainline railroad mask   (+ pad bytes)
- *   uint32[nEdges] u   uint32[nEdges] v   float32[nEdges] km
- *   uint8[nEdges] line mask           uint16[nEdges] subdivision index
- *   uint16[nEdges] heading leaving u  uint16[nEdges] heading leaving v   (degrees, 0 = north)
- *   uint8[nEdges] flags (YARD_FLAG, PASSENGER_FLAG)
- * Line masks (edges and the node mainline mask) have one bit per line: the Class I railroads in RAILROADS
- * order, then REGIONAL and SHORT_LINE, which stand for all regional and all short-line railroads.
+ * Binary layout: see pipeline/export_web_graph.py. Line masks (edges and the node mainline mask) have one
+ * bit per line in LINES order; graph_meta.json "lines" records the order the file was built with.
  */
 import { haversineKm } from "../../shared/geo.ts";
 import type { FraId } from "../../shared/places.ts";
 import { LINES, RAILROADS } from "../../shared/railroads.ts";
+import { NEAR_CITY_KM, SERVE_SLACK_KM, SNAP_KM } from "../rules.ts";
 
 export const REGIONAL = LINES.indexOf("regional");
 export const SHORT_LINE = LINES.indexOf("short line");
@@ -37,18 +31,9 @@ export interface Track {
   passenger: boolean;
 }
 
-/** Coordinates snap to a railroad's mainline only within this distance. */
-export const MAX_SNAP_KM = 15;
-
-/**
- * A railroad serves coordinates only when its mainline is about as close as the nearest one: within this
- * many km of the nearest railroad's distance. A shop 1 km from CN track is not served by a CPKC line 14 km
- * away, so a route must not end there (Oakville, ON, 2026-11-17).
- */
-export const SERVE_SLACK_KM = 5;
-
 export interface GraphMeta {
-  railroads: string[];
+  /** The line bit order graph.bin was built with. */
+  lines: string[];
   pad: number;
   subdivs: string[];
   fra_ids: number[];
@@ -59,7 +44,7 @@ export interface Point {
   label: string;
   lon: number;
   lat: number;
-  /** Exact graph node (an index), when the point is a network node and not just coordinates. */
+  /** Exact graph node (an index) when the point is a network node. */
   node?: number;
   /** Railroad index: only this railroad may serve the point ("Which line?" at a place where several meet). */
   only?: number;
@@ -97,9 +82,7 @@ export class RailGraph {
   private readonly fraIndex: Map<number, number>;
 
   constructor(buf: ArrayBuffer, meta: GraphMeta) {
-    if (meta.railroads.join() !== RAILROADS.join()) {
-      throw new Error(`graph railroads ${meta.railroads} do not match app ${RAILROADS}`);
-    }
+    if (meta.lines.join() !== LINES.join()) throw new Error(`graph lines ${meta.lines} do not match app ${LINES}`);
     this.meta = meta;
     const [n, e] = new Uint32Array(buf, 0, 2);
     this.nodeCount = n;
@@ -214,15 +197,11 @@ export class RailGraph {
         best = name;
       }
     }
-    return bd < 25 ? best : `${Math.round(bd)} km from ${best}`;
-  }
-
-  nodePoint(node: number): Point {
-    return { label: `FRA node ${this.fraId(node)}`, lon: this.lon[node], lat: this.lat[node], node };
+    return bd < NEAR_CITY_KM ? best : `${Math.round(bd)} km from ${best}`;
   }
 
   /** Allowed lines serving a point → their entry node. Exact nodes use the lines present there. */
-  serving(p: Point, track: Track, maxKm = MAX_SNAP_KM): Map<number, number> {
+  serving(p: Point, track: Track, maxKm = SNAP_KM): Map<number, number> {
     const out = new Map<number, number>();
     if (p.node !== undefined) {
       for (let c = 0; c < LINES.length; c++) {
@@ -239,7 +218,7 @@ export class RailGraph {
   }
 
   /** Each allowed line whose mainline is within `maxKm` and within SERVE_SLACK_KM of the nearest allowed one. */
-  servingNear(lon: number, lat: number, track: Track, maxKm = MAX_SNAP_KM): { line: number; node: number; km: number }[] {
+  servingNear(lon: number, lat: number, track: Track, maxKm = SNAP_KM): { line: number; node: number; km: number }[] {
     const hits: { line: number; node: number; km: number }[] = [];
     for (let c = 0; c < LINES.length; c++) {
       if (!(track.allowedMask & (1 << c))) continue;

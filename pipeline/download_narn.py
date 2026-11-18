@@ -13,25 +13,25 @@ from pathlib import Path
 
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from railroad_classes import CARRIER_COLS, CLASS1  # noqa: E402
+
 URL = ("https://services.arcgis.com/xOi1kZaI0eWDREZv/ArcGIS/rest/services/"
        "NTAD_North_American_Rail_Network_Lines/FeatureServer/0/query")
-CLASS1 = ["BNSF", "UP", "CSXT", "NS", "CN", "CPKC"]
 NETS = ["M", "S", "Y"]
-FIELDS = ["OBJECTID", "FRAARCID", "FRFRANODE", "TOFRANODE", "STATEAB", "COUNTRY",
-          "RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in range(1, 10)] + [
+FIELDS = ["OBJECTID", "FRAARCID", "FRFRANODE", "TOFRANODE", "STATEAB", "COUNTRY"] + CARRIER_COLS + [
           "SUBDIV", "YARDNAME", "NET", "TRACKS", "MILES", "KM"]
 PAGE = 2000
 
 
 def where(class1: bool) -> str:
     ins = ",".join(f"'{c}'" for c in CLASS1)
-    cols = ["RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in range(1, 10)]
     nets = ",".join(f"'{n}'" for n in NETS)
     if class1:
-        owner = " OR ".join(f"{c} IN ({ins})" for c in cols)
+        owner = " OR ".join(f"{c} IN ({ins})" for c in CARRIER_COLS)
     else:
         # The exact complement: an empty column is "not Class I" too (NOT IN alone is unknown on NULL).
-        owner = " AND ".join(f"({c} IS NULL OR {c} NOT IN ({ins}))" for c in cols)
+        owner = " AND ".join(f"({c} IS NULL OR {c} NOT IN ({ins}))" for c in CARRIER_COLS)
     return f"({owner}) AND NET IN ({nets})"
 
 

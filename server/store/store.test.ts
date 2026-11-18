@@ -33,7 +33,7 @@ const shop = (over: Partial<Shop> = {}): Shop => ({
 const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedRoute => ({
   id: id as SavedRouteId,
   name,
-  plan: { start: { kind: "text", text: "Kansas City, MO" }, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }], destination: { kind: "shop", shopId: "s1" as ShopId }, include: DEFAULT_INCLUDE },
+  plan: { places: [{ kind: "text", text: "Kansas City, MO" }, { kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }, { kind: "shop", shopId: "s1" as ShopId }], include: DEFAULT_INCLUDE },
   option: null,
   routeString: "BNSF-[Temple, TX]-UP",
   ...over,
@@ -117,16 +117,17 @@ describe("Store", () => {
     check.close();
   });
 
-  it("opens a schema 2 file: a route saved before route strings reads with an empty one", () => {
+  it("opens a schema 2 file: a route saved before route strings, the places list and track choice reads in today's shape", () => {
     const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
     folders.push(dir);
     const file = join(dir, "visnarn.db");
     openStore(file).close();
     const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
     const raw = new DatabaseSync(file);
+    const { places } = route("r1", "x").plan;
     raw.exec(`ALTER TABLE saved_routes DROP COLUMN route_string;
       UPDATE meta SET value = '2' WHERE key = 'schema_version';
-      INSERT INTO saved_routes (id, name, plan_json, option) VALUES ('r1', 'KC → Chicago', '${JSON.stringify(route("r1", "x").plan)}', NULL);`);
+      INSERT INTO saved_routes (id, name, plan_json, option) VALUES ('r1', 'KC → Chicago', '${JSON.stringify({ start: places[0], stops: [places[1]], destination: places[2] })}', NULL);`);
     raw.close();
 
     const migrated = openStore(file);

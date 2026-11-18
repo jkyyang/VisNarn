@@ -3,12 +3,10 @@
  * two nodes, which is all routing needs. track.bin holds each segment's surveyed line (the NARN
  * geometry, thinned to within 2 m), so the map can draw a route along the track when Real tracks is on.
  *
- * track.bin layout (little-endian), written by pipeline/export_web_graph.py:
- *   uint32 nEdges   uint32[nEdges + 1] first point of each edge   float32[nPoints * 2] lon,lat
- * Edge k's points are the ones between its two nodes, in graph.bin edge order, from edgeU toward edgeV.
- * The nodes themselves are not repeated: their coordinates are in graph.bin.
+ * track.bin layout: see pipeline/export_web_graph.py. The nodes themselves are not repeated: their
+ * coordinates are in graph.bin.
  */
-import { round5, type LngLat } from "../shared/geo.ts";
+import { round5, roundLngLat, type LngLat } from "../shared/geo.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 
 export interface TrackShapes {
@@ -63,7 +61,7 @@ export function openTrackShapes(network: RailNetwork, bin: ArrayBuffer): TrackSh
           const from = first[step.edge], to = first[step.edge + 1];
           for (let j = 0; j < to - from; j++) {
             const k = step.forward ? from + j : to - 1 - j;
-            add([round5(points[2 * k]), round5(points[2 * k + 1])]);
+            add(roundLngLat(points[2 * k], points[2 * k + 1]));
           }
         }
         add(q);

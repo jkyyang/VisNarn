@@ -5,7 +5,7 @@
  */
 import type { ShopDraft } from "../../shared/places.ts";
 
-/** The six EXAMPLE shops of the mockups (codes EX-NLR-01 …), each located by coordinates. */
+/** The six EXAMPLE shops (codes EX-NLR-01 …), each located by coordinates. */
 export function exampleShops(): ShopDraft[] {
   const shop = (name: string, code: string, lon: number, lat: number): ShopDraft => ({ name, code, location: { kind: "coord", lon, lat } });
   return [

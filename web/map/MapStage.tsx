@@ -24,14 +24,13 @@ import { createPortal } from "react-dom";
 import type { LngLat } from "../../shared/geo.ts";
 import type { ResolvedPlace } from "../../shared/places.ts";
 import type { TrackIncluded } from "../../shared/railroads.ts";
-import type { Mainline } from "../data/basemap.ts";
+import { canDrawMaps, type Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
+import { NETWORK_CENTRE } from "./config.ts";
 import { mapLook, sunPosition } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
-/** A click snaps to a track node if one is within this many screen pixels; the tolerance in km follows the zoom. */
-export const PICK_RADIUS_PX = 36;
 
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
@@ -122,8 +121,6 @@ export function MapStageProvider(props: { network: Mainline | null; children: Re
   );
 }
 
-/** WebGL is what MapLibre and deck.gl draw with; without it there is nothing to load. */
-const canDrawMaps = () => typeof window !== "undefined" && ("WebGL2RenderingContext" in window || "WebGLRenderingContext" in window);
 
 function NoMap(): ReactElement {
   return (
@@ -135,8 +132,6 @@ function NoMap(): ReactElement {
 
 const noopSubscribe = () => () => {};
 
-/** Where the sun is judged until the map reports its centre: the middle of the network. */
-const NETWORK_CENTRE: LngLat = [-95.5, 38.5];
 /** Dusk lasts about half an hour; a look checked every minute changes gently enough. */
 const CLOCK_TICK_MS = 60_000;
 

@@ -43,13 +43,7 @@ describe("the night map", () => {
     }
   });
 
-  it("uses the app's dark theme colours, and the day map the light theme's, so the cards over the map match the map", () => {
-    const day = tokens('.map[data-look="day"]');
-    const lightTheme = tokens(":root");
-    const darkTheme = tokens(":root", CSS.indexOf("@media (prefers-color-scheme: dark)"));
-    for (const name of ["--panel", "--fg", "--route", "--casing", ...RAILROADS.map((r) => `--rr-${r}`)]) {
-      expect(day[name], `day ${name}`).toBe(lightTheme[name]);
-      expect(night[name], `night ${name}`).toBe(darkTheme[name]);
-    }
+  it("uses the app's dark theme colours, so the cards over the map match the map", () => {
+    expect(night).toEqual(tokens(":root", CSS.indexOf("@media (prefers-color-scheme: dark)")));
   });
 });

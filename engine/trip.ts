@@ -1,19 +1,19 @@
 /**
- * Routing one plan: from the start, through the stops in order, to the destination. In: waypoints with
- * stable ids. Out: paths with stable ids. The node and edge indexes of engine/core never leave this file.
+ * Routing one trip through its points in order: the start, any stops, the destination. In: waypoints
+ * with stable ids. Out: paths with stable ids. The node and edge indexes of engine/core stay in this file.
  */
-import { haversineKm, round5, type LngLat } from "../shared/geo.ts";
+import { haversineKm, round5, roundLngLat, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
-import { DEFAULT_INCLUDE, LINES, RAILROADS, type TrackIncluded } from "../shared/railroads.ts";
+import { LINES, RAILROADS, type TrackIncluded } from "../shared/railroads.ts";
 import type { Leg, Milestone, RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
-import { ALL_RAILROADS_MASK, MAX_SNAP_KM, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
+import { ALL_RAILROADS_MASK, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
 import { RouteError, Router, turnDeg, type Route, type RouteOptions } from "./core/router.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
+import { INTERCHANGE_PENALTY_KM, REVERSE_KM, SNAP_KM } from "./rules.ts";
 
 export interface Trip {
-  start: Waypoint;
-  stops: Waypoint[];
-  destination: Waypoint;
+  /** Travel order, 2 or more. */
+  points: Waypoint[];
   /** Track beyond the Class I railroads the route may use. */
   include: TrackIncluded;
 }
@@ -24,8 +24,9 @@ export interface NoRoute {
    * "dead-end": the stop is reached, but every way of reaching it faces away from the next waypoint.
    */
   kind: "not-served" | "no-path" | "dead-end";
-  /** The waypoint at fault: "start", "destination", or the index of a stop. */
-  at: "start" | "destination" | number;
+  /** The point at fault: an index into `Trip.points`. */
+  at: number;
+  /** One line for a developer; the planner shows its own words. */
   message: string;
 }
 
@@ -36,23 +37,23 @@ export type RouteResult = { ok: true; path: RoutePath } | { ok: false; noRoute: 
  * one per thread, one `route` call at a time. Creating it takes about 20 ms.
  */
 export interface CarRouter {
-  /** One way to run the trip. "No route" is an answer. Deterministic for a given network version. */
+  /** One way to run the trip; {ok: false} when there is no route. Deterministic for a given network version. */
   route(trip: Trip, strategy: RouteStrategy): RouteResult;
 }
 
-/** Extra km the router accepts to avoid changing railroad. */
-const INTERCHANGE_PENALTY_KM = 500;
-const REVERSE_KM = 100;
 
 /**
  * Every Class I railroad, plus regional railroads and short lines when included. Passenger-owned track is
  * included unless turned off; the router then uses it only where no freight-owned way is close in length
  * (core/router.ts PASSENGER_TRACK_COST).
  */
-function trackOf(include: TrackIncluded = DEFAULT_INCLUDE): Track {
+function trackOf(include: TrackIncluded): Track {
   const allowedMask = ALL_RAILROADS_MASK | (include.regional ? 1 << REGIONAL : 0) | (include.shortLine ? 1 << SHORT_LINE : 0);
   return { allowedMask, passenger: include.passenger };
 }
+
+/** Fewest interchanges: any length of single-railroad track beats a change of railroad. */
+const NO_INTERCHANGE_KM = 100_000;
 
 /** Routing penalties per strategy. They steer which path is found; `km` stays real track distance. */
 function costsOf(strategy: RouteStrategy): Omit<RouteOptions, keyof Track> {
@@ -63,19 +64,14 @@ function costsOf(strategy: RouteStrategy): Omit<RouteOptions, keyof Track> {
       // Where railroads share track, a free interchange would win ties and invent a change of railroad: 1 km.
       return { interchangeKm: 1, reverseKm: 0 };
     case "fewest-interchanges":
-      return { interchangeKm: 100_000, reverseKm: REVERSE_KM };
+      return { interchangeKm: NO_INTERCHANGE_KM, reverseKm: REVERSE_KM };
     case "no-turn-backs":
       return { interchangeKm: INTERCHANGE_PENALTY_KM, reverseKm: Infinity };
   }
 }
 
-type At = NoRoute["at"];
-
-/** How a message names a waypoint. Never its label: results are cached under keys without labels. */
-function roleOf(at: At): string {
-  return at === "start" ? "the start" : at === "destination" ? "the destination" : `stop ${at + 1}`;
-}
-const capital = (text: string) => text[0].toUpperCase() + text.slice(1);
+/** How a message names a point. Never its label: results are cached under keys without labels. */
+const nameOf = (at: number) => `point ${at + 1}`;
 
 export function createCarRouter(network: RailNetwork): CarRouter {
   const graph = coreOf(network);
@@ -89,12 +85,11 @@ export function createCarRouter(network: RailNetwork): CarRouter {
   };
 
   /** Why no allowed railroad can serve this waypoint, or null when one can. */
-  const notServed = (w: Waypoint, p: Point | null, at: At, track: Track): NoRoute | null => {
-    if (!p) return { kind: "not-served", at, message: `${capital(roleOf(at))} is FRA node ${w.fraId}, which this network does not have.` };
+  const notServed = (w: Waypoint, p: Point | null, at: number, track: Track): NoRoute | null => {
+    if (!p) return { kind: "not-served", at, message: `${nameOf(at)} (FRA node ${w.fraId}) is not in this network` };
     if (graph.serving(p, track).size) return null;
-    const where = p.node !== undefined ? `track at ${roleOf(at)} (FRA node ${w.fraId})` : `mainline within ${MAX_SNAP_KM} km of ${roleOf(at)}`;
-    const message = w.railroad ? `${w.railroad} has no ${where}.` : `No allowed railroad has ${where}.`;
-    return { kind: "not-served", at, message };
+    const where = p.node !== undefined ? `track at ${nameOf(at)} (FRA node ${w.fraId})` : `mainline within ${SNAP_KM} km of ${nameOf(at)}`;
+    return { kind: "not-served", at, message: w.railroad ? `${w.railroad} has no ${where}` : `no allowed railroad has ${where}` };
   };
 
   /**
@@ -112,15 +107,13 @@ export function createCarRouter(network: RailNetwork): CarRouter {
       const track = trackOf(trip.include);
       const options: RouteOptions = { ...track, ...costsOf(strategy) };
 
-      const ends: [Waypoint, At][] = [[trip.start, "start"], ...trip.stops.map((w, i): [Waypoint, At] => [w, i]), [trip.destination, "destination"]];
       const points: Point[] = [];
-      for (const [w, at] of ends) {
+      for (const [at, w] of trip.points.entries()) {
         const p = pointOf(w);
         const problem = notServed(w, p, at, track);
         if (problem) return { ok: false, noRoute: problem };
         points.push(p!);
       }
-      const atOf = (point: number): At => (point === points.length - 1 ? "destination" : point === 0 ? "start" : point - 1);
 
       let route: Route;
       try {
@@ -128,21 +121,20 @@ export function createCarRouter(network: RailNetwork): CarRouter {
       } catch (error) {
         if (!(error instanceof RouteError)) throw error;
         if (error.deadEnd) {
-          const message = `${capital(roleOf(atOf(error.point)))} is reached, but the route cannot go on from it to ${roleOf(atOf(error.point + 1))} without turning back outside a yard.`;
-          return { ok: false, noRoute: { kind: "dead-end", at: atOf(error.point), message } };
+          const message = `${nameOf(error.point)} is reached but cannot be left toward ${nameOf(error.point + 1)} without turning back outside a yard`;
+          return { ok: false, noRoute: { kind: "dead-end", at: error.point, message } };
         }
         const target = error.point > 0 ? error.point : points.length - 1;
-        const message = `No route from ${roleOf(atOf(target - 1))} to ${roleOf(atOf(target))} on the track allowed, without turning back outside a yard.`;
+        const message = `no route from ${nameOf(target - 1)} to ${nameOf(target)} on the track allowed without turning back outside a yard`;
         // Blame the end the allowed track cuts off (Oakville, ON without passenger-owned track, 2026-11-18).
         const cut = cutOff(points[target - 1], points[target], track);
-        return { ok: false, noRoute: { kind: "no-path", at: atOf(cut === "from" ? target - 1 : target), message } };
+        return { ok: false, noRoute: { kind: "no-path", at: cut === "from" ? target - 1 : target, message } };
       }
       return { ok: true, path: describe(graph, route, strategy, points.slice(1, -1), track) };
     },
   };
 }
 
-const lngLat = ([lon, lat]: [number, number]): LngLat => [round5(lon), round5(lat)];
 
 /** Initial great-circle bearing from one point to another, degrees clockwise from north. */
 function bearingDeg(lon1: number, lat1: number, lon2: number, lat2: number): number {
@@ -199,11 +191,10 @@ function describe(
     }
     visit(coreLeg.nodes[0], rr);
     let piece: (typeof legs)[number] | null = null;
-    for (let j = 0; j + 1 < coreLeg.nodes.length; j++) {
+    for (const [j, edge] of coreLeg.edges.entries()) {
       const u = coreLeg.nodes[j], v = coreLeg.nodes[j + 1];
-      const edge = graph.edgeBetween(u, v);
       const reversal = route.reversals[nextTurnBack];
-      if (reversal && reversal.node === u && reversal.leftOn === edge && Math.abs(reversal.km - km) < 0.01) {
+      if (reversal?.leg === legIndex && reversal.step === j) {
         steps.push({ kind: "turn-back", kmFromStart: km, turnBack: nextTurnBack++ });
         piece = null;
       }
@@ -220,10 +211,6 @@ function describe(
       visit(v, rr);
     }
   }
-  // Reversals the walk did not meet (none are expected) still get their row, so nothing goes unreported.
-  for (; nextTurnBack < route.reversals.length; nextTurnBack++) {
-    steps.push({ kind: "turn-back", kmFromStart: route.reversals[nextTurnBack].km, turnBack: nextTurnBack });
-  }
   for (; nextStop < stops.length; nextStop++) steps.push({ kind: "stop", kmFromStart: km, stop: nextStop, label: stops[nextStop].label });
   steps.push({ kind: "destination", kmFromStart: km });
   steps.sort((x, y) => x.kmFromStart - y.kmFromStart);
@@ -236,7 +223,7 @@ function describe(
       from: graph.nearestPlace(x0, y0),
       to: graph.nearestPlace(x1, y1),
       headingDeg: Math.round(bearingDeg(x0, y0, x1, y1)),
-      path: nodes.map((n) => lngLat([graph.lon[n], graph.lat[n]])),
+      path: nodes.map((n) => roundLngLat(graph.lon[n], graph.lat[n])),
     };
   });
 
@@ -284,9 +271,9 @@ const SAME_LINE_OVERLAP = 0.95;
  * One line on the ground, as a person reading the cards would see it. Railroad names are left out
  * on purpose: on shared track two railroads run over the same rails, and a card per name would show
  * one line several times. Nearly the same track counts too, but only with the same interchanges,
- * turn-backs and length, because those change the estimate. "Nearly the same" is measured in km,
- * not in points: a short stretch of parallel yard track has many points but is not a different line
- * (Temple, TX to Oakville, ON, 2026-11-17: 92 % of points but 99 % of km shared).
+ * turn-backs and length, because those change the route. "Nearly the same" is measured in km: a short
+ * stretch of parallel yard track has many points and is still one line (Temple, TX to Oakville, ON,
+ * 2026-11-17: 92 % of points but 99 % of km shared).
  */
 function sameLine(x: RoutePath, y: RoutePath): boolean {
   if (x.turnBacks.length !== y.turnBacks.length) return false;
@@ -334,5 +321,5 @@ export function tripKey(networkVersion: string, trip: Trip): string {
   const place = (w: Waypoint): (number | string | null)[] =>
     w.fraId !== null ? [w.fraId as FraId, w.railroad] : [round5(w.lon), round5(w.lat), w.railroad];
   const { allowedMask, passenger } = trackOf(trip.include);
-  return JSON.stringify([networkVersion, place(trip.start), trip.stops.map(place), place(trip.destination), allowedMask, passenger]);
+  return JSON.stringify([networkVersion, trip.points.map(place), allowedMask, passenger]);
 }

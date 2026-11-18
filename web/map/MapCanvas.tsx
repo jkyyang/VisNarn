@@ -7,11 +7,10 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
-import type { PlaceSuggestion } from "../../shared/places.ts";
+import { NEAREST_MAX_KM, type PlaceSuggestion } from "../../shared/places.ts";
 import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
-import { usePlace } from "../data/hooks.ts";
-import { useTrackPaths } from "../data/hooks.ts";
+import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
@@ -23,8 +22,9 @@ import { networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
-import { PICK_RADIUS_PX, type MapContentProps, type MapFocus } from "./MapStage.tsx";
-import { REAL_TRACKS_MIN_ZOOM, RealTracks } from "./RealTracks.tsx";
+import { AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM } from "./config.ts";
+import type { MapContentProps, MapFocus } from "./MapStage.tsx";
+import { RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
 import { NETWORK_BOUNDS, routePaths, withRoutePaths } from "./scene.ts";
 
@@ -49,8 +49,6 @@ export interface MapCanvasProps {
   onCentre: (centre: LngLat) => void;
 }
 
-/** The farthest the server snaps a click (GET /api/places/nearest): zoomed far out, 36 px is more than that. */
-const MAX_PICK_KM = 100;
 
 const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
 const INITIAL_VIEW = {
@@ -58,30 +56,15 @@ const INITIAL_VIEW = {
     [NETWORK_BOUNDS[0], NETWORK_BOUNDS[1]],
     [NETWORK_BOUNDS[2], NETWORK_BOUNDS[3]],
   ] as [[number, number], [number, number]],
-  fitBoundsOptions: { padding: 24 },
+  fitBoundsOptions: { padding: INITIAL_PADDING_PX },
 };
-/**
- * How far the map pans: North America with a wide margin, so a glimpse of Greenland, the Caribbean
- * and northern South America stays but the map cannot drift to another continent. MapLibre keeps
- * the whole screen inside these, which also stops zooming out once they fill the screen.
- */
-const PAN_BOUNDS: [[number, number], [number, number]] = [
-  [-170, 5],
-  [-20, 83],
-];
+
+/** Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom. */
+const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 
 /** Web-mercator ground distance covered by one screen pixel (MapLibre zoom levels use 512 px tiles). */
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
-/**
- * In Auto, the dark street map only from this zoom in. Further out the screen spans the twilight
- * band, so the light map stays and the night tiles cover the night side, like the Earth from space;
- * from here in the screen (about 700 km) is nearly all day or all night.
- */
-export const AUTO_DARK_ZOOM = 7;
-
-/** A place found with the search box is shown this close: its yard and the lines through it. */
-const FOUND_ZOOM = 12;
 
 /** Flies to one junction when the screen asks for it. Renders nothing; must be a child of the map. */
 function FlyTo({ focus }: { focus: MapFocus | undefined }) {
@@ -90,7 +73,7 @@ function FlyTo({ focus }: { focus: MapFocus | undefined }) {
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, duration: still ? 0 : 900 });
+    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, duration: still ? 0 : FLY_MS });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
   }, [map, key]);
   return null;
@@ -150,14 +133,14 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const [zoom, setZoom] = useState(3);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
   const resolution = usePlace(chosen?.ref ?? null, "shop");
-  const found = chosen && resolution.status === "ready" && !resolution.stale ? resolution.data : null;
+  const found = chosen && fresh(resolution);
   const [fitNonce, setFitNonce] = useState(0);
   const given = content?.scene ?? null;
   // With Real tracks on, the routes follow the surveyed track and the real lines replace the
   // network where the tiles have them; with it off, both are drawn node to node, like the network layer.
   const asked = useMemo(() => (layers.tracks && given ? routePaths(given) : []), [layers.tracks, given]);
   const onTrack = useTrackPaths(asked.length ? asked : null);
-  const trackPaths = layers.tracks && onTrack.status === "ready" && !onTrack.stale ? onTrack.data : null;
+  const trackPaths = layers.tracks ? fresh(onTrack) : null;
   const scene = useMemo(() => (given && trackPaths ? withRoutePaths(given, trackPaths) : given), [given, trackPaths]);
   const networkShown = layers.network && !(layers.tracks && zoom >= REAL_TRACKS_MIN_ZOOM);
   const include = content?.include ?? DEFAULT_INCLUDE;
@@ -176,9 +159,8 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
   };
-  // Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom.
   const onMoveEnd = (event: ViewStateChangeEvent) => {
-    setZoom(Math.floor(event.viewState.zoom * 2) / 2);
+    setZoom(halfZoom(event.viewState.zoom));
     watchCamera(event.target);
   };
   const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
@@ -198,7 +180,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         doubleClickZoom={false}
         onMoveEnd={onMoveEnd}
         onLoad={(event) => {
-          setZoom(Math.floor(event.target.getZoom() * 2) / 2);
+          setZoom(halfZoom(event.target.getZoom()));
           watchCamera(event.target);
         }}
       >
@@ -206,7 +188,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <DeckOverlay
           layers={deckLayers}
           getTooltip={sceneTooltip}
-          pickingRadius={8}
+          pickingRadius={DECK_PICK_RADIUS_PX}
           onClick={(info) => {
             const target = sceneTarget(info);
             const current = latest.current;
@@ -214,7 +196,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
             if (target && current.onSelect) return current.onSelect(target);
             if (current.onPick && info.coordinate) {
               const [lon, lat] = info.coordinate;
-              current.onPick(lon, lat, Math.min(MAX_PICK_KM, PICK_RADIUS_PX * kmPerPixel(lat, info.viewport?.zoom ?? zoom)));
+              current.onPick(lon, lat, Math.min(NEAREST_MAX_KM, PICK_RADIUS_PX * kmPerPixel(lat, info.viewport?.zoom ?? zoom)));
             }
           }}
         />

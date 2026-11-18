@@ -2,9 +2,9 @@
  * Phone: the route planner in a 390 × 844 window with touch, as on an iPhone 14. The map sits on top,
  * the same rows follow in one column, and nothing is cut off at the sides.
  */
-import { expectMapCanvases, keepScreenshot, mapRegion, planRoute, test, expect } from "./app.ts";
+import { expect, expectMapCanvases, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, planRoute, test } from "./app.ts";
 
-test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+test.use(PHONE);
 
 test("Phone: map on top, then the places, the routes and the sections in one column", async ({ page }) => {
   await page.goto("/route");
@@ -26,7 +26,7 @@ test("Phone: map on top, then the places, the routes and the sections in one col
   await expect(page.getByRole("button", { name: "Undo route change" })).toBeVisible();
 
   // Nothing wider than the phone: no sideways scrolling.
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expectNoSideScroll(page);
   await keepScreenshot(page, "phone");
 });
 
@@ -35,7 +35,7 @@ test("Phone: Shops fits the width; a shop's form comes into view when Edit is ta
     await page.goto(path);
     await expectMapCanvases(page);
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), path).toBeLessThanOrEqual(390);
+    await expectNoSideScroll(page, path);
   }
 
   await page.goto("/shops");
@@ -43,5 +43,5 @@ test("Phone: Shops fits the width; a shop's form comes into view when Edit is ta
   const form = page.getByRole("region", { name: "Edit shop" });
   await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
   await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeInViewport();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expectNoSideScroll(page);
 });

@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
 import { locationOf, refOf, type ImportReport, type ImportRequest, type RowIssue, type Shop, type ShopDraft, type ShopId, type ShopView } from "../../shared/places.ts";
-import { openSource, readShops } from "../intake/intake.ts";
+import { readShops } from "../intake/intake.ts";
 import type { Store } from "../store/store.ts";
 import type { Directory } from "./directory.ts";
 
@@ -25,7 +25,7 @@ export interface Shops {
 }
 
 export function createShops(store: Store, directory: Directory): Shops {
-  // By its saved location, not its id: an import preview shows shops that are not saved yet.
+  // By its saved location: shops in an import preview have no id yet.
   const view = (shop: Shop): ShopView => ({ ...shop, place: directory.resolve(refOf(shop.location), "position") });
   const withCode = (code: string, except: ShopId | null = null) =>
     store.shops.named(code).find((s) => s.code?.toLowerCase() === code.toLowerCase() && s.id !== except) ?? null;
@@ -67,7 +67,7 @@ export function createShops(store: Store, directory: Directory): Shops {
     },
 
     async import({ source, commit }) {
-      const parsed = await readShops(openSource(source));
+      const parsed = readShops(source);
       const issues: RowIssue[] = [...parsed.issues];
       const bad = new Set(parsed.issues.map((i) => i.row));
       const seen = new Map<string, number>();

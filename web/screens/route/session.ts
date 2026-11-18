@@ -1,15 +1,16 @@
 /**
- * The plan being worked on in the route planner: its places with their undo history, which field ⌖
+ * The plan being worked on in the route planner: its place list with its undo history, which row's ⌖
  * is on, and whether the last map click missed. View state only: it lives in memory, in the browser.
  * The routes come from the server (usePlannedRoute); a plan is kept there only when it is saved.
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { haversineKm, type LngLat } from "../../../shared/geo.ts";
 import type { PlaceRef } from "../../../shared/places.ts";
-import type { FullPlan, Plan, PlanField, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
+import type { FullPlan, Plan, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import { snapToNetwork } from "../../data/hooks.ts";
-import { PICK_RADIUS_PX } from "../../map/MapStage.tsx";
+import { PICK_RADIUS_PX } from "../../map/config.ts";
+import { useEscape } from "../../ui/useEscape.ts";
 
 type LonLat = { lon: number; lat: number };
 
@@ -23,35 +24,35 @@ export interface PlanSession {
   /** The saved route this session edits; null for a new plan. */
   savedId: SavedRouteId | null;
   plan: History<Plan>;
-  /** A field whose ⌖ is on; null: clicks go start → destination → stops. */
-  pick: PlanField | null;
+  /** The row whose ⌖ is on; null: a click fills the first empty row, else adds a stop. */
+  pick: number | null;
   /** The last click was too far from any track. */
   missed: boolean;
 }
 
+/** Every change to the place list is undoable and turns ⌖ off. */
 export type PlanAction =
-  /** Typed and Enter, a suggestion, a click, or × to clear. */
-  | { type: "setPlace"; field: PlanField; ref: PlaceRef | null }
-  /** Ignored when the node or shop is already in the plan. */
-  | { type: "addStop"; ref: PlaceRef; index: number }
-  /** The line chosen at a node stop; null = any. */
-  | { type: "setLine"; index: number; railroad: Railroad | null }
-  | { type: "removeStop"; index: number }
-  | { type: "moveStop"; from: number; to: number }
+  /** Typed and Enter, a suggestion, a click, or emptied. */
+  | { type: "setPlace"; at: number; ref: PlaceRef | null }
+  /** A new row before `at`. Ignored when the place is already in the plan. An empty row (null) gets ⌖. */
+  | { type: "insert"; at: number; ref: PlaceRef | null }
+  /** Takes the row out; of the last two, empties it. */
+  | { type: "remove"; at: number }
+  | { type: "move"; from: number; to: number }
+  /** The next carrier chosen at a node; null = the router's pick. */
+  | { type: "setLine"; at: number; railroad: Railroad | null }
   /** Which track beyond Class I the route may use. */
   | { type: "setInclude"; include: TrackIncluded }
-  /** Undoable. */
   | { type: "clear" }
-  /** Destination becomes the start and the stops run the other way. Undoable. */
   | { type: "reverse" }
-  | { type: "pick"; field: PlanField | null }
+  | { type: "pick"; at: number | null }
   | { type: "missed" }
   /** Adopt the id after the first save; the history stays. */
   | { type: "saved"; id: SavedRouteId }
   | { type: "undo" }
   | { type: "redo" };
 
-export const EMPTY_PLAN: Plan = { start: null, stops: [], destination: null, include: DEFAULT_INCLUDE };
+export const EMPTY_PLAN: Plan = { places: [null, null], include: DEFAULT_INCLUDE };
 
 export function startSession(savedId: SavedRouteId | null, plan: Plan): PlanSession {
   return { savedId, plan: { past: [], present: plan, future: [] }, pick: null, missed: false };
@@ -74,26 +75,23 @@ function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
 const sameInclude = (x: TrackIncluded, y: TrackIncluded) => x.regional === y.regional && x.shortLine === y.shortLine && x.passenger === y.passenger;
 
 export function samePlan(x: Plan, y: Plan): boolean {
-  return (
-    samePlace(x.start, y.start) &&
-    samePlace(x.destination, y.destination) &&
-    x.stops.length === y.stops.length &&
-    x.stops.every((stop, i) => samePlace(stop, y.stops[i])) &&
-    sameInclude(x.include, y.include)
-  );
+  return x.places.length === y.places.length && x.places.every((place, i) => samePlace(place, y.places[i])) && sameInclude(x.include, y.include);
 }
 
-export function isFull(plan: Plan): plan is FullPlan {
-  return plan.start !== null && plan.destination !== null;
+const isSet = (place: PlaceRef | null): place is PlaceRef => place !== null;
+
+/** The plan as it is routed and saved: its set rows, or null with fewer than two. */
+export function fullPlan(plan: Plan): FullPlan | null {
+  const places = plan.places.filter(isSet);
+  return places.length >= 2 ? { ...plan, places } : null;
 }
+
+export const isEmpty = (plan: Plan) => !plan.places.some(isSet);
 
 /** The same spot on the ground: a node whatever line was chosen there, one shop, or an equal reference. */
-const sameSpot = (x: PlaceRef, y: PlaceRef) => (x.kind === "node" && y.kind === "node" ? x.fraId === y.fraId : samePlace(x, y));
+export const sameSpot = (x: PlaceRef, y: PlaceRef) => (x.kind === "node" && y.kind === "node" ? x.fraId === y.fraId : samePlace(x, y));
 
-/** True when the place is already the start, a stop or the destination. */
-export function inPlan(plan: Plan, ref: PlaceRef): boolean {
-  return [plan.start, ...plan.stops, plan.destination].some((place) => place !== null && sameSpot(place, ref));
-}
+export const inPlan = (plan: Plan, ref: PlaceRef): boolean => plan.places.some((place) => place !== null && sameSpot(place, ref));
 
 /** A change of plan goes on the history; one that changes nothing does not. */
 function push(session: PlanSession, next: Plan): PlanSession {
@@ -104,38 +102,37 @@ function push(session: PlanSession, next: Plan): PlanSession {
 
 export function planReducer(session: PlanSession, action: PlanAction): PlanSession {
   const plan = session.plan.present;
-  const stops = plan.stops;
+  const { places } = plan;
+  const inside = (at: number) => Number.isInteger(at) && at >= 0 && at < places.length;
+  const change = (next: (PlaceRef | null)[], pick: number | null = null): PlanSession => ({ ...push(session, { ...plan, places: next }), pick, missed: false });
   switch (action.type) {
     case "setPlace":
-      return { ...push(session, { ...plan, [action.field]: action.ref }), pick: null, missed: false };
-    case "addStop": {
-      if (inPlan(plan, action.ref)) return session.missed ? { ...session, missed: false } : session;
-      const at = Math.max(0, Math.min(action.index, stops.length));
-      return { ...push(session, { ...plan, stops: [...stops.slice(0, at), action.ref, ...stops.slice(at)] }), missed: false };
+      return inside(action.at) ? change(places.with(action.at, action.ref)) : session;
+    case "insert": {
+      if (action.ref && inPlan(plan, action.ref)) return session.missed ? { ...session, missed: false } : session;
+      const at = Math.max(0, Math.min(action.at, places.length));
+      return change(places.toSpliced(at, 0, action.ref), action.ref ? null : at);
+    }
+    case "remove":
+      if (!inside(action.at)) return session;
+      return change(places.length > 2 ? places.toSpliced(action.at, 1) : places.with(action.at, null));
+    case "move": {
+      const { from, to } = action;
+      if (from === to || !inside(from) || !inside(to)) return session;
+      return change(places.toSpliced(from, 1).toSpliced(to, 0, places[from]));
     }
     case "setLine": {
-      const stop = stops[action.index];
-      if (stop?.kind !== "node") return session;
-      return push(session, { ...plan, stops: stops.map((s, i) => (i === action.index ? { ...stop, railroad: action.railroad } : s)) });
-    }
-    case "removeStop":
-      if (action.index < 0 || action.index >= stops.length) return session;
-      return push(session, { ...plan, stops: stops.filter((_, i) => i !== action.index) });
-    case "moveStop": {
-      const { from, to } = action;
-      if (from === to || from < 0 || to < 0 || from >= stops.length || to >= stops.length) return session;
-      const next = stops.filter((_, i) => i !== from);
-      next.splice(to, 0, stops[from]);
-      return push(session, { ...plan, stops: next });
+      const place = places[action.at];
+      return place?.kind === "node" ? change(places.with(action.at, { ...place, railroad: action.railroad })) : session;
     }
     case "setInclude":
       return push(session, { ...plan, include: action.include });
     case "clear":
       return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
     case "reverse":
-      return push(session, { ...plan, start: plan.destination, stops: [...stops].reverse(), destination: plan.start });
+      return change(places.toReversed());
     case "pick":
-      return { ...session, pick: action.field, missed: false };
+      return { ...session, pick: action.at, missed: false };
     case "missed":
       return { ...session, missed: true };
     case "saved":
@@ -143,47 +140,49 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
     case "undo": {
       const { past, present, future } = session.plan;
       if (!past.length) return session;
-      return { ...session, plan: { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] }, missed: false };
+      return { ...session, plan: { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] }, pick: null, missed: false };
     }
     case "redo": {
       const { past, present, future } = session.plan;
       if (!future.length) return session;
-      return { ...session, plan: { past: [...past, present], present: future[0], future: future.slice(1) }, missed: false };
+      return { ...session, plan: { past: [...past, present], present: future[0], future: future.slice(1) }, pick: null, missed: false };
     }
   }
 }
 
-/** What the next click on the map fills: the field whose ⌖ is on, else the start, the destination, then a stop. */
-export function nextTarget(session: PlanSession): PlanField | "stop" {
-  const plan = session.plan.present;
-  return session.pick ?? (plan.start === null ? "start" : plan.destination === null ? "destination" : "stop");
+/** The row the next click on the map fills: the one whose ⌖ is on, else the first empty one; null adds a stop. */
+export function nextTarget(session: PlanSession): number | null {
+  if (session.pick !== null) return session.pick;
+  const empty = session.plan.present.places.indexOf(null);
+  return empty >= 0 ? empty : null;
+}
+
+/** "Set as start" or "Set as destination": that end's row when it is empty, else a new row at that end. */
+export function placeAtEnd(plan: Plan, end: "start" | "destination", ref: PlaceRef): PlanAction {
+  const at = end === "start" ? 0 : plan.places.length - 1;
+  return plan.places[at] === null ? { type: "setPlace", at, ref } : { type: "insert", at: end === "start" ? 0 : plan.places.length, ref };
 }
 
 const km = (p: LonLat, q: LonLat) => haversineKm(p.lon, p.lat, q.lon, q.lat);
 
-/** Where a newly clicked stop belongs among the existing ones: where it adds the least straight-line detour between start and destination. */
-export function stopInsertIndex(start: LonLat, stops: LonLat[], destination: LonLat, clicked: LonLat): number {
-  const chain = [start, ...stops, destination];
-  let best = stops.length;
+/** Where a new stop goes in a chain of places: the index of the gap where it adds the least straight-line detour. */
+export function stopInsertIndex(chain: LonLat[], clicked: LonLat): number {
+  let best = chain.length - 1;
   let bestCost = Infinity;
   for (let i = 0; i + 1 < chain.length; i++) {
     const cost = km(chain[i], clicked) + km(clicked, chain[i + 1]) - km(chain[i], chain[i + 1]);
     if (cost < bestCost - 1e-9) {
       bestCost = cost;
-      best = i;
+      best = i + 1;
     }
   }
   return best;
 }
 
-/** Where a new stop goes: by least detour when every place of the plan is known, else last. */
+/** Where a new stop goes: by least detour when the answer is for this plan and every row resolved, else before the last row. */
 export function insertIndex(plan: Plan, places: PlanPlaces | null, at: LonLat): number {
-  const start = places?.start;
-  const destination = places?.destination;
-  const stops = places?.stops ?? [];
-  if (!start?.ok || !destination?.ok || stops.length !== plan.stops.length) return plan.stops.length;
-  const known = stops.flatMap((stop) => (stop.ok ? [stop.place] : []));
-  return known.length === stops.length ? stopInsertIndex(start.place, known, destination.place, at) : plan.stops.length;
+  const known = (places ?? []).flatMap((place) => (place?.ok ? [place.place] : []));
+  return known.length === plan.places.length ? stopInsertIndex(known, at) : plan.places.length - 1;
 }
 
 /** A click this close to the selected route, in pixels, is a click on it (the drawn line follows the track, the legs run node to node). */
@@ -205,9 +204,8 @@ function segmentKm(p: LonLat, a: LngLat, b: LngLat): number {
 
 /**
  * The node of the route nearest a click that lands on the route (within `withinKm` of its legs),
- * else null. Snapping there, not to whatever node is nearest, keeps a stop clicked on the line on
- * the line: a spur node a few km off it would bend the route, or break it. The two ends are left
- * out: they are the start and destination already.
+ * else null. This keeps a stop clicked on the line on the line: the nearest node may sit on a spur a
+ * few km off and bend or break the route. The two ends are skipped; they are the start and destination already.
  */
 export function routeNodeNear(legs: readonly LngLat[][], at: LonLat, withinKm: number): LngLat | null {
   const onRoute = legs.some((path) => path.some((point, i) => i > 0 && segmentKm(at, path[i - 1], point) <= withinKm));
@@ -230,12 +228,12 @@ export interface PlanSessionHandle {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
   /**
-   * Snap, then fill nextTarget: to a node of the selected route (its legs' paths) when the click is
+   * Snap, then place it at nextTarget: to a node of the selected route (its legs' paths) when the click is
    * on it, else to the nearest node. Ignored while a previous snap is in flight. Rejects when the
    * server cannot be reached.
    */
   clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<void>;
-  /** A shop square: fill nextTarget with that ref. */
+  /** A shop square: place that ref at nextTarget. */
   clickPlace: (ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => void;
 }
 
@@ -294,14 +292,7 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
   latest.current = session;
   const snapping = useRef(false);
 
-  useEffect(() => {
-    if (!session.pick) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dispatch({ type: "pick", field: null });
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [session.pick, dispatch]);
+  useEscape(session.pick !== null, () => dispatch({ type: "pick", at: null }));
 
   const place = useCallback(
     (ref: PlaceRef, at: LonLat, places: PlanPlaces | null) => {
@@ -309,12 +300,11 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
       const plan = now.plan.present;
       // A place already in the plan is not added again (a double click, or a click on a pin's own node).
       if (inPlan(plan, ref)) {
-        if (now.pick) dispatch({ type: "pick", field: null });
+        if (now.pick !== null) dispatch({ type: "pick", at: null });
         return;
       }
       const target = nextTarget(now);
-      if (target === "stop") dispatch({ type: "addStop", ref, index: insertIndex(plan, places, at) });
-      else dispatch({ type: "setPlace", field: target, ref });
+      dispatch(target === null ? { type: "insert", at: insertIndex(plan, places, at), ref } : { type: "setPlace", at: target, ref });
     },
     [dispatch],
   );

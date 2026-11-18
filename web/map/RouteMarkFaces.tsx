@@ -1,6 +1,7 @@
 /** The faces of the route marks: a route's pill and a turn-back's disc. Plain DOM, no map library. */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import type { TurnBack } from "../../shared/route.ts";
+import { TurnBadge } from "../ui/badges.tsx";
 import { trackWords, turnBackMove } from "../words.ts";
 import type { PillCorner } from "./pills.ts";
 import type { ScenePill } from "./scene.ts";
@@ -51,13 +52,14 @@ export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; on
     >
       {pill.text}
       {pill.turnBacks > 0 && (
-        <span className="route-pill-turn" aria-hidden="true">
-          ↩{pill.turnBacks > 1 ? pill.turnBacks : ""}
-        </span>
+        <TurnBadge count={pill.turnBacks} />
       )}
     </button>
   );
 }
+
+/** Air kept between the turn-back popover and the map's edge, the search box and the map buttons. */
+const EDGE_PX = 8;
 
 /** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. */
 export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
@@ -90,22 +92,22 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
     const rects = (selector: string) => [...canvas.querySelectorAll(selector)].map((element) => element.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
     let box = details.getBoundingClientRect();
     const searchOver = rects(".map-search").filter((rect) => rect.left < box.right && rect.right > box.left);
-    if (box.top < Math.max(frame.top, ...searchOver.map((rect) => rect.bottom)) + 8) {
+    if (box.top < Math.max(frame.top, ...searchOver.map((rect) => rect.bottom)) + EDGE_PX) {
       details.classList.add("turn-pop--below");
       box = details.getBoundingClientRect();
     }
     // Only the buttons at the popover's own height matter; below them the map is free to its edge.
     const buttonsBeside = rects(".map-controls > *").filter((rect) => rect.top < box.bottom && rect.bottom > box.top);
-    const right = Math.min(frame.right, ...buttonsBeside.map((rect) => rect.left)) - 8;
+    const right = Math.min(frame.right, ...buttonsBeside.map((rect) => rect.left)) - EDGE_PX;
     // Clear of the right side first; the left edge wins if both cannot fit, so the text starts in view.
-    details.style.marginLeft = `${Math.max(Math.min(right - box.right, 0), frame.left + 8 - box.left)}px`;
+    details.style.marginLeft = `${Math.max(Math.min(right - box.right, 0), frame.left + EDGE_PX - box.left)}px`;
   }, [open]);
   return (
     <span className="turn-mark-wrap">
       <button
         ref={ref}
         type="button"
-        className="turn-mark"
+        className="turn-badge turn-mark"
         aria-label={`Turn-back at ${turnBack.at.near}`}
         aria-describedby={open ? id : undefined}
         onMouseEnter={() => setHovered(true)}
@@ -122,7 +124,6 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
           setFocused(false);
         }}
       >
-        {/* The same ↩ as the legend, the pills and the route rows. */}
         <span aria-hidden="true">↩</span>
       </button>
       {open && (

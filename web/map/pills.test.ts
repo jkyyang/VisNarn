@@ -33,7 +33,7 @@ describe("placePills", () => {
     expect(placed.corner).toMatch(/left$/);
   });
 
-  it("sits beside the route lines, never on one", () => {
+  it("sits beside the route lines", () => {
     // A line running up and to the right through the anchor: only the corners off it are free.
     const line = [{ x: 200, y: 400 }, { x: 400, y: 200 }];
     const [placed] = placePills([ask("a", [300, 300])], [], VIEW, [line]);
@@ -69,7 +69,7 @@ describe("turnBackShift", () => {
     expect(Math.hypot(shift.x, shift.y) - BADGE_R).toBeGreaterThan(STOP_R / 2);
   });
 
-  it("sits by the destination drop's head, not its tip", () => {
+  it("sits by the destination drop's head", () => {
     const shift = turnBackShift({ x: 400, y: 300 }, [{ kind: "destination", x: 400, y: 300 }]);
     expect(shift?.y).toBeLessThan(-21);
   });

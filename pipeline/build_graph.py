@@ -7,9 +7,7 @@ railroad_classes.py). Passenger agencies are not carriers, so track only they ma
 Parallel segments keep the shortest one, but the edge stores its FRAARCID and full geometry for drawing paths later.
 Outputs (data/processed/):
   rail_graph.pkl       networkx Graph (largest connected component)
-  rail_nodes.csv       node_id, lon, lat, degree  (used for snapping)
 """
-import csv
 import json
 import pickle
 import sys
@@ -19,9 +17,7 @@ import networkx as nx
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
-from railroad_classes import CLASS1, class_of  # noqa: E402
-# owners + trackage-rights holders = railroads allowed to run trains on the segment
-CARRIER_COLS = ["RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in range(1, 10)]
+from railroad_classes import CARRIER_COLS, CLASS1, class_of  # noqa: E402
 
 
 def carriers_of(p) -> set:
@@ -90,11 +86,6 @@ def main():
     out = ROOT / "data/processed"
     with open(out / "rail_graph.pkl", "wb") as fh:
         pickle.dump(H, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    with open(out / "rail_nodes.csv", "w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["node_id", "lon", "lat", "degree"])
-        for n, d in H.nodes(data=True):
-            w.writerow([n, d["lon"], d["lat"], H.degree(n)])
 
 
 if __name__ == "__main__":

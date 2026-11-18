@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 /**
- * Not 5173: a copy of the app a person is already running there may hold real data, and the tests
- * add, change and delete shops and saved routes. reuseExistingServer stays off for the same reason.
+ * Port 8797: a person's own copy of the app on 5173 may hold real data, and the tests add, change and
+ * delete shops and saved routes. reuseExistingServer stays off for the same reason.
  */
 const PORT = Number(process.env.VISNARN_E2E_PORT ?? 8797);
 

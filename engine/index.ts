@@ -8,6 +8,6 @@
  *   const track = loadTrackShapes(network);           // main thread only: routes drawn on the real track
  */
 export { DEFAULT_NETWORK_DIR, loadNetwork, loadTrackShapes } from "./load.ts";
-export { MAX_SNAP_KM, type City, type RailNetwork, type Snap } from "./network.ts";
+export type { City, RailNetwork, Snap } from "./network.ts";
 export { combine, createCarRouter, tripKey, type CarRouter, type NoRoute, type Routed, type RouteResult, type Trip } from "./trip.ts";
 export type { TrackShapes } from "./track.ts";

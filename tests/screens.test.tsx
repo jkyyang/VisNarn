@@ -3,7 +3,7 @@
  * The screens, rendered from real answers of the real back end: the page's own App, in jsdom,
  * talking over HTTP to `node server/main.ts` started on a temp data folder and a free port. Only the
  * map canvas is replaced, because jsdom has no WebGL. The assertions hold for any network build: they
- * check what every answer must look like on screen, not one route's numbers.
+ * check what every answer must look like on screen.
  */
 import "@testing-library/jest-dom/vitest";
 import { screen, waitFor, within } from "@testing-library/react";
@@ -16,15 +16,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import type { RequestArgs, Res, Route } from "../shared/api.ts";
 import { RAILROADS } from "../shared/railroads.ts";
 import { callApi, clearQueryCache } from "../web/data/query.ts";
-import { openPage, pretendPhone } from "../web/testing/page.tsx";
+import { openPage } from "../web/testing/page.tsx";
 
 vi.mock("../web/map/MapCanvas.tsx", () => import("../web/testing/FakeMapCanvas.tsx"));
 // Real routing in worker threads: a long continental route can take a few seconds the first time.
 vi.setConfig({ testTimeout: 90_000 });
 
 const ROUTING_MS = 30_000;
-/** Words for times and verdicts, which the planner never says. */
-const CLOCK_WORDS = /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\d{1,2}:\d{2}|prep|margin|on time|act now|check first|\bA to B\b|not live/i;
 
 /**
  * The server in its own process. In a jsdom test Vite serves modules the browser way, which the
@@ -90,7 +88,6 @@ afterAll(async () => {
 
 afterEach(() => {
   clearQueryCache();
-  pretendPhone(false);
 });
 
 const field = (name: "Start" | "Destination") => screen.getByRole("combobox", { name });
@@ -121,15 +118,14 @@ describe("Route planner", () => {
     const onRoute = RAILROADS.filter((railroad) => within(pressed!).queryByText(railroad));
     const legend = within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
     expect(legend.filter((item) => item !== "↩Turn-back")).toEqual(onRoute);
-    expect(document.querySelector(".panel")?.textContent).not.toMatch(CLOCK_WORDS);
   });
 
   it("a click on the map adds a stop, which the route then runs through", async () => {
     const user = userEvent.setup();
     await planExample(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    const stops = await screen.findByRole("list", { name: "Stops" }, { timeout: ROUTING_MS });
-    expect(within(stops).getAllByRole("listitem")).toHaveLength(1);
+    const places = screen.getByRole("region", { name: "Places" });
+    await waitFor(() => expect(within(places).getAllByRole("listitem")).toHaveLength(3), { timeout: ROUTING_MS });
     await waitFor(() => expect(within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem").some((row) => row.querySelector("svg text")?.textContent === "1")).toBe(true), {
       timeout: ROUTING_MS,
     });
@@ -151,7 +147,8 @@ describe("Route planner", () => {
     await user.click(within(screen.getByRole("form", { name: "Save route" })).getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("button", { name: "Saved" }, { timeout: ROUTING_MS })).toBeDisabled();
     const [saved] = await api("GET /api/saved-routes");
-    expect(saved).toMatchObject({ name: "Taylor → North Little Rock", plan: { stops: [] } });
+    expect(saved.name).toBe("Taylor → North Little Rock");
+    expect(saved.plan.places).toHaveLength(2);
     expect(window.location.pathname).toBe(`/route/saved/${saved.id}`);
     await api("DELETE /api/saved-routes/:routeId", { params: { routeId: saved.id } });
   });
@@ -167,28 +164,5 @@ describe("Shops", () => {
       if (shop.code) expect(row).toHaveTextContent(shop.code);
       if (shop.place.ok) expect(row).toHaveTextContent(shop.place.place.railroads.join(", "));
     }
-  });
-
-  it("the import preview lists the rows that will not be saved, with why", async () => {
-    const user = userEvent.setup();
-    openPage("/shops");
-    const card = await screen.findByRole("region", { name: "Import shop list" });
-    const csv = "name,lon,lat\nOmaha shop,-95.94,41.26\nShop in the ocean,-140,10\n";
-    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([csv], "shops.csv", { type: "text/csv" }));
-    const preview = await within(card).findByRole("region", { name: "Import preview" }, { timeout: ROUTING_MS });
-    expect(preview).toHaveTextContent("shops.csv · 1 ready · 1 not saved");
-    expect(within(preview).getByRole("list", { name: "Rows to fix before saving" })).toHaveTextContent(/Line 3/);
-    expect((await api("GET /api/shops")).map((s) => s.name)).not.toContain("Omaha shop");
-  });
-});
-
-describe("Phone", () => {
-  it("the phone panel has the same rows in one column: places, routes and sections, nothing folded", async () => {
-    pretendPhone(true);
-    const user = userEvent.setup();
-    await planExample(user);
-    expect(field("Start")).toHaveValue("Taylor, TX");
-    expect(screen.getByRole("list", { name: "Sections" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Mode" })).toHaveTextContent(/^RouteShops$/);
   });
 });

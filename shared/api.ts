@@ -1,7 +1,7 @@
 /**
  * The HTTP contract, once. The server's handler table and the browser's client are both typed from
  * `Api`, so a route that exists on one side only, or a body one side reads differently, is a
- * compile error and not a 404 at run time.
+ * compile error.
  *
  * Only server/http and web/data import this file (scripts/architecture.test.ts checks). Everything
  * else speaks the domain types the routes carry (./places.ts, ./plans.ts, ./route.ts), and those are

@@ -4,6 +4,9 @@
  * The EXAMPLE shops are left as the server made them, for the other screens' tests.
  */
 import { expectMapCanvases, keepScreenshot, test, expect } from "./app.ts";
+import { exampleShops } from "../../server/intake/example.ts";
+
+const EXAMPLES = exampleShops().length;
 
 test.describe("Shops", () => {
   test("add a shop, refuse a spot off the network, edit it, refuse a taken code, delete it", async ({ page }) => {
@@ -11,8 +14,8 @@ test.describe("Shops", () => {
     await expect(page.getByRole("heading", { name: "Your shops", level: 1 })).toBeVisible();
     const table = page.getByRole("table");
     const names = table.locator(".shop-name");
-    await expect(names).toHaveCount(6);
-    await expect(page.getByText("6 shops · 6 EXAMPLE")).toBeVisible();
+    await expect(names).toHaveCount(EXAMPLES);
+    await expect(page.getByText(`${EXAMPLES} shops · ${EXAMPLES} EXAMPLE`)).toBeVisible();
     const nlr = table.getByRole("row").filter({ hasText: "EX-NLR-01" });
     await expect(nlr).toContainText("North Little Rock, AR");
     await expect(nlr).toContainText("EXAMPLE");
@@ -38,7 +41,7 @@ test.describe("Shops", () => {
     const added = table.getByRole("row").filter({ hasText: "Temple test shop" });
     await expect(added).toContainText("BNSF");
     await expect(added).not.toContainText("EXAMPLE");
-    await expect(names).toHaveCount(7);
+    await expect(names).toHaveCount(EXAMPLES + 1);
 
     // The server owns the shops: a reload shows the same list.
     await page.reload();
@@ -58,11 +61,11 @@ test.describe("Shops", () => {
 
     await page.getByRole("button", { name: "Edit Temple test shop, renamed" }).click();
     await page.getByRole("button", { name: "Delete" }).click();
-    await page.getByRole("button", { name: "Yes, delete this shop" }).click();
+    await page.getByRole("group", { name: "Delete this shop?" }).getByRole("button", { name: "Delete" }).click();
     await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Temple test shop" })).toHaveCount(0);
-    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(6);
+    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(EXAMPLES);
     await page.reload();
-    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(6);
+    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(EXAMPLES);
   });
 
   test("a shop CSV with a row that matches no node: the preview lists it to fix, and only the good rows are saved", async ({ page }) => {
@@ -92,7 +95,7 @@ test.describe("Shops", () => {
     for (const name of ["Omaha test shop", "Denver test shop"]) {
       await page.getByRole("button", { name: `Edit ${name}` }).click();
       await page.getByRole("button", { name: "Delete" }).click();
-      await page.getByRole("button", { name: "Yes, delete this shop" }).click();
+      await page.getByRole("group", { name: "Delete this shop?" }).getByRole("button", { name: "Delete" }).click();
       await expect(table.getByRole("row").filter({ hasText: name })).toHaveCount(0);
     }
     await expect(table.locator(".shop-name")).toHaveCount(before);

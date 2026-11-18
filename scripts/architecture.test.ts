@@ -14,7 +14,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 /** tsconfig files allow comments; these have them on their own lines only. */
 const readConfig = (file: string) => JSON.parse(readFileSync(join(ROOT, file), "utf8").replace(/^\s*\/\/.*$/gm, ""));
 
-/** The areas are whatever tsconfig.areas.json builds: one list, read here, not repeated. */
+/** The areas are whatever tsconfig.areas.json builds: read once here. */
 const AREAS: string[] = readConfig("tsconfig.areas.json").references.map((ref: { path: string }) => ref.path.replace("./", ""));
 
 interface SourceFile {
@@ -100,7 +100,9 @@ describe("import rules", () => {
 });
 
 describe("Node runs these files by stripping types", () => {
-  const nodeRun = files.filter((file) => /^(shared|engine|server|scripts)\//.test(file.path));
+  // Every area but the page and its tests runs in Node.
+  const nodeAreas = AREAS.filter((area) => area !== "web" && area !== "tests");
+  const nodeRun = files.filter((file) => nodeAreas.some((area) => file.path.startsWith(`${area}/`)));
   it("no parameter properties, enums or namespaces (TypeScript 5.6 cannot flag them; Node refuses them)", () => {
     const bad = nodeRun.filter(
       (file) => /constructor\s*\([^)]*\b(public|private|protected|readonly)\s/.test(file.text) || /^\s*(export\s+)?(declare\s+)?(const\s+)?enum\s/m.test(file.text) || /^\s*(export\s+)?namespace\s/m.test(file.text),

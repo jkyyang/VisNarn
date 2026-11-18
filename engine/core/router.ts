@@ -8,7 +8,7 @@
  * railroad, or all regional railroads together, or all short lines together (graph.ts LINES).
  * - Moving onto the next segment needs the line to own or have trackage rights on it (cost = km), and
  *   passenger-owned track only when `passenger` is allowed (cost = PASSENGER_TRACK_COST × km).
- * - The turn between the arriving and leaving segment must be gentle (<= maxTurnDeg). A sharper turn is a
+ * - The turn between the arriving and leaving segment must be gentle (<= MAX_TURN_DEG). A sharper turn is a
  *   reversal: trains cannot reverse at a switch, so it is only allowed when the car both arrives and leaves
  *   on yard track (it is switched onto another train inside the yard). A junction that merely touches a yard
  *   lead does not count. It costs `reverseKm` and is reported in Route.reversals so a person can check it.
@@ -17,12 +17,15 @@
  * Because state includes the direction of travel, a route keeps its direction through a via point.
  */
 import { LINES, type Line } from "../../shared/railroads.ts";
-import { MAX_SNAP_KM, type Point, type RailGraph, type Track } from "./graph.ts";
+import { MAX_INTERCHANGES, MAX_TURN_DEG, PASSENGER_TRACK_COST, SNAP_KM } from "../rules.ts";
+import type { Point, RailGraph, Track } from "./graph.ts";
 
 export interface Leg {
   railroad: Line;
   km: number;
   nodes: number[];
+  /** The segment between each pair of nodes: edges[i] runs from nodes[i] to nodes[i + 1]. */
+  edges: number[];
   path: [number, number][];
   subdivisions: string[];
   from: string;
@@ -34,7 +37,10 @@ export interface Reversal {
   position: [number, number];
   place: string;
   railroad: Line;
-  /** The segments the car arrived and left on, and its heading on each: what the junction inspector shows. */
+  /** Where in the route: the leg it leaves on, and the index of the edge it leaves on in that leg's `edges`. */
+  leg: number;
+  step: number;
+  /** The segments the route arrived and left on, and its heading on each. */
   arrivedOn: number;
   leftOn: number;
   arrivingDeg: number;
@@ -53,10 +59,8 @@ export interface Route {
 export interface RouteOptions extends Track {
   /** Cost of changing railroad, in km-equivalent. */
   interchangeKm: number;
-  /** Cost of reversing direction in a yard, in km-equivalent. Default 100. */
-  reverseKm?: number;
-  /** Largest change of heading (degrees) allowed outside a yard. Default 90. */
-  maxTurnDeg?: number;
+  /** Cost of reversing direction in a yard, in km-equivalent. */
+  reverseKm: number;
 }
 
 export class RouteError extends Error {
@@ -73,17 +77,15 @@ export class RouteError extends Error {
 }
 
 const NR = LINES.length;
-const DEFAULT_REVERSE_KM = 100;
-const DEFAULT_MAX_TURN = 90;
-/**
- * Passenger-owned track, when allowed, costs this many times its km: a freight car takes it only where no
- * freight-owned way is close in length (a shop on a commuter line), not as a short cut through a city centre.
- */
-const PASSENGER_TRACK_COST = 4;
 
 /** Absolute difference between two headings, 0..180. */
 export function turnDeg(fromHeading: number, toHeading: number): number {
   return Math.abs((((toHeading - fromHeading) % 360) + 540) % 360 - 180);
+}
+
+/** A move from one heading to the other that a train can make only by reversing. */
+export function isSharpTurn(fromHeading: number, toHeading: number): boolean {
+  return turnDeg(fromHeading, toHeading) > MAX_TURN_DEG;
 }
 
 class MinHeap {
@@ -167,11 +169,11 @@ export class Router {
   readonly graph: RailGraph;
 
   // No parameter properties in engine/ or server/: Node runs these files by stripping types only.
-  constructor(graph: RailGraph, maxInterchanges = 3) {
+  constructor(graph: RailGraph) {
     this.graph = graph;
-    this.K = maxInterchanges;
+    this.K = MAX_INTERCHANGES;
     // Directed segments × railroads × interchange count. Float32 km is precise to metres at continental scale.
-    const states = graph.edgeCount * 2 * NR * (maxInterchanges + 1);
+    const states = graph.edgeCount * 2 * NR * (MAX_INTERCHANGES + 1);
     this.dist = new Float32Array(states);
     this.prev = new Int32Array(states);
   }
@@ -195,6 +197,11 @@ export class Router {
     return { edge, node, rr, k };
   }
 
+  /** Leaving `node` on `edge` after arriving on `arrivedOn` with `heading`: back the same way, or a turn too sharp for a train. */
+  private isSharp(heading: number, edge: number, arrivedOn: number, node: number): boolean {
+    return edge === arrivedOn || isSharpTurn(heading, this.graph.leaving(edge, node));
+  }
+
   /** Heading of a car that arrived at `node` over `edge`: the reverse of the track leaving `node` back along it. */
   private arrivingHeading(edge: number, node: number) {
     return (this.graph.leaving(edge, node) + 180) % 360;
@@ -207,8 +214,6 @@ export class Router {
   private search(starts: Start[], goals: Map<number, number>, opt: RouteOptions, collectSlackKm: number | null): Hit[] {
     const g = this.graph;
     const { dist, prev } = this;
-    const reverseKm = opt.reverseKm ?? DEFAULT_REVERSE_KM;
-    const maxTurn = opt.maxTurnDeg ?? DEFAULT_MAX_TURN;
     dist.fill(Infinity);
     prev.fill(-1);
     const goalMask = new Map<number, number>();
@@ -223,10 +228,9 @@ export class Router {
     /** Cost to leave `node` on `edge` for a car arriving with `heading` (null = free), or -1 if not allowed. */
     const leaveCost = (node: number, edge: number, arrivedOn: number, heading: number | null) => {
       if (heading === null) return 0;
-      const sharp = edge === arrivedOn || turnDeg(heading, g.leaving(edge, node)) > maxTurn;
-      if (!sharp) return 0;
+      if (!this.isSharp(heading, edge, arrivedOn, node)) return 0;
       const insideYard = g.edgeYard[edge] && (arrivedOn < 0 ? g.yardNode[node] : g.edgeYard[arrivedOn]);
-      return insideYard ? reverseKm : -1;
+      return insideYard ? opt.reverseKm : -1;
     };
 
     // dist is Float32: round the key the same way, or a popped key can look "stale" against its own rounded copy.
@@ -313,12 +317,12 @@ export class Router {
   route(points: Point[], opt: RouteOptions): Route {
     if (points.length < 2) throw new RouteError("Need at least two points.");
     let frontier = this.firstStarts(points[0], opt);
-    if (!frontier.length) throw new RouteError(`No allowed mainline within ${MAX_SNAP_KM} km of ${points[0].label}.`, 0);
+    if (!frontier.length) throw new RouteError(`No allowed mainline within ${SNAP_KM} km of ${points[0].label}.`, 0);
     for (let i = 0; i < points.length - 1; i++) {
       const from = points[i], to = points[i + 1];
       const last = i === points.length - 2;
       const goals = this.graph.serving(to, opt);
-      if (!goals.size) throw new RouteError(`No allowed mainline within ${MAX_SNAP_KM} km of ${to.label}.`, i + 1);
+      if (!goals.size) throw new RouteError(`No allowed mainline within ${SNAP_KM} km of ${to.label}.`, i + 1);
       const already: Hit[] = frontier
         .filter((st) => goals.get(st.rr) === st.node && opt.allowedMask & (1 << st.rr))
         .map((st) => ({ cost: st.cost, steps: st.prefix, heading: st.heading }));
@@ -334,7 +338,7 @@ export class Router {
           i + 1,
         );
       }
-      if (last) return this.describe(hits[0].steps, opt);
+      if (last) return this.describe(hits[0].steps);
       frontier = hits.map((h) => {
         const end = h.steps[h.steps.length - 1];
         return { node: end.node, rr: end.rr, edge: end.edge, heading: h.heading, cost: h.cost, prefix: h.steps };
@@ -343,9 +347,8 @@ export class Router {
     throw new RouteError("unreachable");
   }
 
-  private describe(steps: Step[], opt: RouteOptions): Route {
+  private describe(steps: Step[]): Route {
     const g = this.graph;
-    const maxTurn = opt.maxTurnDeg ?? DEFAULT_MAX_TURN;
     const legs: (Omit<Leg, "path" | "from" | "to"> & { rr: number })[] = [];
     const reversals: Reversal[] = [];
     let cur: (typeof legs)[number] | null = null;
@@ -357,19 +360,20 @@ export class Router {
         cur = null; // interchange: same place, another railroad
         continue;
       }
-      if (heading !== null && (b.edge === a.edge || turnDeg(heading, g.leaving(b.edge, a.node)) > maxTurn)) {
+      if (!cur || cur.rr !== b.rr) {
+        cur = { rr: b.rr, railroad: LINES[b.rr], km: 0, nodes: [a.node], edges: [], subdivisions: [] };
+        legs.push(cur);
+      }
+      if (heading !== null && this.isSharp(heading, b.edge, a.edge, a.node)) {
         reversals.push({
           node: a.node, position: [g.lon[a.node], g.lat[a.node]], place: g.nearestPlace(g.lon[a.node], g.lat[a.node]), railroad: LINES[b.rr],
-          arrivedOn: a.edge, leftOn: b.edge, arrivingDeg: heading, leavingDeg: g.leaving(b.edge, a.node), km,
+          leg: legs.length - 1, step: cur.edges.length, arrivedOn: a.edge, leftOn: b.edge, arrivingDeg: heading, leavingDeg: g.leaving(b.edge, a.node), km,
         });
       }
       km += g.edgeKm[b.edge];
-      if (!cur || cur.rr !== b.rr) {
-        cur = { rr: b.rr, railroad: LINES[b.rr], km: 0, nodes: [a.node], subdivisions: [] };
-        legs.push(cur);
-      }
       cur.km += g.edgeKm[b.edge];
       cur.nodes.push(b.node);
+      cur.edges.push(b.edge);
       const sd = g.meta.subdivs[g.edgeSubdiv[b.edge]];
       if (sd && cur.subdivisions[cur.subdivisions.length - 1] !== sd) cur.subdivisions.push(sd);
       heading = this.arrivingHeading(b.edge, b.node);

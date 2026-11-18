@@ -6,7 +6,6 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadNetwork, loadTrackShapes, type TrackShapes } from "../engine/index.ts";
 import { AppError, type Meta } from "../shared/app.ts";
-import { RAILROADS } from "../shared/railroads.ts";
 import type { Config } from "./config.ts";
 import { exampleShops } from "./intake/example.ts";
 import { createDirectory, type Directory } from "./places/directory.ts";
@@ -50,12 +49,7 @@ export async function createApp(config: Config): Promise<App> {
   return {
     meta() {
       const shopRows = store.shops.all();
-      return {
-        graphVersion: network.version,
-        railroads: RAILROADS,
-        exampleOnly: shopRows.length > 0 && shopRows.every((shop) => shop.example) && store.savedRoutes.all().length === 0,
-        storage: databaseFile,
-      };
+      return { exampleOnly: shopRows.length > 0 && shopRows.every((shop) => shop.example) && store.savedRoutes.all().length === 0 };
     },
     places: directory,
     shops,

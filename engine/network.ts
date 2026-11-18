@@ -5,9 +5,8 @@
 import { round5 } from "../shared/geo.ts";
 import type { FraId, NetworkNode } from "../shared/places.ts";
 import { RAILROADS, type Railroad } from "../shared/railroads.ts";
-import { ALL_LINES_MASK, ALL_RAILROADS_MASK, MAX_SNAP_KM, RailGraph, type GraphMeta } from "./core/graph.ts";
+import { ALL_LINES_MASK, ALL_RAILROADS_MASK, RailGraph, type GraphMeta } from "./core/graph.ts";
 
-export { MAX_SNAP_KM };
 
 export interface City {
   name: string;
@@ -15,7 +14,7 @@ export interface City {
   lat: number;
 }
 
-/** Where coordinates meet the network: each Class I whose mainline is within MAX_SNAP_KM and about as close as the nearest. */
+/** Where coordinates meet the network: each Class I whose mainline is within SNAP_KM (./rules.ts) and about as close as the nearest. */
 export interface Snap {
   /** Empty when only a regional railroad or a short line is that close. */
   railroads: Railroad[];
@@ -30,13 +29,13 @@ export interface RailNetwork {
   node(fraId: FraId): NetworkNode | null;
   /** The node nearest to a point, on any Class I track; null when none is within `withinKm`. */
   nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
-  /** Null: no freight mainline within MAX_SNAP_KM, so a car cannot be routed to or from here. */
+  /** Null: no freight mainline within SNAP_KM, so a car cannot be routed to or from here. */
   snap(lon: number, lat: number): Snap | null;
   /** One of the public city names shipped with the network, matched exactly (case-insensitive). */
   city(name: string): City | null;
   /** City names for autocomplete: those starting with the text first, then those containing it. */
   cities(text: string, limit: number): City[];
-  /** "Temple, TX", or "72 km from Jacksonville, FL" when no city is within 25 km. */
+  /** "Temple, TX", or "72 km from Jacksonville, FL" when no city is within NEAR_CITY_KM. */
   near(lon: number, lat: number): string;
 }
 

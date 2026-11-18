@@ -4,15 +4,15 @@
  *
  * Each decoder checks shape and ranges only (a number is finite, a `kind` is one we know, a
  * railroad is in RAILROADS) and throws AppError("invalid") naming the
- * field. Whether a shop exists or a place resolves is the application's business, not the decoder's.
+ * field. Whether a shop exists or a place resolves is for the application to check.
  * Decoders build new objects from the fields they know, so anything else a client sends is dropped.
  */
 import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { LngLat } from "../../shared/geo.ts";
-import { SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
+import { NEAREST_MAX_KM, SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
-import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
+import { RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
 
 type RoutesWith<Part extends "body" | "query"> = { [R in Route]: Api[R][Part] extends undefined ? never : R }[Route];
@@ -102,14 +102,21 @@ const oneOf =
   };
 
 const list =
-  <T>(decode: Decoder<T>, max = 1_000): Decoder<T[]> =>
+  <T>(decode: Decoder<T>, max = 1_000, min = 0): Decoder<T[]> =>
   (value, path) => {
     if (!Array.isArray(value)) invalid(path, `${path} must be a list.`);
     if (value.length > max) invalid(path, `${path} has more than ${max} items.`);
+    if (value.length < min) invalid(path, `${path} needs at least ${min} items.`);
     return value.map((item, i) => decode(item, `${path}[${i}]`));
   };
 
 const railroad: Decoder<Railroad> = oneOf(RAILROADS);
+
+/** The longest id the server reads: ids are made by the server, so anything longer is not one. */
+const ID_MAX = 200;
+
+const lon = inRange(-180, 180);
+const lat = inRange(-90, 90);
 
 // ---- domain values ----
 
@@ -119,11 +126,11 @@ const placeRef: Decoder<PlaceRef> = (value, path) => {
     case "text":
       return { kind, text: field(value, path, "text", text()) };
     case "shop":
-      return { kind, shopId: field(value, path, "shopId", nonEmpty(200)) as ShopId };
+      return { kind, shopId: field(value, path, "shopId", nonEmpty(ID_MAX)) as ShopId };
     case "node":
       return { kind, fraId: field(value, path, "fraId", wholeNumber) as FraId, railroad: field(value, path, "railroad", nullable(railroad)) };
     case "coord":
-      return { kind, lon: field(value, path, "lon", inRange(-180, 180)), lat: field(value, path, "lat", inRange(-90, 90)) };
+      return { kind, lon: field(value, path, "lon", lon), lat: field(value, path, "lat", lat) };
   }
 };
 
@@ -136,22 +143,14 @@ const trackIncluded: Decoder<TrackIncluded> = (value, path) => ({
   passenger: field(value, path, "passenger", boolean),
 });
 
-/** A plan with no `include` (from before track could be chosen) uses the default. */
-const included: Decoder<TrackIncluded> = (value, path) => field(value, path, "include", nullable(trackIncluded)) ?? DEFAULT_INCLUDE;
+/** `plan` takes empty rows (null); `fullPlan`, saved, takes none. */
+const planDecoder =
+  <P extends Plan>(row: Decoder<P["places"][number]>): Decoder<P> =>
+  (value, path) =>
+    ({ places: field(value, path, "places", list(row, MAX_STOPS + 2, 2)), include: field(value, path, "include", trackIncluded) }) as P;
 
-const plan: Decoder<Plan> = (value, path) => ({
-  start: field(value, path, "start", nullable(placeRef)),
-  stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
-  destination: field(value, path, "destination", nullable(placeRef)),
-  include: included(value, path),
-});
-
-const fullPlan: Decoder<FullPlan> = (value, path) => ({
-  start: field(value, path, "start", placeRef),
-  stops: field(value, path, "stops", list(placeRef, MAX_STOPS)),
-  destination: field(value, path, "destination", placeRef),
-  include: included(value, path),
-});
+const plan = planDecoder<Plan>(nullable(placeRef));
+const fullPlan = planDecoder<FullPlan>(placeRef);
 
 const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
   name: field(value, path, "name", name(120)),
@@ -181,7 +180,7 @@ const role: Decoder<PlaceRole> = oneOf(["position", "shop"] as const);
 
 const lngLat: Decoder<LngLat> = (value, path) => {
   if (!Array.isArray(value) || value.length !== 2) invalid(path, `${path} must be [longitude, latitude].`);
-  return [inRange(-180, 180)(value[0], `${path}[0]`), inRange(-90, 90)(value[1], `${path}[1]`)];
+  return [lon(value[0], `${path}[0]`), lat(value[1], `${path}[1]`)];
 };
 
 /** The routes on one map: a few paths of up to a few thousand nodes each. */
@@ -211,14 +210,14 @@ export const decodeQuery: { [R in RoutesWith<"query">]: (query: URLSearchParams)
   "GET /api/places/nearest": (query) => ({
     lon: queryNumber(query, "lon", -180, 180),
     lat: queryNumber(query, "lat", -90, 90),
-    withinKm: queryNumber(query, "withinKm", 0, 100),
+    withinKm: queryNumber(query, "withinKm", 0, NEAREST_MAX_KM),
   }),
 };
 
 // Path parameters arrive as text. These turn them into the ids and numbers handlers work with.
 export function shopId(text: string): ShopId {
-  return nonEmpty(200)(text, "shopId") as ShopId;
+  return nonEmpty(ID_MAX)(text, "shopId") as ShopId;
 }
 export function savedRouteId(text: string): SavedRouteId {
-  return nonEmpty(200)(text, "routeId") as SavedRouteId;
+  return nonEmpty(ID_MAX)(text, "routeId") as SavedRouteId;
 }

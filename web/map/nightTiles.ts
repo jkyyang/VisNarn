@@ -9,18 +9,11 @@
  */
 import type { AddProtocolAction } from "maplibre-gl";
 import { blackMarbleTile } from "../data/blackMarble.ts";
-import { subsolarPoint } from "./daylight.ts";
+import { subsolarPoint, TWILIGHT_DAY_DEG, TWILIGHT_NIGHT_DEG } from "./daylight.ts";
 
 export const NIGHT_PROTOCOL = "earthnight";
 export const TILE_PX = 256;
 
-/**
- * Sun heights (degrees) where night begins to fall and where it is complete. 10° of sun height is
- * about 1,100 km on the ground; city lights are half on at −3° and 90% on by −6°, the end of civil
- * twilight. (−12° to +1° is softer, about 1,450 km, but the edge of night is harder to see.)
- */
-export const TWILIGHT_NIGHT_DEG = -8;
-export const TWILIGHT_DAY_DEG = 2;
 /** The day side darkens a little as the sun gets low, up to 30% at the horizon, none from 20° up. */
 const LOW_SUN_DEG = 20;
 const LOW_SUN_DIM = 0.3;
@@ -33,7 +26,7 @@ const WARM_RGB = [0xff, 0x8a, 0x3d] as const;
 export const NIGHT_GROUND_RGB = [0x04, 0x05, 0x0f] as const;
 
 /** The sun moves about 2.5° of longitude in 10 minutes: the night tiles are redrawn that often. */
-export const NIGHT_REFRESH_MS = 600_000;
+const NIGHT_REFRESH_MS = 600_000;
 
 const RAD = Math.PI / 180;
 

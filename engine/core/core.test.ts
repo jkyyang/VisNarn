@@ -1,12 +1,13 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { RAILROADS } from "../../shared/railroads.ts";
 import { ALL_RAILROADS_MASK, type RailGraph } from "./graph.ts";
-import { RouteError, turnDeg, type Router } from "./router.ts";
-import { cityPoint, loadTestCore } from "./testing.ts";
+import { INTERCHANGE_PENALTY_KM, REVERSE_KM } from "../rules.ts";
+import { isSharpTurn, RouteError, type Router } from "./router.ts";
+import { cityPoint, loadTestCore, nodePoint } from "./testing.ts";
 
 let graph: RailGraph;
 let router: Router;
-const opt = { allowedMask: ALL_RAILROADS_MASK, passenger: false, interchangeKm: 500 };
+const opt = { allowedMask: ALL_RAILROADS_MASK, passenger: false, interchangeKm: INTERCHANGE_PENALTY_KM, reverseKm: REVERSE_KM };
 const only = (...rr: string[]) => ({ ...opt, allowedMask: rr.reduce((m, r) => m | (1 << RAILROADS.indexOf(r as never)), 0) });
 const at = (name: string) => cityPoint(graph, name);
 
@@ -25,9 +26,9 @@ describe("RailGraph", () => {
   });
   it("lets a point be served by one chosen railroad only", () => {
     const hit = graph.nearestNode(-97.34, 31.1)!;
-    const all = graph.serving(graph.nodePoint(hit.node), { allowedMask: ALL_RAILROADS_MASK, passenger: true });
+    const all = graph.serving(nodePoint(graph, hit.node), { allowedMask: ALL_RAILROADS_MASK, passenger: true });
     const [first] = [...all.keys()];
-    expect([...graph.serving({ ...graph.nodePoint(hit.node), only: first }, { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()]).toEqual([first]);
+    expect([...graph.serving({ ...nodePoint(graph, hit.node), only: first }, { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()]).toEqual([first]);
   });
   it("finds who serves Austin", () => {
     expect([...graph.serving(at("Austin, TX"), { allowedMask: ALL_RAILROADS_MASK, passenger: true }).keys()].map((i) => RAILROADS[i])).toEqual(["UP"]);
@@ -66,7 +67,7 @@ describe("train movement rules", () => {
     for (let i = 1; i < nodes.length - 1; i++) {
       const e1 = graph.edgeBetween(nodes[i - 1], nodes[i]), e2 = graph.edgeBetween(nodes[i], nodes[i + 1]);
       const arriving = (graph.leaving(e1, nodes[i]) + 180) % 360;
-      if ((e1 === e2 || turnDeg(arriving, graph.leaving(e2, nodes[i])) > 90) && !(graph.edgeYard[e1] && graph.edgeYard[e2])) bad++;
+      if ((e1 === e2 || isSharpTurn(arriving, graph.leaving(e2, nodes[i]))) && !(graph.edgeYard[e1] && graph.edgeYard[e2])) bad++;
     }
     return bad;
   };
@@ -77,7 +78,7 @@ describe("train movement rules", () => {
     // every reported reversal is at a yard, and says how the car arrived and left
     for (const r of toShop.reversals) {
       expect(graph.yardNode[r.node]).toBe(1);
-      expect(turnDeg(r.arrivingDeg, r.leavingDeg) > 90 || r.arrivedOn === r.leftOn).toBe(true);
+      expect(isSharpTurn(r.arrivingDeg, r.leavingDeg) || r.arrivedOn === r.leftOn).toBe(true);
       expect(r.km).toBeGreaterThanOrEqual(0);
     }
   });

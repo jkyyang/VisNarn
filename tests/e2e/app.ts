@@ -1,10 +1,11 @@
 /**
  * What every browser test shares: a page that fails the test on an uncaught error or a server
- * error, the map checks, a click at a place on the real map, and the screenshots we keep.
+ * error, the map checks, a click on the real map, a phone window, and the screenshots we keep.
  */
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
-import type { PlannedRoute } from "../../shared/plans.ts";
-import { saveShot } from "./shots.ts";
+import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 
 export { expect };
 
@@ -43,76 +44,24 @@ export async function expectMapCanvases(page: Page): Promise<void> {
   }
 }
 
-export interface Camera {
-  lon: number;
-  lat: number;
-  zoom: number;
-}
-
-/** Web Mercator in MapLibre's units: one zoom level doubles a 512 px world. */
-function worldPx(lon: number, lat: number, zoom: number): [number, number] {
-  const size = 512 * 2 ** zoom;
-  const y = (1 - Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) / Math.PI) / 2;
-  return [((lon + 180) / 360) * size, y * size];
-}
-
-/**
- * Clicks the map where a place is, given where the camera is. The page keeps the map instance to
- * itself, so the camera is one the test can work out (see fittedCamera) and the test works out the
- * pixel the way MapLibre does.
- */
-export async function clickMapAt(page: Page, place: { lon: number; lat: number }, camera: Camera): Promise<void> {
+/** Clicks the middle of the map, where the search box puts the place it found. */
+export async function clickMapCentre(page: Page): Promise<void> {
   const box = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
   if (!box) throw new Error("The map canvas is not on the page.");
-  const [cx, cy] = worldPx(camera.lon, camera.lat, camera.zoom);
-  const [px, py] = worldPx(place.lon, place.lat, camera.zoom);
-  const x = box.x + box.width / 2 + (px - cx);
-  const y = box.y + box.height / 2 + (py - cy);
-  if (x < box.x || x > box.x + box.width || y < box.y || y > box.y + box.height) throw new Error(`(${place.lon}, ${place.lat}) is outside the map at zoom ${camera.zoom}.`);
-  await page.mouse.click(x, y);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
-/** The place at a world pixel (Web Mercator, 512 px at zoom 0) at this zoom: the inverse of worldPx. */
-function lonLatOf(x: number, y: number, zoom: number): { lon: number; lat: number } {
-  const size = 512 * 2 ** zoom;
-  const lon = (x / size) * 360 - 180;
-  const lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / size))) * 180) / Math.PI;
-  return { lon, lat };
-}
+/** A phone: an iPhone 14's window, with touch. */
+export const PHONE = { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
 
-/** The bounds the planner frames for an answer: every route's track, and the stops (web/map/scene.ts). */
-export function routeBounds(planned: PlannedRoute): [number, number, number, number] {
-  const points: [number, number][] = [];
-  if (planned.outcome === "routed") for (const route of planned.routes) for (const leg of route.legs) points.push(...leg.path);
-  for (const stop of planned.places.stops) if (stop.ok) points.push([stop.place.lon, stop.place.lat]);
-  const lons = points.map((p) => p[0]);
-  const lats = points.map((p) => p[1]);
-  return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
-}
-
-/**
- * Where "Fit whole route" puts the camera for these bounds: MapLibre's fitBounds with the padding
- * web/map/FitBounds.tsx asks for, at most zoom 11. The page keeps the map to itself, so the test works
- * the camera out the same way.
- */
-export async function fittedCamera(page: Page, bounds: [number, number, number, number]): Promise<Camera> {
-  const box = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
-  if (!box) throw new Error("The map canvas is not on the page.");
-  const side = Math.round(Math.min(150, Math.max(40, box.width * 0.14)));
-  const pad = { top: 72, bottom: 84, left: side, right: box.width >= 640 ? Math.max(side, 240) : Math.max(side, 72) };
-  const [w, s, e, n] = bounds;
-  const [x0, y0] = worldPx(w, n, 0);
-  const [x1, y1] = worldPx(e, s, 0);
-  const zoom = Math.min(11, Math.log2(Math.min((box.width - pad.left - pad.right) / (x1 - x0), (box.height - pad.top - pad.bottom) / (y1 - y0))));
-  const scale = 2 ** zoom;
-  const cx = ((x0 + x1) / 2) * scale - (pad.left - pad.right) / 2;
-  const cy = ((y0 + y1) / 2) * scale - (pad.top - pad.bottom) / 2;
-  return { ...lonLatOf(cx, cy, zoom), zoom };
+/** Nothing on the page is wider than the window. */
+export async function expectNoSideScroll(page: Page, why?: string): Promise<void> {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth), why).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
 }
 
 /** Types the start and the destination, each with Enter, and waits for the routes. */
 export async function planRoute(page: Page, start: string, destination: string): Promise<PlannedRoute> {
-  const answer = page.waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST" && (r.request().postDataJSON() as { destination: unknown }).destination !== null);
+  const answer = page.waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST" && (r.request().postDataJSON() as Plan).places.at(-1) !== null);
   await page.getByRole("combobox", { name: "Start" }).fill(start);
   await page.getByRole("combobox", { name: "Start" }).press("Enter");
   await page.getByRole("combobox", { name: "Destination" }).fill(destination);
@@ -122,8 +71,11 @@ export async function planRoute(page: Page, start: string, destination: string):
   return planned;
 }
 
+/** Outside Playwright's outputDir (test-results/e2e), which it empties on every run. */
+const SHOTS_DIR = fileURLToPath(new URL("../../test-results/screenshots/", import.meta.url));
+
 /**
- * A full-page screenshot in docs/screenshots/<name>.png, after the map has had its chance to load
+ * A full-page screenshot in test-results/screenshots/<name>.png, after the map has had its chance to load
  * tiles. Tiles come from public servers; without a network the shot still saves, with a grey map.
  *
  * On a desktop the panel scrolls inside a page that does not, so a plain full-page shot would stop
@@ -144,6 +96,7 @@ export async function keepScreenshot(page: Page, name: string): Promise<void> {
   if (grow) await page.setViewportSize({ width: size.width, height: Math.min(tallest, 5000) });
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(800);
-  await saveShot(page, name);
+  mkdirSync(SHOTS_DIR, { recursive: true });
+  await page.screenshot({ path: `${SHOTS_DIR}${name}.png`, fullPage: true });
   if (grow) await page.setViewportSize(size);
 }

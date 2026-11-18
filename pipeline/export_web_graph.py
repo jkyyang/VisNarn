@@ -4,12 +4,12 @@ public/data/graph.bin layout (little-endian):
   header: uint32 n_nodes, uint32 n_edges
   float32[n_nodes*2] lon,lat      uint8[n_nodes] mainline railroad mask
   uint32[n_edges] u   uint32[n_edges] v   float32[n_edges] km
-  uint8[n_edges] railroad mask (bits 0-5 Class I, bit 6 regional, bit 7 short line)   uint16[n_edges] subdivision index
+  uint8[n_edges] line mask (one bit per LINES entry)   uint16[n_edges] subdivision index
   uint16[n_edges] heading leaving u (degrees, 0 = north)   uint16[n_edges] heading leaving v
   uint8[n_edges] flags (bit 0 = yard track, bit 1 = owned by a passenger agency)
 Headings are measured over the first ~0.2 km of track geometry, so the router can tell a
 through move or a gentle diverging move from a reversal (trains can't reverse at a switch).
-public/data/graph_meta.json: railroad bit order, subdivision names, FRA node ids, places.
+public/data/graph_meta.json: line bit order ("lines"), subdivision names, FRA node ids, places.
 
 public/data/track.bin: each edge's surveyed line, for drawing a route on the real track (engine/track.ts):
   uint32 n_edges   uint32[n_edges+1] index of each edge's first point   float32[n_points*2] lon,lat
@@ -28,9 +28,9 @@ from shapely.geometry import LineString
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 from places import PLACES  # noqa: E402
-from railroad_classes import CLASS1, PASSENGER  # noqa: E402
+from railroad_classes import LINES, PASSENGER  # noqa: E402
 
-BIT = {c: 1 << i for i, c in enumerate(CLASS1 + ["regional", "short line"])}
+BIT = {c: 1 << i for i, c in enumerate(LINES)}
 
 YARD = 1
 PASSENGER_OWNED = 2
@@ -101,7 +101,7 @@ with open(out / "graph.bin", "wb") as fh:
 with open(out / "track.bin", "wb") as fh:
     fh.write(np.array([E, *shape_first], np.uint32).tobytes())
     fh.write(np.array(shape_points, np.float32).tobytes())
-json.dump({"railroads": CLASS1, "pad": pad, "subdivs": subdivs, "fra_ids": ids,
+json.dump({"lines": LINES, "pad": pad, "subdivs": subdivs, "fra_ids": ids,
            "places": {k: list(p) for k, p in PLACES.items()}},
           open(out / "graph_meta.json", "w"), separators=(",", ":"))
 print(len(ids), "nodes", E, "edges", len(subdivs), "subdivisions, pad", pad, len(shape_points), "track shape points")

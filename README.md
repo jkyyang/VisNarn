@@ -1,6 +1,6 @@
-# VisNARN — Shop Arrival Check
+# VisNARN: Shop Arrival Check
 
-Stage 1: a route planner over the North American rail network, for one laptop. Click (or type) a start and a
+Stage 1: a route planner over the North American rail network (Class I, regional, short line and passenger track), for one laptop. Click (or type) a start and a
 destination, shop or station, and a route appears; each further click adds a stop the route must pass
 through. Choose the line where several meet, pick between the alternatives, and save the route with a
 name. Your own shops are on the Shops screen. Stage 1 shows no dates, times or cars.
@@ -18,7 +18,7 @@ npm run typecheck  # tsc -b: one program per area; an import across areas fails 
 npm run test:e2e   # Playwright in the installed Chrome: every screen against the real app (port 8797, throwaway data)
 ```
 The browser tests build the page, start the app on 127.0.0.1:8797 with an empty data folder in the
-system temp folder (never `~/.visnarn`), and save a screenshot of each screen to `docs/screenshots/`.
+system temp folder (never `~/.visnarn`), and save a screenshot of each screen to `test-results/screenshots/`.
 Node 23.6 or newer (the server runs its TypeScript sources directly). No build step for the server.
 In development Vite runs inside the Node server (middleware mode), so the page, `/api` and hot reload
 share one origin. The server restarts by itself when a file in `server/`, `engine/` or `shared/` changes.
@@ -36,19 +36,18 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 ```
 
 ## Layout
-- `shared/` — the words both sides use: places, plans, routes, and the HTTP contract (`api.ts`)
-- `engine/` — rail network and router. Pure logic; the server and the scripts use it through `engine/index.ts`
-- `server/` — the back end: database (`store/`), places (`places/`), routing workers (`routing/`), planned and saved routes (`plans/`), shop lists in (`intake/`), HTTP (`http/`)
-- `web/` — the page: screens (`screens/`), map (`map/`), server data (`data/`)
-- `scripts/` — the weekly network update (`update-network.ts`, see `scripts/README.md`) and the import-rule test
-- `tests/` — the API over HTTP and the screens rendered from real answers
-- `pipeline/` — Python: download NARN lines, build the graph, export `public/data/graph.bin`
+- `shared/`: places, plans, routes and the HTTP contract (`api.ts`)
+- `engine/`: rail network and router, used through `engine/index.ts`
+- `server/`: database, places, routing workers, plans, shop import, HTTP
+- `web/`: screens, map, server data
+- `scripts/`: weekly network update, free-port, import rules test
+- `tests/`: the API over HTTP, the screens, the browser tests
+- `pipeline/`: Python that downloads NARN and writes `public/data` (graph.bin, track.bin, basemap)
 
 ## Map sources (free, no key)
-OpenFreeMap vector styles (OpenStreetMap data, also the rail lines of Real tracks), Esri World Imagery for satellite,
-NASA GIBS Black Marble for city lights at night.
-Check each provider's terms before production use (Esri imagery needs an ArcGIS account for commercial apps).
+OpenFreeMap vector styles (OpenStreetMap data) for the map and the Real tracks overlay, Esri World Imagery for
+satellite, NASA Black Marble for night lights.
 
 ## Known limits
-Shortest-distance routing is not the railroads' real operating plan; industry spurs are missing; coordinates snap
-to mainline within 15 km.
+Shortest-distance routing is the model; the railroads' real operating plan can differ. A typed coordinate snaps to
+nearby mainline.

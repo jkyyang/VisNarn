@@ -1,9 +1,9 @@
 import { useId, useState, type ReactElement } from "react";
 import type { BasemapKind } from "./basemaps.ts";
-import { LIGHT_WORDS, type LightMode, type MapLook } from "./daylight.ts";
+import type { LightMode, LightPhase, MapLook } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 
-export interface MapControlsProps {
+interface MapControlsProps {
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
   /** What Auto shows now, for the button. */
@@ -13,10 +13,8 @@ export interface MapControlsProps {
   history: { undo: (() => void) | null; redo: (() => void) | null } | null;
 }
 
-const BASEMAPS: [BasemapKind, string][] = [
-  ["map", "Map"],
-  ["satellite", "Satellite"],
-];
+const BASEMAPS: Record<BasemapKind, string> = { map: "Map", satellite: "Satellite" };
+const LIGHT_WORDS: Record<LightPhase, string> = { day: "Day", sunrise: "Sunrise", sunset: "Sunset", night: "Night" };
 
 const LIGHTS: [LightMode, string][] = [
   ["auto", "Auto"],
@@ -37,7 +35,7 @@ export function MapControls(props: MapControlsProps): ReactElement {
   const lightLabel = useId();
   const tracksOn = layers.tracks;
   const lightWord = LIGHT_WORDS[props.look.phase];
-  const summary = `${layers.basemap === "map" ? "Map" : "Satellite"} · ${lightWord}${tracksOn ? " + tracks" : ""}`;
+  const summary = `${BASEMAPS[layers.basemap]} · ${lightWord}${tracksOn ? " + tracks" : ""}`;
 
   return (
     <div className="map-controls">
@@ -49,9 +47,9 @@ export function MapControls(props: MapControlsProps): ReactElement {
         <span className="map-btn-text">Layers · {summary}</span>
       </button>
       {open && (
-        <div className="layers-card">
+        <div className="card layers-card">
           <div className="layer-tiles" role="radiogroup" aria-label="Map layer">
-            {BASEMAPS.map(([kind, label]) => (
+            {(Object.entries(BASEMAPS) as [BasemapKind, string][]).map(([kind, label]) => (
               <button key={kind} type="button" role="radio" aria-checked={layers.basemap === kind} className="layer-tile" onClick={() => onLayers({ ...layers, basemap: kind })}>
                 <Thumb kind={kind} />
                 {label}

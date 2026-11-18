@@ -45,7 +45,7 @@ describe("route string", () => {
     expect(string.junctions[0].chosen).toBe(false);
   });
 
-  it("shows a regional railroad or short line by its class label, never a made-up mark", () => {
+  it("shows a regional railroad or short line by its class label", () => {
     expect(shownRouteString(routeStringOf(route("UP", "[Topeka, KS]", "short line", "[Salina, KS]", "regional"), []))).toBe(
       "UP – [Topeka, KS] – short line – [Salina, KS] – regional",
     );

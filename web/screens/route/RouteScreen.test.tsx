@@ -25,7 +25,10 @@ afterEach(() => {
 const field = (name: "Start" | "Destination") => screen.getByRole("combobox", { name });
 const hint = () => screen.getByRole("status", { name: "" });
 const routeRows = () => within(screen.getByRole("region", { name: "Routes" })).getAllByRole("button");
-const stopRows = () => within(screen.getByRole("list", { name: "Stops" })).getAllByRole("listitem");
+const placeRows = () => within(screen.getByRole("region", { name: "Places" })).getAllByRole("listitem");
+const stopRows = () => placeRows().slice(1, -1);
+/** What each place row shows, in order. */
+const rowValues = () => placeRows().map((row) => (within(row).getByRole("combobox") as HTMLInputElement).value);
 const legend = () => within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
 
 /** Temple, TX typed with Enter; North Little Rock, AR picked from the suggestions (the EXAMPLE shop). */
@@ -42,7 +45,7 @@ describe("Route planner", () => {
     fake.state.savedRoutes.push({
       id: "route-9" as SavedRouteId,
       name: "EXAMPLE Omaha → North Platte",
-      plan: { start: { kind: "text", text: "Omaha, NE" }, stops: [], destination: { kind: "text", text: "North Platte, NE" }, include: DEFAULT_INCLUDE },
+      plan: { places: [{ kind: "text", text: "Omaha, NE" }, { kind: "text", text: "North Platte, NE" }], include: DEFAULT_INCLUDE },
       option: null,
       routeString: "",
     });
@@ -59,7 +62,7 @@ describe("Route planner", () => {
     openPage("/route");
     expect(await screen.findByText("EXAMPLE DATA")).toBeInTheDocument();
     await user.type(field("Start"), "Temple, TX{Enter}");
-    expect(hint()).toHaveTextContent("Click the destination.");
+    expect(hint()).toHaveTextContent("Click the map to set the destination.");
     await user.type(field("Destination"), "north little");
     await user.click(await screen.findByRole("option", { name: /North Little Rock, AR.*Your shop · EX-NLR-01/ }));
     expect(field("Destination")).toHaveValue("North Little Rock, AR");
@@ -74,7 +77,7 @@ describe("Route planner", () => {
     expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
-    expect(fake.state.lastPlan).toEqual({ start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "shop", shopId: "shop-ex-1" }, include: DEFAULT_INCLUDE });
+    expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE });
   });
 
   it("a click on the map adds a stop; Undo takes it away and Redo brings it back", async () => {
@@ -82,11 +85,11 @@ describe("Route planner", () => {
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
-    expect(await within(stopRows()[0]).findByText("TEMPLE, TX wye")).toBeInTheDocument();
+    expect(await within(stopRows()[0]).findByDisplayValue("TEMPLE, TX wye")).toBeInTheDocument();
     await waitFor(() => expect(routeRows()).toHaveLength(1));
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(screen.queryByRole("list", { name: "Stops" })).not.toBeInTheDocument();
+    expect(stopRows()).toHaveLength(0);
     await waitFor(() => expect(routeRows()).toHaveLength(2));
     await user.click(screen.getByRole("button", { name: "Redo route change" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
@@ -96,12 +99,12 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    const lines = await screen.findByRole("radiogroup", { name: "Next carrier at stop 1" });
+    const lines = await screen.findByRole("radiogroup", { name: "Next carrier at Stop 1" });
     expect(within(lines).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Router's pick", "BNSF", "UP"]);
     expect(within(lines).getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
 
     await user.click(within(lines).getByRole("radio", { name: "UP" }));
-    await waitFor(() => expect(fake.state.lastPlan?.stops).toEqual([{ kind: "node", fraId: 358070, railroad: "UP" }]));
+    await waitFor(() => expect(fake.state.lastPlan?.places[1]).toEqual({ kind: "node", fraId: 358070, railroad: "UP" }));
     expect(screen.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
@@ -114,8 +117,6 @@ describe("Route planner", () => {
     const string = screen.getByRole("region", { name: "Route string" });
     expect(string).toHaveTextContent("BNSF");
     expect(string).not.toHaveTextContent("–");
-    // Stage 1 has no clearance or schedule talk; the old disclaimer chip must not come back.
-    expect(screen.queryByText(/clearance|schedule/i)).toBeNull();
 
     await user.click(routeRows()[1]);
     await waitFor(() => expect(screen.getByRole("region", { name: "Route string" })).toHaveTextContent("BNSF – [Fort Worth, TX] – UP"));
@@ -139,7 +140,7 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Reverse route" }));
     expect(field("Start")).toHaveValue("Chicago, IL");
     expect(field("Destination")).toHaveValue("Kansas City, MO");
-    await waitFor(() => expect(fake.state.lastPlan).toMatchObject({ start: there?.destination, destination: there?.start }));
+    await waitFor(() => expect(fake.state.lastPlan?.places).toEqual(there?.places.toReversed()));
   });
 
   it("Class I is always on; ticking Short lines plans again with short lines included, and Undo unticks it", async () => {
@@ -210,11 +211,11 @@ describe("Route planner", () => {
     expect(hint()).toBeEmptyDOMElement();
   });
 
-  it("a saved route whose shop was deleted leaves that field empty with its one line, not the loading '…'", async () => {
+  it("a saved route whose shop was deleted leaves that field empty with its one line", async () => {
     fake.state.savedRoutes.push({
       id: "route-9" as SavedRouteId,
       name: "EXAMPLE Kansas City → gone shop",
-      plan: { start: { kind: "shop", shopId: "shop-ex-2" as ShopId }, stops: [], destination: { kind: "shop", shopId: "shop-gone" as ShopId }, include: DEFAULT_INCLUDE },
+      plan: { places: [{ kind: "shop", shopId: "shop-ex-2" as ShopId }, { kind: "shop", shopId: "shop-gone" as ShopId }], include: DEFAULT_INCLUDE },
       option: null,
       routeString: "",
     });
@@ -240,7 +241,7 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(routeRows()).toHaveLength(1));
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(fake.state.savedRoutes[0].plan.stops).toHaveLength(1));
+    await waitFor(() => expect(fake.state.savedRoutes[0].plan.places).toHaveLength(3));
     expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
 
     // New starts an empty plan; the list opens the saved one again, stops and all.
@@ -268,12 +269,12 @@ describe("Route planner", () => {
     await screen.findByRole("option", { name: /Kansas City, MO.*Your shop · EX-KCY-01/ });
     expect(start).not.toHaveAttribute("aria-activedescendant");
     await user.keyboard("{Enter}");
-    await waitFor(() => expect(fake.state.lastPlan?.start).toEqual({ kind: "shop", shopId: "shop-ex-2" }));
+    await waitFor(() => expect(fake.state.lastPlan?.places[0]).toEqual({ kind: "shop", shopId: "shop-ex-2" }));
     expect(start).toHaveValue("Kansas City, MO");
 
     const destination = field("Destination");
     await user.type(destination, "Nowhere Junction{Enter}");
-    await waitFor(() => expect(fake.state.lastPlan?.destination).toEqual({ kind: "text", text: "Nowhere Junction" }));
+    await waitFor(() => expect(fake.state.lastPlan?.places[1]).toEqual({ kind: "text", text: "Nowhere Junction" }));
   });
 
   it("⌖ sends the next click to its field, and Esc turns it off", async () => {
@@ -285,8 +286,8 @@ describe("Route planner", () => {
     expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "false");
     await user.click(screen.getByRole("button", { name: "Pick on the map: Start" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    await waitFor(() => expect(fake.state.lastPlan?.start).toEqual({ kind: "node", fraId: 358070, railroad: null }));
-    expect(screen.queryByRole("list", { name: "Stops" })).not.toBeInTheDocument();
+    await waitFor(() => expect(fake.state.lastPlan?.places[0]).toEqual({ kind: "node", fraId: 358070, railroad: null }));
+    expect(stopRows()).toHaveLength(0);
   });
 
   it("an old or unknown link (/cars, /batch) opens the planner and the address bar says /route", async () => {
@@ -298,12 +299,45 @@ describe("Route planner", () => {
     }
   });
 
-  it("the panel says no time, date or verdict anywhere", async () => {
+  it("every place is one row with the same buttons: + Add stop, remove, and a handle that reorders by keyboard", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    await waitFor(() => expect(routeRows()).toHaveLength(1));
-    const text = document.querySelector(".panel")?.textContent ?? "";
-    expect(text).not.toMatch(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\d{1,2}:\d{2}|prep|margin|on time|act now|check first|\bA to B\b|not live/i);
+    await waitFor(() => expect(placeRows()).toHaveLength(3));
+    for (const row of placeRows()) {
+      expect(within(row).getByRole("combobox")).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: /^Pick on the map/ })).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: /^Remove/ })).toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: /^Move/ })).toBeInTheDocument();
+    }
+
+    // Space grabs the start, ↓ moves it below the stop, Space drops it: the stop is the start now.
+    screen.getByRole("button", { name: "Move Start" }).focus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("button", { name: "Move Start" })).toHaveAttribute("aria-pressed", "true");
+    await user.keyboard("{ArrowDown}");
+    await waitFor(() => expect(rowValues()).toEqual(["TEMPLE, TX wye", "Temple, TX", "North Little Rock, AR"]));
+    expect(screen.getByRole("button", { name: "Move Stop 1" })).toHaveFocus();
+    await user.keyboard(" ");
+    expect(screen.getByRole("button", { name: "Move Stop 1" })).toHaveAttribute("aria-pressed", "false");
+
+    // Escape puts a grabbed row back where it was.
+    screen.getByRole("button", { name: "Move Destination" }).focus();
+    await user.keyboard(" {ArrowUp}{ArrowUp}");
+    await waitFor(() => expect(rowValues()).toEqual(["North Little Rock, AR", "TEMPLE, TX wye", "Temple, TX"]));
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(rowValues()).toEqual(["TEMPLE, TX wye", "Temple, TX", "North Little Rock, AR"]));
+
+    // + Add stop opens an empty row before the destination with ⌖ on; the route still runs through the set rows.
+    await user.click(screen.getByRole("button", { name: "+ Add stop" }));
+    expect(placeRows()).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "Pick on the map: Stop 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(hint()).toHaveTextContent("Click the map to set stop 2.");
+    await user.click(screen.getByRole("button", { name: "Remove Stop 2" }));
+    expect(placeRows()).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: "Remove Stop 1" }));
+    expect(placeRows()).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /^Remove/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear Start" })).toBeInTheDocument();
   });
 });

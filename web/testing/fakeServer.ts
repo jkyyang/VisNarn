@@ -4,10 +4,10 @@
  * answers are made up. It follows the contract of shared/api.ts and the rules the server documents
  * (names resolve per role, a plan's places resolve before it is routed, a route is derived on every read).
  */
-import { haversineKm, round5, type LngLat } from "../../shared/geo.ts";
+import { haversineKm, pathKm, round5, roundLngLat, type LngLat } from "../../shared/geo.ts";
 import type { ImportReport, NetworkNode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ResolvedPlace, RowIssue, ShopDraft, ShopId, ShopView } from "../../shared/places.ts";
-import type { Plan, PlannedRoute, PlanPlaces, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
-import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
+import { placeKind, type Plan, type PlannedRoute, type PlanPlaces, type SavedRoute, type SavedRouteDraft, type SavedRouteId } from "../../shared/plans.ts";
+import type { Railroad } from "../../shared/railroads.ts";
 import type { Leg, Milestone, RoutePath } from "../../shared/route.ts";
 import { CITIES, EXAMPLE_SHOPS, NODES, ROUTES, type City, type PathSpec } from "./example.ts";
 
@@ -116,7 +116,6 @@ function suggest(state: FakeState, q: string, role: PlaceRole): PlaceSuggestion[
 
 // ---- routes ----
 
-const pathKm = (points: LngLat[]) => points.slice(1).reduce((sum, p, i) => sum + haversineKm(points[i][0], points[i][1], p[0], p[1]), 0);
 
 function bearing([lon1, lat1]: LngLat, [lon2, lat2]: LngLat): number {
   const r = Math.PI / 180;
@@ -152,7 +151,7 @@ function pathOf(spec: PathSpec, stops: ResolvedPlace[]): RoutePath {
     to: near(leg.points[leg.points.length - 1]),
     headingDeg: bearing(leg.points[0], leg.points[leg.points.length - 1]),
     subdivisions: leg.subdivisions,
-    path: leg.points.map(([x, y]) => [round5(x), round5(y)] as LngLat),
+    path: leg.points.map(([x, y]) => roundLngLat(x, y)),
   }));
   const steps: Milestone[] = [];
   let km = 0;
@@ -178,20 +177,14 @@ function pathOf(spec: PathSpec, stops: ResolvedPlace[]): RoutePath {
   };
 }
 
-type Resolved = Extract<PlaceResolution, { ok: true }>;
-const isResolved = (place: PlaceResolution | null): place is Resolved => place !== null && place.ok;
-
 function plan(state: FakeState, body: Plan): PlannedRoute {
   state.lastPlan = body;
-  const places: PlanPlaces = {
-    start: body.start && resolve(state, body.start, "shop"),
-    stops: body.stops.map((ref) => resolve(state, ref, "position")),
-    destination: body.destination && resolve(state, body.destination, "shop"),
-  };
-  const { start, destination } = places;
-  const stops = places.stops.filter(isResolved);
-  if (!isResolved(start) || !isResolved(destination) || stops.length !== places.stops.length) return { outcome: "incomplete", places };
-  const [first, ...rest] = specsFor(start.place, destination.place, stops.length > 0).map((spec) => pathOf(spec, stops.map((stop) => stop.place)));
+  const places: PlanPlaces = body.places.map((ref, at) => ref && resolve(state, ref, placeKind(at, body.places.length) === "stop" ? "position" : "shop"));
+  const set = places.filter((place) => place !== null);
+  const resolved = set.flatMap((place) => (place.ok ? [place.place] : []));
+  if (set.length < 2 || resolved.length < set.length) return { outcome: "incomplete", places };
+  const stops = resolved.slice(1, -1);
+  const [first, ...rest] = specsFor(resolved[0], resolved.at(-1)!, stops.length > 0).map((spec) => pathOf(spec, stops));
   return { outcome: "routed", places, routes: [first, ...rest] };
 }
 
@@ -266,7 +259,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
 
   if (route === "GET /api/meta") {
     const exampleOnly = state.shops.length > 0 && state.shops.every((s) => s.example) && state.savedRoutes.length === 0;
-    return { graphVersion: "fake", railroads: RAILROADS, exampleOnly, storage: "~/.visnarn/visnarn.db" };
+    return { exampleOnly };
   }
 
   if (route === "GET /api/places/suggest") return suggest(state, q.get("q") ?? "", (q.get("role") ?? "position") as PlaceRole);
@@ -276,7 +269,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
   if (route === "GET /api/shops") return state.shops;
   if (route === "POST /api/shops/import") {
     const source = anyBody.source as { fileName: string; text: string };
-    // As the real server: an empty file is refused, not previewed as zero rows.
+    // As the real server: an empty file is refused with a message.
     if (!source.text.trim()) throw new HttpError(400, "invalid", `${source.fileName} is empty.`, "source");
     const report = readShopCsv(state, source.text);
     if (anyBody.commit) state.shops.push(...report.ready);

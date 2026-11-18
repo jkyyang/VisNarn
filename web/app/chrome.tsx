@@ -13,7 +13,7 @@ function Logo(): ReactElement {
   );
 }
 
-const ExampleBadge = () => <span className="example-badge">EXAMPLE DATA</span>;
+const ExampleBadge = () => <span className="tag">EXAMPLE DATA</span>;
 
 /** Logo, "Shop Arrival Check", and the "EXAMPLE DATA" badge while the server holds only seeded EXAMPLE shops. */
 export function AppHeader(props: { exampleOnly: boolean }): ReactElement {
@@ -61,10 +61,10 @@ export function ModeTabs(props: { current: Screen["name"] }): ReactElement {
 }
 
 /** Back arrow and title, for Shops. */
-export function BackHeader(props: { back: Screen; title: string; exampleOnly?: boolean }): ReactElement {
+export function BackHeader(props: { title: string; exampleOnly?: boolean }): ReactElement {
   return (
     <header className="back-header">
-      <a className="icon-btn" {...linkTo(props.back)} aria-label={props.back.name === "route" ? "Back to route" : "Back"}>
+      <a className="icon-btn" {...linkTo(HOME)} aria-label="Back to route">
         <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
           <path d="M16 10H4M9 5l-5 5 5 5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

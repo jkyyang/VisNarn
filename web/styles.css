@@ -1,5 +1,6 @@
 /* Shop Arrival Check: the canvas look (docs/design/*.dc.html). A panel beside one full-height map; on a phone the map sits on top. */
-:root {
+:root,
+.map[data-look="day"] {
   --bg: #f1f3f4;
   --panel: #ffffff;
   --surface: #f8f9fa;
@@ -38,6 +39,12 @@
   --shadow-1: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
   --shadow-2: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
   --panel-w: 440px;
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  /* Motion: rows sliding into place (web/ui/reorder.ts). */
+  --move-ms: 200ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -79,44 +86,9 @@
   }
 }
 
-/* The map's own day or night look (web/map/daylight.ts), whatever the OS setting: the same two token
-   sets, so the rail lines, the route and the cards over the map keep the contrast each was tuned for. */
-.map[data-look="day"] {
-  --bg: #f1f3f4;
-  --panel: #ffffff;
-  --surface: #f8f9fa;
-  --fg: #202124;
-  --fg2: #3c4043;
-  --muted: #5f6368;
-  --line: #dadce0;
-  --line2: #e8eaed;
-  --route: #1a73e8;
-  --route-dark: #174ea6;
-  --route-soft: #e8f0fe;
-  --route-text: #1a5fb4;
-  --alt-route: #9aa0a6;
-  --casing: #ffffff;
-  --risk: #c5221f;
-  --risk-soft: #fce8e6;
-  --ok: #188038;
-  --pin-a: #80868b;
-  --shop: #c5221f;
-  --turn: #b06000;
-  --rr-BNSF: #d0661f;
-  --rr-UP: #b8920f;
-  --rr-CSXT: #2b6cb0;
-  --rr-NS: #6b55b0;
-  --rr-CN: #c0392b;
-  --rr-CPKC: #23866a;
-  --rr-regional: #5f6368;
-  --rr-short-line: #8d6e63;
-  --rr-passenger: #a8708f;
-  --on-fill: #ffffff;
-  --risk-text: #7a1714;
-  --shadow-1: 0 1px 2px rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
-  --shadow-2: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
-  color-scheme: light;
-}
+/* The map's own night look (web/map/daylight.ts), whatever the OS setting: the dark set again, so the rail
+   lines, the route and the cards over the map keep the contrast each was tuned for. tests/map-look.test.ts checks
+   that this copy matches the dark block above. */
 .map[data-look="night"] {
   --bg: #121417;
   --panel: #1f2125;
@@ -153,7 +125,7 @@
   --shadow-2: 0 1px 3px rgba(0, 0, 0, 0.6), 0 4px 8px 3px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
-/* Text colour is inherited as a value, not a token: set it again where the tokens change. */
+/* Text colour inherits as a computed value, so set it again wherever the tokens change. */
 .map[data-look] {
   color: var(--fg);
 }
@@ -198,7 +170,7 @@ kbd {
   font-size: 11px;
   border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 0 4px;
   background: var(--panel);
 }
@@ -219,12 +191,113 @@ kbd {
 .strong {
   font-weight: 600;
 }
-.center {
-  text-align: center;
-}
 .right {
   text-align: right;
 }
+/* ---- Kit: one rule per shared look ---- */
+.card {
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+.card--float {
+  box-shadow: var(--shadow-2);
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag--accent {
+  border-color: var(--route);
+}
+/* ↩ a turn-back, and ⇄ a count of interchanges: one shape. Each place sets only its size. */
+.turn-badge,
+.ix-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--turn);
+  color: var(--on-fill);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+.alert {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--risk-soft);
+  color: var(--risk-text);
+  font-size: 13px;
+}
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--risk);
+  border-radius: var(--radius);
+  background: var(--risk-soft);
+  color: var(--risk-text);
+  font-size: 13px;
+}
+.confirm > span {
+  flex: 1 1 auto;
+}
+/* A text input in a box with its icons and buttons; each box sets its own size and border. */
+.input-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.input-box:focus-within {
+  outline: 2px solid var(--route);
+  outline-offset: -1px;
+}
+.input-box input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+}
+.rr-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* The chosen one of a choice. */
+.line-chip[aria-checked="true"],
+.tag--accent,
+.layer-tile[aria-checked="true"],
+.segmented button[aria-checked="true"] {
+  background: var(--route-soft);
+  color: var(--route-text);
+  font-weight: 600;
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+}
+
 .grow {
   flex: 1;
 }
@@ -263,7 +336,7 @@ kbd {
   height: 100%;
   overflow-y: auto;
   background: var(--panel);
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  box-shadow: var(--shadow-1);
   position: relative;
   z-index: 2;
 }
@@ -294,17 +367,6 @@ kbd {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-.example-badge {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 3px 7px;
-  background: var(--panel);
-  white-space: nowrap;
 }
 .tabs {
   display: flex;
@@ -343,11 +405,8 @@ kbd {
   min-width: 0;
 }
 .back-title h1 {
-  font-size: 17px;
-  font-weight: 600;
-}
-.app[data-screen="shops"] .back-title h1 {
   font-size: 20px;
+  font-weight: 600;
 }
 .server-note {
   margin: 12px 16px 0;
@@ -355,11 +414,6 @@ kbd {
   gap: 10px;
   align-items: center;
   justify-content: space-between;
-  background: var(--risk-soft);
-  color: var(--risk);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 13px;
 }
 .panel-note {
   margin: 14px 20px;
@@ -368,11 +422,6 @@ kbd {
 }
 .error-card {
   margin: 14px 16px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--risk-soft);
-  color: var(--risk);
-  font-size: 13px;
 }
 .error-card p {
   margin: 0 0 8px;
@@ -387,7 +436,7 @@ kbd {
   height: 36px;
   padding: 0 14px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 999px;
   background: var(--panel);
   color: var(--fg2);
   font-size: 13px;
@@ -420,11 +469,11 @@ kbd {
 .btn--small {
   height: 30px;
   padding: 0 12px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 .btn--dark {
   background: transparent;
-  color: #fff;
+  color: var(--on-fill);
   border-color: #80868b;
   height: 28px;
 }
@@ -441,25 +490,6 @@ kbd {
   color: var(--on-fill);
   filter: brightness(0.92);
 }
-.confirm-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--risk);
-  border-radius: 10px;
-  background: var(--risk-soft);
-  color: var(--risk-text);
-  font-size: 13px;
-}
-.confirm-row > span:first-child {
-  flex: 1 1 220px;
-}
-.confirm-actions {
-  display: flex;
-  gap: 8px;
-}
 .btn--quiet-danger {
   color: var(--risk);
   border-color: transparent;
@@ -467,7 +497,7 @@ kbd {
 .icon-btn {
   width: 40px;
   height: 40px;
-  border-radius: 20px;
+  border-radius: 999px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -484,7 +514,7 @@ kbd {
 .icon-btn.small {
   width: 32px;
   height: 32px;
-  border-radius: 16px;
+  border-radius: 999px;
 }
 .link-btn {
   border: 0;
@@ -504,7 +534,7 @@ input[inputmode],
 select {
   height: 36px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 0 10px;
   background: var(--panel);
   min-width: 0;
@@ -545,23 +575,14 @@ input[aria-invalid="true"] {
   font-family: var(--mono);
   color: var(--fg);
   background: var(--surface);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 2px 7px 2px 4px;
 }
 .rr-swatch {
   width: 10px;
   height: 10px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   display: inline-block;
-}
-.example-tag {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 4px;
 }
 /* ---- Route planner: places, routes, sections, saving ---- */
 .route-panel {
@@ -579,11 +600,60 @@ input[aria-invalid="true"] {
   flex-direction: column;
   gap: 6px;
 }
-.plan-row {
+/* Positioned, so each row's offsetTop is measured from the list (web/ui/reorder.ts). */
+.place-list {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Pin · input · handle; the next carrier under the input. The slide is the FLIP and drag motion of web/ui/reorder.ts. */
+.place-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr) 32px;
   column-gap: 6px;
+  row-gap: 4px;
   align-items: start;
+  border-radius: var(--radius);
+  transition: transform var(--move-ms) var(--ease-out);
+}
+.place-row .line-chips {
+  grid-column: 2;
+}
+.place-row.is-dragging {
+  position: relative;
+  z-index: 1;
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  transition: none;
+  will-change: transform;
+}
+.place-row.is-grabbed {
+  box-shadow: 0 0 0 2px var(--route), var(--shadow-1);
+}
+.place-list.is-reordering {
+  user-select: none;
+}
+.drag-handle {
+  margin-top: 4px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.place-list.is-reordering .drag-handle {
+  cursor: grabbing;
+}
+.drag-handle[aria-pressed="true"] {
+  color: var(--route);
+  background: var(--route-soft);
+}
+@media (prefers-reduced-motion: reduce) {
+  .place-row {
+    transition: none;
+  }
 }
 .place-pin {
   display: flex;
@@ -595,23 +665,16 @@ input[aria-invalid="true"] {
   position: relative;
   min-width: 0;
 }
-/* The shop form's Location input sits in a plain block, not the .field flex column, so it needs its own width to fill the card. */
+/* The shop form's Location input sits in a plain block, so it sets its own width to fill the card. */
 .shop-form .place-field > input {
   width: 100%;
 }
 .place-box {
-  display: flex;
-  align-items: center;
-  gap: 2px;
   height: 40px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 0 2px 0 10px;
   background: var(--panel);
-}
-.place-box:focus-within {
-  border-color: var(--route);
-  box-shadow: 0 0 0 1px var(--route);
 }
 .place-field.is-wrong .place-box {
   border-color: var(--risk);
@@ -619,18 +682,6 @@ input[aria-invalid="true"] {
 .place-field.is-picking .place-box {
   border-color: var(--route);
   background: var(--route-soft);
-}
-.place-box input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  height: 100%;
-  font-size: 14px;
-  background: transparent;
-}
-.place-box input:focus-visible {
-  outline: none;
 }
 .found-mark {
   flex: none;
@@ -647,43 +698,6 @@ input[aria-invalid="true"] {
   font-size: 12px;
   color: var(--risk);
 }
-.stop-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.stop-row {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  column-gap: 6px;
-  row-gap: 4px;
-  align-items: center;
-  min-height: 40px;
-}
-.stop-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.stop-actions {
-  display: flex;
-  grid-column: 3;
-  grid-row: 1;
-}
-.stop-actions .icon-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-  background: transparent;
-}
-.stop-row .line-chips,
-.stop-row .place-problem {
-  grid-column: 2 / span 2;
-  margin: 0;
-}
 .line-chips {
   display: flex;
   flex-wrap: wrap;
@@ -696,7 +710,7 @@ input[aria-invalid="true"] {
   height: 26px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 999px;
   background: var(--panel);
   font-family: var(--mono);
   font-size: 12px;
@@ -709,9 +723,11 @@ input[aria-invalid="true"] {
 }
 .line-chip[aria-checked="true"] {
   border-color: var(--route);
-  background: var(--route-soft);
-  color: var(--route-text);
-  font-weight: 600;
+}
+.plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  padding-left: 22px;
 }
 .track-choice {
   display: flex;
@@ -721,20 +737,9 @@ input[aria-invalid="true"] {
   font-size: 13px;
   color: var(--fg2);
 }
-.track-choice label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.hint-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-left: 30px;
-}
 .hint-line {
   margin: 0;
+  padding-left: 30px;
   font-size: 13px;
   color: var(--muted);
 }
@@ -742,7 +747,7 @@ input[aria-invalid="true"] {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .route-row {
@@ -767,10 +772,8 @@ input[aria-invalid="true"] {
   border-left-color: var(--route);
   background: var(--route-soft);
 }
-.route-row-rr {
-  display: flex;
+.route-row .rr-list {
   flex: none;
-  gap: 4px;
 }
 .route-row-km {
   flex: 1;
@@ -784,31 +787,16 @@ input[aria-invalid="true"] {
   font-weight: 600;
 }
 .ix-chip {
-  flex: none;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: 11px;
   background: var(--surface);
   color: var(--fg);
-  font-size: 12px;
-  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  display: inline-flex;
-  align-items: center;
 }
-.turn-chip {
-  flex: none;
-  min-width: 24px;
+.route-row .ix-chip,
+.route-row .turn-badge {
   height: 22px;
+  min-width: 22px;
   padding: 0 6px;
-  border-radius: 11px;
-  background: var(--turn);
-  color: #fff;
   font-size: 12px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 .sections {
   list-style: none;
@@ -835,7 +823,7 @@ input[aria-invalid="true"] {
 .section-bar {
   width: 5px;
   align-self: stretch;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 .section-ring {
   width: 12px;
@@ -843,18 +831,6 @@ input[aria-invalid="true"] {
   border-radius: 50%;
   border: 3px solid var(--fg);
   background: var(--panel);
-}
-.section-turn {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--turn);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 .section--turn-back .section-text {
   color: var(--turn);
@@ -872,7 +848,7 @@ input[aria-invalid="true"] {
 .save-bar .error {
   flex-basis: 100%;
 }
-/* The route string: "BNSF – [Kansas City, MO] – UP", and what it is not. */
+/* The route string: "BNSF – [Kansas City, MO] – UP". */
 .route-string {
   display: flex;
   flex-wrap: wrap;
@@ -889,22 +865,6 @@ input[aria-invalid="true"] {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--muted);
-}
-/* On each railroad change: "you chose" or "router's pick". */
-.who-chip {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  font-size: 11px;
-  line-height: 17px;
-  color: var(--muted);
-}
-.who-chip.is-chosen {
-  border-color: var(--route);
-  background: var(--route-soft);
-  color: var(--route-text);
 }
 .saved-list summary {
   cursor: pointer;
@@ -925,6 +885,10 @@ input[aria-invalid="true"] {
   min-height: 36px;
   border-top: 1px solid var(--line2);
 }
+.saved-list .confirm {
+  flex: 1;
+  margin: 4px 0;
+}
 .saved-list li.is-current .saved-name {
   font-weight: 600;
 }
@@ -936,16 +900,6 @@ input[aria-invalid="true"] {
   white-space: nowrap;
   text-decoration: none;
 }
-.confirm-inline {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-.confirm-inline > span {
-  flex: 1;
-}
 .suggestions {
   position: absolute;
   z-index: 5;
@@ -956,7 +910,7 @@ input[aria-invalid="true"] {
   margin: 0;
   padding: 4px 0;
   background: var(--panel);
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-2);
   max-height: 260px;
   overflow-y: auto;
@@ -990,7 +944,6 @@ input[aria-invalid="true"] {
   padding: 8px 14px 12px;
   font-size: 12px;
   color: var(--muted);
-  font-style: italic;
   border-top: 1px solid var(--line2);
 }
 
@@ -1006,7 +959,7 @@ input[aria-invalid="true"] {
 }
 .app[data-screen="shops"] .back-header .icon-btn {
   background: var(--panel);
-  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+  box-shadow: var(--shadow-1);
 }
 .shops-body {
   display: flex;
@@ -1020,9 +973,6 @@ input[aria-invalid="true"] {
 .shop-list,
 .shop-form,
 .import-card {
-  background: var(--panel);
-  border-radius: 12px;
-  box-shadow: var(--shadow-1);
   overflow: hidden;
 }
 .shop-list-bar {
@@ -1034,29 +984,15 @@ input[aria-invalid="true"] {
 }
 .search-box {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   height: 36px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 999px;
   padding: 0 12px;
   color: var(--muted);
 }
 .search-box input {
-  flex: 1;
-  border: 0;
   height: 32px;
-  padding: 0;
   font-size: 13px;
-  background: transparent;
-  color: var(--fg);
-}
-.search-box input:focus-visible {
-  outline: none;
-}
-.search-box:focus-within {
-  border-color: var(--route);
 }
 /* Positioned, so the visually hidden "Edit" header stays inside the scroll box instead of widening the page. */
 .table-scroll {
@@ -1085,10 +1021,9 @@ input[aria-invalid="true"] {
 }
 .shop-table td.mono {
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 12px;
 }
-.shop-table .example-tag {
-  display: inline-block;
+.shop-table .tag {
   margin-left: 6px;
 }
 .shop-table tr.is-editing td {
@@ -1118,10 +1053,7 @@ input[aria-invalid="true"] {
 .rr-bars i {
   width: 8px;
   height: 8px;
-  border-radius: 2px;
-}
-.shop-list .table-foot {
-  font-style: normal;
+  border-radius: var(--radius-sm);
 }
 .shop-form {
   padding: 14px 16px;
@@ -1248,7 +1180,7 @@ input[aria-invalid="true"] {
 }
 .map-btn--layers,
 .map-btn--solo {
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-1);
 }
 .map-btn--layers {
@@ -1262,7 +1194,7 @@ input[aria-invalid="true"] {
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-1);
   overflow: hidden;
 }
@@ -1272,10 +1204,7 @@ input[aria-invalid="true"] {
   margin: 0 8px;
 }
 .layers-card {
-  background: var(--panel);
-  border-radius: 10px;
   padding: 6px 6px 8px;
-  box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1296,15 +1225,10 @@ input[aria-invalid="true"] {
   padding: 4px 0;
   border: 0;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 11px;
   color: var(--fg2);
   cursor: pointer;
-}
-.layer-tile[aria-checked="true"] {
-  background: var(--route-soft);
-  font-weight: 600;
-  color: var(--route-text);
 }
 .layer-tile[aria-disabled="true"] {
   cursor: default;
@@ -1312,7 +1236,7 @@ input[aria-invalid="true"] {
 .layer-thumb {
   width: 48px;
   height: 36px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   display: block;
   border: 1px solid var(--line);
 }
@@ -1343,7 +1267,7 @@ input[aria-invalid="true"] {
 .segmented {
   display: flex;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 .segmented button {
@@ -1359,16 +1283,8 @@ input[aria-invalid="true"] {
 .segmented button + button {
   border-left: 1px solid var(--line);
 }
-.segmented button[aria-checked="true"] {
-  background: var(--route-soft);
-  color: var(--route-text);
-  font-weight: 600;
-}
 /* A MapLibre control in the bottom-left corner, stacked above the credits (web/map/MapCanvas.tsx). */
 .legend {
-  background: var(--panel);
-  border-radius: 10px;
-  box-shadow: var(--shadow-1);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1393,7 +1309,7 @@ input[aria-invalid="true"] {
 .legend-line {
   width: 16px;
   height: 4px;
-  border-radius: 2px;
+  border-radius: 999px;
 }
 /* Regional and short-line sections are drawn thinner than Class I. */
 .legend-line.is-thin {
@@ -1401,11 +1317,8 @@ input[aria-invalid="true"] {
 }
 .map-card {
   position: absolute;
-  background: var(--panel);
-  border-radius: 12px;
-  box-shadow: var(--shadow-2);
 }
-/* Bottom right, as on the canvas: clear of the junction inspector (top left) and the change balloon (bottom centre). */
+/* Bottom right, above the map attribution. */
 .pick-prompt {
   right: 16px;
   bottom: 36px;
@@ -1416,7 +1329,7 @@ input[aria-invalid="true"] {
   background: #202124;
   color: #fff;
   font-size: 13px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   max-width: calc(100% - 140px);
 }
 .pick-prompt kbd {
@@ -1425,7 +1338,7 @@ input[aria-invalid="true"] {
   border-color: #80868b;
 }
 .maplibregl-ctrl-attrib {
-  font-size: 10px;
+  font-size: 11px;
 }
 /* The search box: top left, clear of the layers button (top right) and the legend and credits (bottom left). */
 .map-search {
@@ -1437,29 +1350,12 @@ input[aria-invalid="true"] {
   z-index: 6;
 }
 .map-search-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   height: 44px;
   padding: 0 4px 0 14px;
   background: var(--panel);
   color: var(--muted);
-  border-radius: 22px;
+  border-radius: 999px;
   box-shadow: var(--shadow-1);
-}
-.map-search-box input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--fg);
-  font: inherit;
-  font-size: 14px;
-}
-.map-search-box:focus-within {
-  box-shadow: 0 0 0 2px var(--route), var(--shadow-1);
 }
 .map-search .suggestions {
   max-height: min(360px, calc(100vh - 140px));
@@ -1478,27 +1374,10 @@ input[aria-invalid="true"] {
   flex: 1;
   min-width: 0;
 }
-.search-rr {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.type-chip {
-  flex: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 1px 7px;
-}
 .map-search-problem {
   margin: 6px 0 0;
   padding: 8px 12px;
-  background: var(--panel);
   color: var(--risk);
-  border-radius: 8px;
-  box-shadow: var(--shadow-1);
   font-size: 13px;
 }
 /* The found place: a dot on the spot, its card just under it. Over the route marks, under the map buttons. */
@@ -1567,6 +1446,8 @@ input[aria-invalid="true"] {
   height: 0;
 }
 .route-pill {
+  /* From the anchor to the near corner (OFFSET_PX in web/map/pills.ts). */
+  --pill-offset: 8px;
   position: absolute;
   display: inline-flex;
   align-items: center;
@@ -1574,10 +1455,10 @@ input[aria-invalid="true"] {
   height: 26px;
   padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: 999px;
   background: var(--panel);
   color: var(--fg);
-  font: 600 12.5px/1 var(--sans);
+  font: 600 12px/1 var(--sans);
   white-space: nowrap;
   box-shadow: var(--shadow-1);
   cursor: pointer;
@@ -1587,60 +1468,44 @@ input[aria-invalid="true"] {
 }
 .route-pill.is-selected {
   background: var(--route);
-  border: 2px solid #fff;
+  border: 2px solid var(--casing);
   color: var(--on-fill);
   cursor: default;
 }
 /* 8 px off the anchor both ways, beside the line; the corner at the anchor is sharp, like a callout's tail. */
 .route-pill--above-right {
-  left: 8px;
-  bottom: 8px;
+  left: var(--pill-offset);
+  bottom: var(--pill-offset);
   border-bottom-left-radius: 3px;
 }
 .route-pill--above-left {
-  right: 8px;
-  bottom: 8px;
+  right: var(--pill-offset);
+  bottom: var(--pill-offset);
   border-bottom-right-radius: 3px;
 }
 .route-pill--below-right {
-  left: 8px;
-  top: 8px;
+  left: var(--pill-offset);
+  top: var(--pill-offset);
   border-top-left-radius: 3px;
 }
 .route-pill--below-left {
-  right: 8px;
-  top: 8px;
+  right: var(--pill-offset);
+  top: var(--pill-offset);
   border-top-right-radius: 3px;
-}
-.route-pill-turn {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--turn);
-  color: #fff;
-  font-size: 11px;
 }
 .turn-mark-wrap {
   position: relative;
   display: block;
 }
 .turn-mark {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--turn);
-  color: #fff;
-  font: 700 12px/1 var(--sans);
-  box-shadow: var(--shadow-1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
   position: relative;
+  height: 22px;
+  min-width: 22px;
+  padding: 0;
+  border: 2px solid var(--casing);
+  box-shadow: var(--shadow-1);
+  font-size: 12px;
+  cursor: pointer;
 }
 /* A 44 px touch target round the small disc (not on the badge, where it would take taps meant for the pin). */
 .route-mark:not(.route-mark--badge) .turn-mark::before {
@@ -1651,10 +1516,10 @@ input[aria-invalid="true"] {
 }
 /* Beside a pin it would otherwise cover (see turnBackShift): smaller, so the pin's number shows. */
 .route-mark--badge .turn-mark {
-  width: 16px;
   height: 16px;
+  min-width: 16px;
   border-width: 1.5px;
-  font-size: 10px;
+  font-size: 11px;
 }
 .turn-pop {
   position: absolute;
@@ -1667,11 +1532,11 @@ input[aria-invalid="true"] {
   width: max-content;
   max-width: 280px;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--panel);
   color: var(--fg);
   box-shadow: var(--shadow-2);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.4;
   pointer-events: none;
 }
@@ -1679,18 +1544,10 @@ input[aria-invalid="true"] {
   bottom: auto;
   top: calc(100% + 8px);
 }
-.legend-turn-mark {
-  width: 16px;
+.legend .turn-badge {
   height: 16px;
-  border-radius: 50%;
-  background: var(--turn);
-  color: #fff;
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  min-width: 16px;
+  padding: 0;
 }
 .legend-rr .legend-turn {
   font-family: var(--sans);
@@ -1725,7 +1582,7 @@ input[aria-invalid="true"] {
   .app-header .brand {
     display: none;
   }
-  .app-header:not(:has(.example-badge)) {
+  .app-header:not(:has(.tag)) {
     display: none;
   }
   .tabs {
@@ -1740,9 +1597,6 @@ input[aria-invalid="true"] {
   .tab svg {
     display: none;
   }
-  .tab[aria-current="page"] {
-    padding-bottom: 9px;
-  }
   /* Edit scrolls the form to the top: leave a gap so the card's edge and heading show. */
   .shop-form {
     scroll-margin-top: 12px;
@@ -1754,7 +1608,7 @@ input[aria-invalid="true"] {
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 22px;
+    border-radius: 999px;
   }
   /* Pinch zooms on a phone; Undo and Redo stay. */
   .map-controls .ctl-group:not(.ctl-group--history) {
@@ -1782,9 +1636,6 @@ input[aria-invalid="true"] {
     left: 12px;
     right: 68px;
     max-width: none;
-  }
-  .app[data-screen="shops"] .panel {
-    background: var(--bg);
   }
   .shops-screen {
     padding: 8px 12px 24px;

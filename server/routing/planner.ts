@@ -13,15 +13,12 @@ import { combine, tripKey, type RouteResult, type Routed, type Trip } from "../.
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Job, JobResult, WorkerData } from "./protocol.ts";
 
-/** "pick": the router's own route only. "all": every distinct alternative too. */
-export type Want = "pick" | "all";
-
 export interface RoutePlanner {
   /**
-   * The routes for a trip. Identical requests in flight share one computation. Aborting the signal
+   * The distinct routes for a trip, the router's own first. Identical requests in flight share one computation. Aborting the signal
    * drops the request if it has not started; the promise then rejects with the signal's reason.
    */
-  plan(trip: Trip, want: Want, options?: { signal?: AbortSignal }): Promise<Routed>;
+  plan(trip: Trip, options?: { signal?: AbortSignal }): Promise<Routed>;
   close(): Promise<void>;
 }
 
@@ -153,13 +150,12 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
   };
 
   return {
-    plan(trip, want, { signal } = {}) {
+    plan(trip, { signal } = {}) {
       if (closed) return Promise.reject(new Error("The route planner is closed."));
       if (signal?.aborted) return Promise.reject(signal.reason);
-      const strategies = want === "pick" ? ["pick" as const] : ROUTE_STRATEGIES;
       const known = new Map<RouteStrategy, RouteResult>();
       const waiting: Search[] = [];
-      for (const strategy of strategies) {
+      for (const strategy of ROUTE_STRATEGIES) {
         const key = searchKey(trip, strategy);
         const hit = cached(key);
         if (hit) {
@@ -170,7 +166,7 @@ export function startRoutePlanner(options: { networkDir: string; networkVersion:
         search.interest++;
         waiting.push(search);
       }
-      const answer = () => combine(strategies.map((s) => known.get(s)!));
+      const answer = () => combine(ROUTE_STRATEGIES.map((s) => known.get(s)!));
       if (!waiting.length) return Promise.resolve(answer());
       pump();
 

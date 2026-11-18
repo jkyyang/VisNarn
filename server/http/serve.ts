@@ -7,7 +7,7 @@
  *   reach the server by pointing its own domain name at 127.0.0.1: "DNS rebinding");
  * - a request that carries an Origin must come from this server's own page, and one the browser marks
  *   as sent from another site is refused unless it opens the page in a window: this covers every
- *   path, not only /api, because in development Vite serves any file it can read (the database too);
+ *   path, /api and the rest, because in development Vite serves any file it can read (the database too);
  * - a body must be sent as application/json, which a form or a plain cross-site request cannot do;
  * - answers are never cached and request bodies are never logged.
  */
@@ -33,6 +33,8 @@ export interface Server {
 
 /** Largest request body accepted: a CSV of a few thousand shops is well under this. */
 const BODY_LIMIT = 5 * 1024 * 1024;
+const BAD_PATH = "Bad request path.";
+const NOT_FOUND = "Not found.";
 
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -110,14 +112,14 @@ export async function serve(app: App, options: { port: number; webDir: string | 
       return sendJson(res, 403, envelope("invalid", "Requests from other web pages are refused."));
     }
     const target = req.url ?? "/";
-    if (!target.startsWith("/")) return sendJson(res, 400, envelope("invalid", "Bad request path."));
+    if (!target.startsWith("/")) return sendJson(res, 400, envelope("invalid", BAD_PATH));
     const url = new URL(`http://${LOOPBACK}${target}`);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return api(req, res, url);
     if (vite) {
       const devServer = vite;
       return new Promise<void>((done) => {
         devServer.middlewares(req, res, () => {
-          sendJson(res, 404, envelope("not-found", "Not found."));
+          sendJson(res, 404, envelope("not-found", NOT_FOUND));
           done();
         });
         res.on("close", () => done());
@@ -210,7 +212,7 @@ async function jsonBody(req: IncomingMessage): Promise<unknown> {
     size += chunk.length;
     if (size <= BODY_LIMIT) chunks.push(chunk);
   }
-  if (size > BODY_LIMIT) throw new Refusal(413, "The request is larger than 5 MB.");
+  if (size > BODY_LIMIT) throw new Refusal(413, `The request is larger than ${BODY_LIMIT / 1024 / 1024} MB.`);
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
@@ -233,15 +235,15 @@ async function staticFile(req: IncomingMessage, res: ServerResponse, pathname: s
   try {
     path = decodeURIComponent(pathname);
   } catch {
-    return sendJson(res, 400, envelope("invalid", "Bad request path."));
+    return sendJson(res, 400, envelope("invalid", BAD_PATH));
   }
-  if (path.includes("\0")) return sendJson(res, 400, envelope("invalid", "Bad request path."));
+  if (path.includes("\0")) return sendJson(res, 400, envelope("invalid", BAD_PATH));
   const isFile = async (file: string) => (await stat(file).catch(() => null))?.isFile() ?? false;
   let file = resolve(root, `.${path}`);
-  if (file !== root && !file.startsWith(root + sep)) return sendJson(res, 404, envelope("not-found", "Not found."));
+  if (file !== root && !file.startsWith(root + sep)) return sendJson(res, 404, envelope("not-found", NOT_FOUND));
   if (!(await isFile(file))) {
     if (await isFile(join(file, "index.html"))) file = join(file, "index.html");
-    else if (extname(path)) return sendJson(res, 404, envelope("not-found", "Not found."));
+    else if (extname(path)) return sendJson(res, 404, envelope("not-found", NOT_FOUND));
     else file = join(root, "index.html");
   }
   if (!(await isFile(file))) return sendJson(res, 404, envelope("not-found", "The page is not built yet. Run `npm run build`."));

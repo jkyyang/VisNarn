@@ -18,12 +18,11 @@ const colors: ThemeColors = {
   route: [26, 115, 232, 255],
   alternative: [154, 160, 166, 255],
   casing: [255, 255, 255, 255],
-  rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255] },
-  passenger: [9, 0, 0, 255],
+  rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255], passenger: [9, 0, 0, 255] },
 };
 
-const TEMPLE_TO_NLR: Plan = { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "North Little Rock, AR" }, include: DEFAULT_INCLUDE };
-const WITH_WYE: Plan = { ...TEMPLE_TO_NLR, stops: [{ kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }] };
+const TEMPLE_TO_NLR: Plan = { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "North Little Rock, AR" }], include: DEFAULT_INCLUDE };
+const WITH_WYE: Plan = { ...TEMPLE_TO_NLR, places: [TEMPLE_TO_NLR.places[0], { kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }, TEMPLE_TO_NLR.places[1]] };
 
 let twoRoutes: PlannedRoute;
 let oneRoute: PlannedRoute;
@@ -41,7 +40,7 @@ beforeAll(async () => {
   const fake = installFakeServer({ state });
   twoRoutes = await routeOf(TEMPLE_TO_NLR);
   oneRoute = await routeOf(WITH_WYE);
-  startOnly = await routeOf({ ...TEMPLE_TO_NLR, destination: null });
+  startOnly = await routeOf({ ...TEMPLE_TO_NLR, places: [TEMPLE_TO_NLR.places[0], null] });
   fake.restore();
 });
 
@@ -64,7 +63,7 @@ describe("planScene", () => {
     expect(squares.length).toBeGreaterThan(0);
     for (const square of squares) expect(square.shopId).not.toBeNull();
     // The destination is the EXAMPLE shop at North Little Rock, typed as a city: it is not a square too.
-    const usedAsEnd = planScene({ planned: { ...oneRoute, places: { ...oneRoute.places, destination: { ok: true, place: { ...shopPlace("North Little Rock, AR") } } } }, option: null, shops });
+    const usedAsEnd = planScene({ planned: { ...oneRoute, places: oneRoute.places.with(-1, { ok: true, place: { ...shopPlace("North Little Rock, AR") } }) }, option: null, shops });
     expect(usedAsEnd.pins.filter((p) => p.kind === "shop").map((p) => p.label)).not.toContain("North Little Rock, AR");
   });
 
@@ -270,7 +269,7 @@ describe("layers", () => {
     expect(lineColor(shown["network-class_i"], "KCTL")).toBe(grey);
     expect(lineColor(shown["network-short_line"], "KCTL")).toBe(colors.rail["short line"]);
     expect(lineColor(shown["network-regional"], "WSOR")).toBe(colors.rail.regional);
-    expect(lineColor(shown["network-passenger"], "AMTK")).toBe(colors.passenger);
+    expect(lineColor(shown["network-passenger"], "AMTK")).toBe(colors.rail.passenger);
     expect(shown["network-short_line"].opacity).toBeLessThan(shown["network-class_i"].opacity as number);
     expect(byClass([], true)["network-class_i"]).toMatchObject({ visible: false, opacity: 0.35 });
   });

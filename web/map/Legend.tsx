@@ -1,32 +1,28 @@
 import type { ReactElement } from "react";
-import { isClassI, LINES, RAILROADS, type Line, type NetworkClass } from "../../shared/railroads.ts";
-import { lineColor } from "../theme.ts";
+import { isClassI, type NetworkClass } from "../../shared/railroads.ts";
+import { CLASS_LINES, lineColor, MAP_LINES, type MapLine } from "../theme.ts";
+import { TurnBadge } from "../ui/badges.tsx";
 import { lineName } from "../words.ts";
 import type { MapScene } from "./scene.ts";
-
-/** A line the map can draw: a route's line, or passenger-owned track in the network. */
-type LegendLine = Line | "passenger";
-const LEGEND_ORDER: readonly LegendLine[] = [...LINES, "passenger"];
-const NETWORK_LINES: Record<NetworkClass, readonly LegendLine[]> = { class_i: RAILROADS, regional: ["regional"], short_line: ["short line"], passenger: ["passenger"] };
 
 /**
  * What the legend lists for a scene: the selected route's lines; with no route, the lines of the
  * network classes drawn (none while the network is switched off).
  */
-export function legendFor(scene: MapScene | null, network: readonly NetworkClass[]): { railroads: readonly LegendLine[]; turnBack: boolean } {
+export function legendFor(scene: MapScene | null, network: readonly NetworkClass[]): { railroads: readonly MapLine[]; turnBack: boolean } {
   const selected = scene?.kind === "route" ? scene.selected : null;
   return {
-    railroads: selected ? [...new Set(selected.legs.map((leg) => leg.railroad))] : network.flatMap((c) => NETWORK_LINES[c]),
+    railroads: selected ? [...new Set(selected.legs.map((leg) => leg.railroad))] : network.flatMap((c) => CLASS_LINES[c]),
     turnBack: scene?.kind === "route" && scene.turnBacks.length > 0,
   };
 }
 
 /** Which colour is which line: only those the map shows, and the turn-back mark when the route has one. Nothing to list: no legend. */
-export function Legend(props: { railroads: readonly LegendLine[]; turnBack: boolean }): ReactElement | null {
-  const shown = LEGEND_ORDER.filter((line) => props.railroads.includes(line));
+export function Legend(props: { railroads: readonly MapLine[]; turnBack: boolean }): ReactElement | null {
+  const shown = MAP_LINES.filter((line) => props.railroads.includes(line));
   if (!shown.length && !props.turnBack) return null;
   return (
-    <div className="map-ctl legend">
+    <div className="map-ctl card legend">
       <div className="legend-rr" role="list" aria-label="Railroad colors">
         {shown.map((line) => (
           <span role="listitem" key={line}>
@@ -36,9 +32,7 @@ export function Legend(props: { railroads: readonly LegendLine[]; turnBack: bool
         ))}
         {props.turnBack && (
           <span role="listitem" className="legend-turn">
-            <i className="legend-turn-mark" aria-hidden="true">
-              ↩
-            </i>
+            <TurnBadge />
             Turn-back
           </span>
         )}

@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PlaceSuggestion } from "../../shared/places.ts";
 import { clearQueryCache } from "../data/query.ts";
 import { installFakeServer, type FakeServer } from "../testing/fakeServer.ts";
-import { MapSearch, moveActive } from "./MapSearch.tsx";
+import { moveActive } from "../ui/combobox.tsx";
+import { MapSearch } from "./MapSearch.tsx";
 
 describe("moveActive", () => {
   it("goes round the list; from no row, ↓ takes the first and ↑ the last", () => {

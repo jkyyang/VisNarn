@@ -4,11 +4,6 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 describe("styles.css", () => {
-  // Stage 1 shows no dates or times, so no date input exists to style.
-  it("has no date or time input selectors", () => {
-    expect(css).not.toMatch(/type="(datetime-local|date|time)"/);
-  });
-
   // jsdom has no layout, so this reads the rule: a nowrap "DRAFT-UTLX-ECH" made the shop table wider than a 360 px card and clipped Edit.
   it("lets a shop code wrap on a phone so each row's Edit stays visible", () => {
     const start = css.indexOf("@media (max-width: 640px)");

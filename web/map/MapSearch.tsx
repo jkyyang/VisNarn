@@ -1,33 +1,22 @@
 /**
- * The search box over the map, as in a maps app: Your shops and cities. An FRA node id
- * ("FRA 358070") still finds its node, but the placeholder does not advertise it: jargon, and it clips on a phone.
+ * The search box over the map, as in a maps app: Your shops and cities. An FRA node id ("FRA 358070")
+ * still finds its node; the placeholder leaves it out because it is jargon and clips on a phone.
  * Choosing a suggestion flies the map there and drops a pin with a card (./FoundPin.tsx). Plain DOM,
  * no map library, so page tests draw it.
  *
- * It asks only our own server (GET /api/places/suggest, the Directory every place input uses), so
- * nothing typed here leaves the laptop.
+ * It asks only our own server (GET /api/places/suggest, the Directory every place input uses).
  */
 import { useId, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
-import { usePlaceSuggestions } from "../data/hooks.ts";
-import { RailroadChip } from "../ui/badges.tsx";
-
-export const TYPE_CHIPS: Record<PlaceSuggestion["source"], string> = { shop: "Shop", city: "City", yard: "Yard", junction: "Junction", node: "Node" };
-
-/** The highlighted row after ↓ or ↑, going round the list; with none highlighted, ↓ takes the first and ↑ the last. */
-export function moveActive(active: number, key: "ArrowDown" | "ArrowUp", count: number): number {
-  if (count === 0) return -1;
-  const step = key === "ArrowDown" ? 1 : -1;
-  return active < 0 ? (step > 0 ? 0 : count - 1) : (active + step + count) % count;
-}
+import { fresh, usePlaceSuggestions } from "../data/hooks.ts";
+import { RailroadChips } from "../ui/badges.tsx";
+import { moveActive, SuggestionList } from "../ui/combobox.tsx";
+import { Cross, Search } from "../ui/icons.tsx";
+import { PLACE_SOURCE_WORDS } from "../words.ts";
 
 export function Railroads({ place }: { place: Pick<ResolvedPlace, "railroads"> }): ReactElement {
   return place.railroads.length ? (
-    <span className="search-rr">
-      {place.railroads.map((railroad) => (
-        <RailroadChip key={railroad} railroad={railroad} />
-      ))}
-    </span>
+    <RailroadChips railroads={place.railroads} />
   ) : (
     <span className="muted small">No Class I track</span>
   );
@@ -43,10 +32,10 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
   const [active, setActive] = useState(-1);
   const suggestions = usePlaceSuggestions(draft ?? "", "shop");
   // A stale list belongs to the text before the last keystroke.
-  const list = draft !== null && suggestions.status === "ready" && !suggestions.stale ? suggestions.data : [];
+  const list = (draft !== null && fresh(suggestions)) || [];
   const open = list.length > 0;
   const typed = draft?.trim() ?? "";
-  const nothing = typed && suggestions.status === "ready" && !suggestions.stale && !suggestions.data.length;
+  const nothing = typed && fresh(suggestions)?.length === 0;
   const message = nothing ? `No shop, code or city called “${typed}”.` : props.problem;
 
   const choose = (suggestion: PlaceSuggestion | null) => {
@@ -70,11 +59,8 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
 
   return (
     <div className="map-search" role="search">
-      <div className="map-search-box">
-        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="7.5" cy="7.5" r="5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-          <path d="M11.5 11.5l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        </svg>
+      <div className="input-box map-search-box">
+        <Search size={18} />
         <input
           role="combobox"
           aria-label="Search the map"
@@ -94,39 +80,33 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
         />
         {(draft || props.chosen) && (
           <button type="button" className="icon-btn small" aria-label="Clear the search" onClick={() => choose(null)}>
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <Cross />
           </button>
         )}
       </div>
       {open && (
-        <ul className="suggestions" role="listbox" id={listId} aria-label="Places found">
-          {list.map((suggestion, i) => (
-            <li
-              key={`${suggestion.source}-${suggestion.label}-${i}`}
-              id={`${listId}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                choose(suggestion);
-              }}
-            >
+        <SuggestionList
+          id={listId}
+          label="Places found"
+          list={list}
+          active={active}
+          onChoose={choose}
+          item={(suggestion) => (
+            <>
               <span className="search-line">
                 <span className="search-name">{suggestion.label}</span>
-                <span className="type-chip">{TYPE_CHIPS[suggestion.source]}</span>
+                <span className="tag">{PLACE_SOURCE_WORDS[suggestion.source]}</span>
               </span>
               <span className="search-line muted small">
-                {/* "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070"; a city's "City" is the chip already. */}
-                {suggestion.detail !== TYPE_CHIPS[suggestion.source] && suggestion.detail}
+                {/* "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070"; a city's "City" is the tag already. */}
+                {suggestion.detail !== PLACE_SOURCE_WORDS[suggestion.source] && suggestion.detail}
                 <Railroads place={suggestion} />
               </span>
-            </li>
-          ))}
-        </ul>
+            </>
+          )}
+        />
       )}
-      {message && !open && <p className="map-search-problem">{message}</p>}
+      {message && !open && <p className="card map-search-problem">{message}</p>}
     </div>
   );
 }

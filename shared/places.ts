@@ -75,6 +75,11 @@ export interface PlaceProblem {
 
 export type PlaceResolution = { ok: true; place: ResolvedPlace } | { ok: false; problem: PlaceProblem };
 
+/** The farthest a map click snaps to a node (GET /api/places/nearest). */
+export const NEAREST_MAX_KM = 100;
+
+export const resolvedOf = (resolution: PlaceResolution | null | undefined): ResolvedPlace | null => (resolution?.ok ? resolution.place : null);
+
 /** A network node near a map click. */
 export interface NetworkNode {
   fraId: FraId;
@@ -143,13 +148,6 @@ export interface ShopView extends Shop {
 
 /** Company data arrives as one of these. Adding the database is a new member here and a new source in server/intake. */
 export type UploadSource = { kind: "csv"; fileName: string; text: string };
-
-/** Where an import came from. */
-export interface SourceInfo {
-  kind: "csv" | "database";
-  /** "EXAMPLE shops.csv". */
-  label: string;
-}
 
 export interface RowIssue {
   /** 0-based position among the data rows; `line` is the line in the file, for "line 7 matches no node". */

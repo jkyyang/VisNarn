@@ -34,11 +34,9 @@ describe("words", () => {
   });
 
   it("routeName joins the short names of the places, stops after 'via'", () => {
-    expect(routeName({ start: found("Kansas City, MO"), stops: [], destination: found("Chicago, IL") })).toBe("Kansas City → Chicago");
-    expect(routeName({ start: found("Kansas City, MO"), stops: [found("Galesburg, IL"), found("Peoria, IL")], destination: found("Chicago, IL") })).toBe(
-      "Kansas City → Chicago via Galesburg, Peoria",
-    );
-    expect(routeName({ start: found("Texarkana, AR · UTLX"), stops: [], destination: found("Regina, SK · Procor (approximate)") })).toBe("Texarkana → Regina");
+    expect(routeName([found("Kansas City, MO"), found("Chicago, IL")])).toBe("Kansas City → Chicago");
+    expect(routeName([found("Kansas City, MO"), found("Galesburg, IL"), null, found("Peoria, IL"), found("Chicago, IL")])).toBe("Kansas City → Chicago via Galesburg, Peoria");
+    expect(routeName([found("Texarkana, AR · UTLX"), found("Regina, SK · Procor (approximate)")])).toBe("Texarkana → Regina");
   });
 
   it("placeProblem is the problem's own line, or nothing", () => {

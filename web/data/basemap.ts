@@ -29,12 +29,15 @@ function load(): Promise<Mainline | null> {
   return loading;
 }
 
+/** WebGL is what MapLibre and deck.gl draw with; without it there is nothing to load. */
+export const canDrawMaps = () => typeof window !== "undefined" && ("WebGL2RenderingContext" in window || "WebGLRenderingContext" in window);
+
 /** Null until public/data/basemap_mainline.geojson has loaded; the map shows its tiles meanwhile. */
 export function useBasemap(): Mainline | null {
   const [network, setNetwork] = useState<Mainline | null>(null);
   useEffect(() => {
     // The page shell renders before the map needs the network; tests and browsers without WebGL never draw it.
-    if (typeof window === "undefined" || !("WebGLRenderingContext" in window)) return;
+    if (!canDrawMaps()) return;
     let live = true;
     void load().then((data) => {
       if (live) setNetwork(data);

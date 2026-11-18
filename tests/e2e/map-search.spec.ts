@@ -3,7 +3,7 @@
  * hands the place to the planner. Only our own server is asked.
  */
 import type { Page } from "@playwright/test";
-import { expectMapCanvases, keepScreenshot, mapRegion, test, expect } from "./app.ts";
+import { expect, expectMapCanvases, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
 
 /** Types into the search box and picks the city of that name (Your shops may list a shop with it too). */
 async function findCity(page: Page, name: string) {
@@ -45,7 +45,7 @@ test("Search Kansas City: the map centres on it, and Set as start makes it the p
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  test.use(PHONE);
 
   test("the box runs across the top of the map, clear of the layers button and the legend", async ({ page }) => {
     await findCity(page, "Kansas City");
@@ -57,7 +57,7 @@ test.describe("on a phone", () => {
     expect(search.width).toBeGreaterThan(map.width * 0.7);
     expect(search.x + search.width).toBeLessThanOrEqual(layers.x);
     expect(search.y + search.height).toBeLessThanOrEqual(legend.y);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await expectNoSideScroll(page);
     await keepScreenshot(page, "map-search-phone");
   });
 });

@@ -11,3 +11,13 @@ export function haversineKm(lon1: number, lat1: number, lon2: number, lat2: numb
 }
 
 export const round5 = (n: number): number => Math.round(n * 1e5) / 1e5;
+
+export const isLngLat = (lon: number, lat: number): boolean => Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+
+/** Text pasted from documents often writes minus as U+2212. */
+export const plainMinus = (text: string): string => text.replaceAll("−", "-");
+
+export const roundLngLat = (lon: number, lat: number): LngLat => [round5(lon), round5(lat)];
+
+/** Length of a line along the ground. */
+export const pathKm = (path: readonly LngLat[]): number => path.slice(1).reduce((km, [lon, lat], i) => km + haversineKm(path[i][0], path[i][1], lon, lat), 0);

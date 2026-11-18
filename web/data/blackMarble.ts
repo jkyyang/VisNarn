@@ -1,17 +1,17 @@
 /**
  * NASA's Black Marble night-lights tiles, downloaded for the night side of the map
- * (web/map/nightTiles.ts). A public picture of the Earth: only tile numbers are sent, never car data.
+ * (web/map/nightTiles.ts). A public picture of the Earth; each request carries only tile numbers.
  */
 
 /** VIIRS Black Marble 2016 from NASA GIBS: free, no key, served with CORS, tiles to zoom 8. */
-export const BLACK_MARBLE_TILE = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png";
+const BLACK_MARBLE_TILE = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png";
 export const BLACK_MARBLE_MAX_ZOOM = 8;
 export const BLACK_MARBLE_ATTRIBUTION = 'Night lights: <a href="https://earthobservatory.nasa.gov/features/NightLights">NASA Earth Observatory</a> VIIRS Black Marble, via NASA GIBS';
 
 /**
  * Downloaded tiles, most recently used last. GIBS sends `cache-control: no-store`, so without this
  * every 10-minute redraw of the night side would download every tile again. The PNGs are kept as
- * they came (tens of KB each, not 256 KB of pixels); decoding one again takes about a millisecond.
+ * they came (tens of KB each; decoded pixels would take 256 KB); decoding one again takes about a millisecond.
  */
 const CACHE_TILES = 256;
 const downloads = new Map<string, Promise<Blob>>();

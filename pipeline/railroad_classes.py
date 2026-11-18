@@ -2,10 +2,14 @@
 
 class_of(code) -> "class1" | "regional" | "short line" | "passenger".
 Every freight code that is neither Class I nor in REGIONAL is a short line, including codes we could not
-identify: nothing is guessed into a bigger class.
+identify; a code joins a bigger class only when it is listed.
 """
 
 CLASS1 = ["BNSF", "UP", "CSXT", "NS", "CN", "CPKC"]
+# The order of the line bits in graph.bin: the Class I railroads, then the two classes of smaller freight railroad.
+LINES = CLASS1 + ["regional", "short line"]
+# Owners and trackage-rights holders: the railroads allowed to run trains on a segment.
+CARRIER_COLS = ["RROWNER1", "RROWNER2", "RROWNER3"] + [f"TRKRGHTS{i}" for i in range(1, 10)]
 
 # US Class II (regional) railroads, the AAR's current list as given by Wikipedia "Regional railroad"
 # (https://en.wikipedia.org/wiki/Regional_railroad, read 2026-11-17), mapped to their NARN codes.

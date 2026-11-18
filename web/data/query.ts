@@ -13,7 +13,7 @@
  */
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, type Route } from "../../shared/api.ts";
-import { AppError, type AppErrorKind } from "../../shared/app.ts";
+import { APP_ERROR_KINDS, AppError } from "../../shared/app.ts";
 
 /** Routes that change nothing on the server. Three of them are POSTs because their input is a document. */
 export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/track">;
@@ -27,10 +27,11 @@ export type QueryState<T> =
   /** `stale`: a newer answer is on its way and `data` is the one before it. */
   | { status: "ready"; data: T; stale: boolean };
 
+/** The data when it answers the current request; null while loading, after an error, or while stale. */
+export const fresh = <T>(state: QueryState<T>): T | null => (state.status === "ready" && !state.stale ? state.data : null);
+
 /** One call to the server. The real one is `callApi`; tests give the cache a fake. */
 export type Transport = (route: Route, request: unknown, signal: AbortSignal) => Promise<unknown>;
-
-const KINDS: readonly AppErrorKind[] = ["invalid", "not-found", "conflict", "internal"];
 
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
 
@@ -63,7 +64,7 @@ export async function callApi<R extends Route>(origin: string, route: R, request
   const json = text ? safeJson(text) : null;
   if (!response.ok) {
     const failure = (json as ApiErrorBody | null)?.error;
-    if (failure && KINDS.includes(failure.kind) && typeof failure.message === "string") {
+    if (failure && (APP_ERROR_KINDS as readonly string[]).includes(failure.kind) && typeof failure.message === "string") {
       throw new AppError(failure.kind, failure.message, failure.field ?? null);
     }
     throw new AppError("internal", `The server answered with an error (HTTP ${response.status}).`);

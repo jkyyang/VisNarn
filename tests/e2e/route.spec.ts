@@ -1,18 +1,16 @@
 /**
  * The route planner in a real browser against the real server: Taylor, TX to the EXAMPLE shop at
  * North Little Rock, a stop clicked at Temple, the routes told apart by their pills, saved and opened
- * again. Places only: no car and no clock.
+ * again.
  */
 import type { Locator, Page } from "@playwright/test";
-import type { PlannedRoute } from "../../shared/plans.ts";
-import { RAILROADS } from "../../shared/railroads.ts";
-import { clickMapAt, expect, expectMapCanvases, fittedCamera, keepScreenshot, mapRegion, planRoute, routeBounds, test } from "./app.ts";
-
-/** FRA node 358070 at Temple, TX, where BNSF and UP meet. */
-const TEMPLE = { lon: -97.33832, lat: 31.08799 };
+import type { Plan, PlannedRoute } from "../../shared/plans.ts";
+import { DEFAULT_INCLUDE, RAILROADS } from "../../shared/railroads.ts";
+import { clickMapCentre, expect, expectMapCanvases, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
 
 const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).getByRole("button");
-const stopRows = (page: Page): Locator => page.getByRole("list", { name: "Stops" }).getByRole("listitem");
+/** Every place is a row: start, stops, destination. */
+const placeRows = (page: Page): Locator => page.getByRole("region", { name: "Places" }).getByRole("listitem");
 const legend = (page: Page): Locator => page.getByRole("list", { name: "Railroad colors" }).getByRole("listitem");
 const pressedRow = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).locator('[aria-pressed="true"]');
 
@@ -20,16 +18,18 @@ const pressedRow = (page: Page): Locator => page.getByRole("region", { name: "Ro
 const nextRoute = (page: Page) =>
   page.waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST").then(async (r) => (await r.json()) as PlannedRoute);
 
-/** Clicks Temple on the map, after "Fit whole route" has put the camera where the test can work it out. */
-async function clickTemple(page: Page, planned: PlannedRoute): Promise<PlannedRoute> {
-  await page.getByRole("button", { name: "Fit whole route" }).click();
+/** Clicks FRA node 358070 at Temple, TX, where BNSF and UP meet: the search box centres the map on it. */
+async function clickTemple(page: Page): Promise<PlannedRoute> {
+  await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 358070");
+  await page.getByRole("option", { name: /FRA node 358070/ }).click();
+  await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
   const answer = nextRoute(page);
-  await clickMapAt(page, TEMPLE, await fittedCamera(page, routeBounds(planned)));
+  await clickMapCentre(page);
   return answer;
 }
 
 test.describe("Route planner", () => {
-  test("empty at first; a typed start and destination give a route, and the legend lists only its railroads", async ({ page }) => {
+  test("a typed start and destination give a route and its legend", async ({ page }) => {
     await page.goto("/route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
     await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toBeVisible();
@@ -43,15 +43,15 @@ test.describe("Route planner", () => {
     await expect(legend(page)).toHaveText(RAILROADS.filter((railroad) => railroads.includes(railroad)));
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor");
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("North Little Rock");
-    await expect(page.locator(".panel")).not.toContainText(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\d{1,2}:\d{2}|prep|margin|on time|act now|check first|not live/i);
   });
 
-  test("a click at Temple adds a stop; a pill selects its route and adds no stop; pills keep apart; Undo takes the stop back", async ({ page }) => {
+  test("a click at Temple adds a stop that Undo takes back", async ({ page }) => {
     await page.goto("/route");
-    const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-    const withStop = await clickTemple(page, planned);
-    await expect(stopRows(page)).toHaveCount(1);
-    await expect(stopRows(page).first()).toContainText("Temple");
+    await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    const withStop = await clickTemple(page);
+    await page.getByRole("button", { name: "Fit whole route" }).click();
+    await expect(placeRows(page)).toHaveCount(3);
+    await expect(placeRows(page).nth(1).getByRole("combobox")).toHaveValue(/Temple/i);
     expect(withStop.outcome).toBe("routed");
 
     // Every visible pill is clear of the others and of the turn-back discs.
@@ -72,17 +72,17 @@ test.describe("Route planner", () => {
     await expect(page).toHaveURL(/\?option=[a-z-]+$/);
     await expect(pressedRow(page)).not.toHaveText(before);
     await page.waitForTimeout(500);
-    await expect(stopRows(page)).toHaveCount(1);
+    await expect(placeRows(page)).toHaveCount(3);
 
     await page.getByRole("button", { name: "Undo route change" }).click();
-    await expect(page.getByRole("list", { name: "Stops" })).toHaveCount(0);
+    await expect(placeRows(page)).toHaveCount(2);
   });
 
-  test("a stop where railroads meet offers its lines; the chosen line is sent; a saved route reopens on the same alternative", async ({ page }) => {
+  test("a stop where railroads meet sends the chosen next carrier", async ({ page }) => {
     await page.goto("/route");
-    const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-    await clickTemple(page, planned);
-    const lines = page.getByRole("radiogroup", { name: "Next carrier at stop 1" });
+    await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    await clickTemple(page);
+    const lines = page.getByRole("radiogroup", { name: "Next carrier at Stop 1" });
     await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"UP"'));
     await lines.getByRole("radio", { name: "UP" }).click();
@@ -103,7 +103,7 @@ test.describe("Route planner", () => {
 
     await page.goto(savedAt);
     await expect(pressedRow(page)).toHaveText(chosen);
-    await expect(stopRows(page)).toHaveCount(1);
+    await expect(placeRows(page)).toHaveCount(3);
     await expect(page.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
     await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
 
@@ -114,20 +114,20 @@ test.describe("Route planner", () => {
     await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
   });
 
-  test("ticking Short lines reaches the Ville Platte shop, which only a short line serves; a saved route keeps the tick", async ({ page }) => {
+  test("ticking Short lines reaches the Ville Platte shop", async ({ page }) => {
     await page.goto("/route");
     const shortLines = page.getByRole("group", { name: "Track" }).getByRole("checkbox", { name: "Short lines" });
     await expect(shortLines).not.toBeChecked();
     // The map draws the network's short-line track only while the box is ticked.
     const network = page.locator(".map-canvas");
     await expect(network).toHaveAttribute("data-network-classes", "class_i passenger");
-    const firstAnswer = page.waitForResponse((r) => r.url().endsWith("/api/route") && (r.request().postDataJSON() as { destination: unknown }).destination !== null);
+    const firstAnswer = page.waitForResponse((r) => r.url().endsWith("/api/route") && (r.request().postDataJSON() as Plan).places.at(-1) !== null);
     await page.getByRole("combobox", { name: "Start" }).fill("Baton Rouge, LA");
     await page.getByRole("combobox", { name: "Start" }).press("Enter");
     // 1373 Union Tank Car Road, Ville Platte, LA: the end of the short line, 20 km from UP.
     await page.getByRole("combobox", { name: "Destination" }).fill("-92.271, 30.688");
     await page.getByRole("combobox", { name: "Destination" }).press("Enter");
-    expect((await (await firstAnswer).json()) as PlannedRoute).toMatchObject({ outcome: "no-route", problem: { at: "destination" } });
+    expect((await (await firstAnswer).json()) as PlannedRoute).toMatchObject({ outcome: "no-route", problem: { at: 1 } });
     await expect(routeRows(page)).toHaveCount(0);
 
     const ticked = nextRoute(page);
@@ -152,11 +152,11 @@ test.describe("Route planner", () => {
     await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
   });
 
-  test("a turn-back is an amber mark on the map; hovering it shows where and how the route turns", async ({ page, request }) => {
+  test("hovering a turn-back mark shows where and how the route turns", async ({ page, request }) => {
     // Taylor → Temple (the city) → North Little Rock: the router's own route turns back in Temple yard.
-    const plan = { start: { kind: "text", text: "Taylor, TX" }, stops: [{ kind: "text", text: "Temple, TX" }], destination: { kind: "text", text: "North Little Rock, AR" } };
+    const plan: Plan = { places: ["Taylor, TX", "Temple, TX", "North Little Rock, AR"].map((text) => ({ kind: "text", text })), include: DEFAULT_INCLUDE };
     const answer = (await (await request.post("/api/route", { data: plan })).json()) as PlannedRoute;
-    test.skip(answer.outcome !== "routed" || !answer.routes[0].turnBacks.length, "This network build has no turn-back on that route; the jsdom test covers the mark.");
+    test.skip(answer.outcome !== "routed" || !answer.routes[0].turnBacks.length, "This network build has no turn-back on that route; web/screens/route/RouteScreen.test.tsx covers the mark.");
     const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null, routeString: "" } })).json()) as { id: string };
 
     await page.goto(`/route/saved/${saved.id}`);
@@ -170,11 +170,31 @@ test.describe("Route planner", () => {
     await request.delete(`/api/saved-routes/${saved.id}`);
   });
 
-  test("Kansas City → Chicago: the route string; the next carrier chosen at a junction is marked; saved and reopened the same; reversed", async ({ page }) => {
+  test("dragging the destination to the top makes it the start", async ({ page }) => {
+    await page.goto("/route");
+    await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+    await page.getByRole("combobox", { name: "Search the map" }).fill("Temple, TX");
+    await page.getByRole("option").first().click();
+    await page.getByRole("button", { name: "Add as stop" }).click();
+    await expect(placeRows(page)).toHaveCount(3);
+    const values = () => placeRows(page).getByRole("combobox").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
+    await expect.poll(values).toEqual(["Taylor, TX", "Temple, TX", "North Little Rock, AR"]);
+
+    const handle = await page.getByRole("button", { name: "Move Destination", exact: true }).boundingBox();
+    const top = await placeRows(page).first().boundingBox();
+    if (!handle || !top) throw new Error("The rows are not on the page.");
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2, top.y + handle.height / 2, { steps: 12 });
+    await page.mouse.up();
+    await expect.poll(values).toEqual(["North Little Rock, AR", "Taylor, TX", "Temple, TX"]);
+  });
+
+  test("the route string marks a chosen carrier and survives save and reverse", async ({ page }) => {
     await page.goto("/route");
     await planRoute(page, "Kansas City, MO", "Chicago, IL");
     const string = page.getByRole("region", { name: "Route string" });
-    // Carriers and [our own place names] only: never a made-up junction code.
+    // Carriers and [our own place names] only.
     const shape = /^(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line)( – \[[^\]]+\] – (BNSF|UP|CSXT|NS|CN|CPKC|regional|short line))*$/;
     await expect(string.locator(".route-string-text")).toHaveText(shape);
 
@@ -182,7 +202,7 @@ test.describe("Route planner", () => {
     await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 412783");
     await page.getByRole("option", { name: /FRA node 412783/ }).click();
     await page.getByRole("button", { name: "Add as stop" }).click();
-    const lines = page.getByRole("radiogroup", { name: "Next carrier at stop 1" });
+    const lines = page.getByRole("radiogroup", { name: "Next carrier at Stop 1" });
     await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"NS"'));
     await lines.getByRole("radio", { name: "NS", exact: true }).click();

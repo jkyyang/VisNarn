@@ -42,7 +42,7 @@ export function readConfig(argv: readonly string[], env: Readonly<Record<string,
   if (dev && webDir) throw new Error("--dev serves the page from source and --web serves a built page: use one of them.");
 
   const dataDir = resolve(env.VISNARN_DATA_DIR?.trim() || join(env.HOME || homedir(), ".visnarn"));
-  // The whole repo, not just public/ and dist/: in development Vite serves any file under it.
+  // The whole repo: in development Vite serves any file under it.
   for (const served of [REPO, ...(webDir ? [webDir] : [])]) {
     if (isInside(dataDir, served)) throw new Error(`The data folder ${dataDir} is inside ${served}, which the browser can read. Set VISNARN_DATA_DIR to a folder outside it.`);
   }

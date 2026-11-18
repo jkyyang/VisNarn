@@ -21,14 +21,14 @@ export default function App(): ReactElement {
   const tabbed = screen.name === "route";
 
   return (
-    <ErrorBoundary fallback={<p className="error page-error">Something went wrong on this page. Reload to start again; nothing was lost on the server.</p>}>
+    <ErrorBoundary fallback={<p className="error page-error">Something went wrong on this page. Reload to start again.</p>}>
       <MapStageProvider network={network}>
         <div className="app" data-screen={screen.name}>
           <main className="panel">
             {tabbed && <AppHeader exampleOnly={meta.status === "ready" && meta.data.exampleOnly} />}
             {tabbed && <ModeTabs current={screen.name} />}
             {meta.status === "error" && (
-              <div className="server-note" role="alert">
+              <div className="alert server-note" role="alert">
                 <span>{meta.error.message}</span>
                 <button type="button" className="btn btn--small" onClick={meta.retry}>
                   Try again

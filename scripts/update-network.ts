@@ -14,6 +14,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCarRouter, DEFAULT_NETWORK_DIR, loadNetwork } from "../engine/index.ts";
+import { csvRecords } from "../server/intake/csv.ts";
 import { selfTest } from "../server/selftest.ts";
 import { haversineKm } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
@@ -30,6 +31,10 @@ const LOG_FILE = join(homedir(), "Library/Logs/visnarn-network-update.log");
 const ORIGINS = ["Chicago, IL", "Temple, TX", "Barstow, CA", "Atlanta, GA", "Winnipeg, MB"];
 const MAX_END_KM = 2.5;
 const REPORT_KM_CHANGE = 0.05;
+/** The source check: a laptop waking at 07:00 may not be online yet, so it tries again, waiting longer each time. */
+const FETCH_TRIES = 3;
+const FETCH_WAIT_MS = 60_000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 export interface SourceVersion {
   /** The layer's editingInfo.dataLastEditDate, as an ISO date. */
@@ -68,18 +73,8 @@ export function sourceChanged(recorded: SourceVersion | null, sourceDate: string
 }
 
 export function parseShops(csv: string): Shop[] {
-  const [header, ...rows] = csv.trim().split(/\r?\n/);
-  const columns = splitCsvLine(header);
-  return rows.map((row) => {
-    const cell = Object.fromEntries(splitCsvLine(row).map((value, i) => [columns[i], value]));
-    const number = (text: string) => (text === "" ? null : Number(text));
-    return { name: cell.name, lon: number(cell.lon), lat: number(cell.lat), fraId: number(cell.fra_id) };
-  });
-}
-
-/** Quoted fields may hold commas; the shops file has no escaped quotes, so this need not handle them. */
-function splitCsvLine(line: string): string[] {
-  return [...line.matchAll(/("([^"]*)"|[^,]*)(,|$)/g)].slice(0, -1).map((m) => m[2] ?? m[1]);
+  const number = (text: string | undefined) => (text ? Number(text) : null);
+  return csvRecords("shops.csv", csv).map(({ cells }) => ({ name: cells.name, lon: number(cells.lon), lat: number(cells.lat), fraId: number(cells.fra_id) }));
 }
 
 /** Routes present before and after whose length changed by more than `limit` (0.05 = 5%). */
@@ -111,7 +106,7 @@ function checkRoutes(dir: string, shops: Shop[]): RouteCheck[] {
       if (shop.fraId !== null && !node) return { route, km: null, problem: `FRA node ${shop.fraId} is gone` };
       const lon = node?.lon ?? shop.lon!, lat = node?.lat ?? shop.lat!;
       const target: Waypoint = { label: shop.name, lon, lat, fraId: node?.fraId ?? null, railroad: null };
-      const result = router.route({ start: city(origin), stops: [], destination: target, include: DEFAULT_INCLUDE }, "pick");
+      const result = router.route({ points: [city(origin), target], include: DEFAULT_INCLUDE }, "pick");
       if (!result.ok) return { route, km: null, problem: result.noRoute.message };
       const [endLon, endLat] = result.path.legs.at(-1)!.path.at(-1)!;
       const endKm = haversineKm(endLon, endLat, lon, lat);
@@ -184,14 +179,13 @@ function finish(line: string, exitCode: number): number {
 async function fetchSourceDate(): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     try {
-      const response = await fetch(`${LAYER_URL}?f=json`, { headers: { "User-Agent": "rail-network-update/1.0" }, signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(`${LAYER_URL}?f=json`, { headers: { "User-Agent": "rail-network-update/1.0" }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return sourceDateOf((await response.json()) as LayerInfo);
     } catch (error) {
-      // A laptop waking at 07:00 may not be online yet.
-      if (attempt === 3) throw new Error(`could not reach the NARN service: ${(error as Error).message}`);
+      if (attempt === FETCH_TRIES) throw new Error(`could not reach the NARN service: ${(error as Error).message}`);
       log(`source check attempt ${attempt} failed (${(error as Error).message}); retrying`);
-      await new Promise((resolve) => setTimeout(resolve, attempt * 60_000));
+      await new Promise((resolve) => setTimeout(resolve, attempt * FETCH_WAIT_MS));
     }
   }
 }
@@ -263,7 +257,7 @@ async function main(): Promise<number> {
   const summary = newNetwork === oldNetwork ? `network unchanged (${newNetwork})` : `network ${oldNetwork} → ${newNetwork}: ${oldSize} → ${newSize}`;
   for (const change of changes) log(`  km change: ${change}`);
   const routeLine = `${routes} shop routes checked, all end within ${MAX_END_KM} km; ${changes.length} changed by more than ${REPORT_KM_CHANGE * 100}%`;
-  const message = [`Network data: NARN source of ${day}`, "", summary + ".", routeLine + (changes.length ? ":" : "."), ...changes.map((c) => `  ${c}`), "", "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"].join("\n");
+  const message = [`Network data: NARN source of ${day}`, "", summary + ".", routeLine + (changes.length ? ":" : "."), ...changes.map((c) => `  ${c}`)].join("\n");
   const committed = commit(message);
   return finish(`updated to NARN data of ${day}: ${summary}; ${changes.length} routes changed >5%${committed ? "" : " (no file changed, nothing to commit)"}`, 0);
 }

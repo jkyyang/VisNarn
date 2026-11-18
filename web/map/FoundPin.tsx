@@ -5,7 +5,9 @@
 import { useRef, type ReactElement } from "react";
 import { Marker } from "react-map-gl/maplibre";
 import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
-import { Railroads, TYPE_CHIPS } from "./MapSearch.tsx";
+import { Cross } from "../ui/icons.tsx";
+import { PLACE_SOURCE_WORDS } from "../words.ts";
+import { Railroads } from "./MapSearch.tsx";
 import type { PlaceAction } from "./MapStage.tsx";
 import { useNativeClick } from "./RouteMarkFaces.tsx";
 
@@ -29,14 +31,12 @@ export function FoundPin(props: { chosen: PlaceSuggestion; place: ResolvedPlace;
   return (
     <Marker longitude={place.lon} latitude={place.lat} anchor="center" className="found-pin">
       <span className="found-dot" aria-hidden="true" />
-      <section ref={card} className="map-card found-card" aria-label={`Found: ${chosen.label}`}>
+      <section ref={card} className="card card--float map-card found-card" aria-label={`Found: ${chosen.label}`}>
         <div className="found-head">
           <strong>{chosen.label}</strong>
-          <span className="type-chip">{TYPE_CHIPS[chosen.source]}</span>
+          <span className="tag">{PLACE_SOURCE_WORDS[chosen.source]}</span>
           <CardButton label="Close" className="icon-btn small" onPress={props.onClose}>
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
+            <Cross />
           </CardButton>
         </div>
         <Railroads place={place} />

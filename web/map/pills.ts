@@ -38,7 +38,7 @@ export interface PillPlace {
   box: Box;
 }
 
-/** From the anchor to the pill's near corner, across and down: the pill sits beside its line, not on it. */
+/** From the anchor to the pill's near corner, across and down, so the pill sits beside its line. Matches --pill-offset in styles.css. */
 const OFFSET_PX = 8;
 /** Air kept between a pill and a pin, the legend or another pill. */
 const CLEAR_PX = 4;
@@ -48,7 +48,7 @@ const LINE_CLEAR_PX = 7;
 /** Matches .route-pill in styles.css. */
 export const PILL_HEIGHT_PX = 26;
 
-/** 12.5 px semibold text is about 7 px a character; 10 px padding each side; the ↩ badge adds 18. */
+/** 12 px semibold text is about 7 px a character; 8 px padding and 1 px border each side, and a little; the ↩ badge adds 18. */
 export function pillWidthPx(text: string, turnBacks: number): number {
   return text.length * 7 + 20 + (turnBacks > 0 ? 18 : 0);
 }

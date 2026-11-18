@@ -1,15 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
-import { csvSource, parseCsv } from "./csv.ts";
-
-async function recordsOf(fileName: string, text: string) {
-  const out = [];
-  for await (const record of csvSource(fileName, text).records()) out.push(record);
-  return out;
-}
+import { csvRecords, parseCsv } from "./csv.ts";
 
 describe("parseCsv", () => {
-  it("keeps a line break inside a quoted cell (the old parser could not round-trip its own output)", () => {
+  it("keeps a line break inside a quoted cell", () => {
     const text = 'car_id,note\n104233,"first line\nsecond line"\n104234,plain\n';
     expect(parseCsv(text)).toEqual([
       { line: 1, cells: ["car_id", "note"] },
@@ -47,20 +41,19 @@ describe("parseCsv", () => {
   });
 });
 
-describe("csvSource", () => {
-  it("gives one record per data row, keyed by lower-cased header, with trimmed cells and file line numbers", async () => {
-    const records = await recordsOf("EXAMPLE cars.csv", 'Car_ID , Shop\n 104233 ,"EX-NLR-01 "\n\n104234\n');
+describe("csvRecords", () => {
+  it("gives one record per data row, keyed by lower-cased header, with trimmed cells and file line numbers", () => {
+    const records = csvRecords("EXAMPLE cars.csv", 'Car_ID , Shop\n 104233 ,"EX-NLR-01 "\n\n104234\n');
     expect(records).toEqual([
       { line: 2, cells: { car_id: "104233", shop: "EX-NLR-01" } },
       { line: 4, cells: { car_id: "104234", shop: "" } },
     ]);
-    expect(csvSource("EXAMPLE cars.csv", "a\n1").info).toEqual({ kind: "csv", label: "EXAMPLE cars.csv" });
   });
 
   it("refuses an empty file, a header without rows, and a column named twice", () => {
     const refused = (text: string) => {
       try {
-        csvSource("cars.csv", text);
+        csvRecords("cars.csv", text);
       } catch (error) {
         return error instanceof AppError ? `${error.kind}: ${error.message}` : String(error);
       }
@@ -71,8 +64,8 @@ describe("csvSource", () => {
     expect(refused("shop,SHOP\n1,2")).toBe('invalid: cars.csv has the column "shop" twice.');
   });
 
-  it("keeps a column called __proto__ as data", async () => {
-    const [record] = await recordsOf("odd.csv", "__proto__,b\nx,y");
+  it("keeps a column called __proto__ as data", () => {
+    const [record] = csvRecords("odd.csv", "__proto__,b\nx,y");
     expect(Object.keys(record.cells)).toEqual(["__proto__", "b"]);
     expect(record.cells.__proto__).toBe("x");
   });

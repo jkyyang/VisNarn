@@ -10,7 +10,7 @@ export const isClassI = (name: string): name is Railroad => (RAILROADS as readon
 
 /**
  * What a stretch of route runs on: a Class I railroad, or one of the two groups of smaller railroads.
- * The network file knows a smaller railroad's class, not its name.
+ * The network file gives a smaller railroad's class and leaves out its name.
  */
 export const LINES = [...RAILROADS, "regional", "short line"] as const;
 export type Line = (typeof LINES)[number];

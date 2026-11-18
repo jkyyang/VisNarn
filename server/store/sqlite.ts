@@ -14,7 +14,7 @@
 import { chmodSync } from "node:fs";
 import process from "node:process";
 import { AppError } from "../../shared/app.ts";
-import type { NodeLocation, Shop, ShopId } from "../../shared/places.ts";
+import type { NodeLocation, PlaceRef, Shop, ShopId } from "../../shared/places.ts";
 import type { FullPlan, SavedRoute, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
@@ -136,9 +136,13 @@ export function openStore(file: string): Store {
   });
 
   const planOf = (text: unknown): FullPlan => {
-    const plan = parse<FullPlan>(text);
-    // A route saved before track could be chosen has no `include`.
-    return { ...plan, include: plan.include ?? DEFAULT_INCLUDE };
+    const plan = parse<Partial<FullPlan> & { start?: PlaceRef; stops?: PlaceRef[]; destination?: PlaceRef }>(text);
+    return {
+      // Routes saved before the places list keep start, stops and destination as three fields.
+      places: plan.places ?? [plan.start!, ...(plan.stops ?? []), plan.destination!],
+      // A route saved before track could be chosen has no `include`.
+      include: plan.include ?? DEFAULT_INCLUDE,
+    };
   };
 
   const savedRouteOf = (row: Row): SavedRoute => ({
@@ -192,7 +196,7 @@ export function openStore(file: string): Store {
         return row ? savedRouteOf(row) : null;
       },
       save: (route) => {
-        // ON CONFLICT DO UPDATE, not REPLACE: the row keeps its rowid, so its place among same-named routes.
+        // ON CONFLICT DO UPDATE keeps the row's rowid, and with it the route's place among same-named routes.
         db.prepare(
           `INSERT INTO saved_routes (id, name, plan_json, option, route_string) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET name = excluded.name, plan_json = excluded.plan_json, option = excluded.option, route_string = excluded.route_string`,

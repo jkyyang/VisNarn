@@ -2,8 +2,10 @@
 import { useEffect, useState, type ReactElement } from "react";
 import type { NetworkNode } from "../../../shared/places.ts";
 import { BackHeader } from "../../app/chrome.tsx";
-import { go, HOME, type Screen } from "../../app/routes.ts";
+import { useEscape } from "../../ui/useEscape.ts";
+import { go, type Screen } from "../../app/routes.ts";
 import { importShops, removeShop, saveShop, snapToNetwork, useMeta, useShops } from "../../data/hooks.ts";
+import { SHOP_EDITING_ZOOM, SHOP_PICKED_ZOOM } from "../../map/config.ts";
 import { MapContent } from "../../map/MapStage.tsx";
 import { shopsScene } from "../../map/scene.ts";
 import { PickPrompt, ShopForm, ShopImportCard, ShopTable } from "./ShopsPage.tsx";
@@ -31,29 +33,16 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     if (unknownShop) go({ name: "shops", edit: null }, { replace: true });
   }, [unknownShop]);
 
-  useEffect(() => {
-    if (!picking) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPicking(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [picking]);
+  useEscape(picking, () => setPicking(false));
 
-  const header = (
-    <BackHeader
-      back={HOME}
-      title="Your shops"
-      exampleOnly={meta.status === "ready" && meta.data.exampleOnly}
-    />
-  );
+  const header = <BackHeader title="Your shops" exampleOnly={meta.status === "ready" && meta.data.exampleOnly} />;
 
   if (shops.status !== "ready") {
     return (
       <div className="shops-screen">
         {header}
         {shops.status === "error" ? (
-          <div className="error-card" role="alert">
+          <div className="alert error-card" role="alert">
             <p>Couldn't load your shops. {shops.error.message}</p>
             <button type="button" className="btn" onClick={shops.retry}>
               Try again
@@ -112,7 +101,7 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
       <ShopImportCard run={importShops} />
       <MapContent
         scene={shopsScene(list, editingAt)}
-        focus={pickedHere ? { kind: "place", lon: pickedHere.lon, lat: pickedHere.lat, zoom: 11 } : editingAt ? { kind: "place", lon: editingAt.lon, lat: editingAt.lat, zoom: 9 } : { kind: "fit" }}
+        focus={pickedHere ? { kind: "place", lon: pickedHere.lon, lat: pickedHere.lat, zoom: SHOP_PICKED_ZOOM } : editingAt ? { kind: "place", lon: editingAt.lon, lat: editingAt.lat, zoom: SHOP_EDITING_ZOOM } : { kind: "fit" }}
         onPick={picking ? (lon, lat, km) => void onPick(lon, lat, km) : undefined}
       >
         {picking && <PickPrompt missed={missed} onCancel={() => setPicking(false)} />}

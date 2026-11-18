@@ -2,7 +2,7 @@
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
 import { isClassI, NETWORK_CLASSES, type NetworkClass } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
-import type { RGBA, ThemeColors } from "../theme.ts";
+import { CLASS_LINES, type RGBA, type ThemeColors } from "../theme.ts";
 import { lineName } from "../words.ts";
 import type { MapScene, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
@@ -24,20 +24,26 @@ const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 const svgUrl = (width: number, height: number, body: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`)}`;
 
+/** Pin colours, baked into the icon images: the light theme's --pin-a, --shop, --route, --fg2 and --casing. */
+const PIN = { start: "#80868b", destination: "#c5221f", stop: "#1a73e8", shop: "#3c4043", edge: "#fff" };
+
 /** Pins as images: start a hollow ring, destination a red drop with a white dot, a stop a numbered ring, a shop a small dark square. */
-const PIN_ICONS = {
-  start: { url: svgUrl(18, 18, '<circle cx="9" cy="9" r="6" fill="#fff" stroke="#80868b" stroke-width="3"/>'), width: 18, height: 18, anchorY: 9 },
+export const PIN_ICONS = {
+  start: { url: svgUrl(18, 18, `<circle cx="9" cy="9" r="6" fill="${PIN.edge}" stroke="${PIN.start}" stroke-width="3"/>`), width: 18, height: 18, anchorY: 9 },
   destination: {
-    url: svgUrl(28, 34, '<path d="M14 33c-8-10-13-15-13-21a13 13 0 0 1 26 0c0 6-5 11-13 21z" fill="#c5221f" stroke="#fff" stroke-width="1.5"/><circle cx="14" cy="12" r="4.6" fill="#fff"/>'),
+    url: svgUrl(28, 34, `<path d="M14 33c-8-10-13-15-13-21a13 13 0 0 1 26 0c0 6-5 11-13 21z" fill="${PIN.destination}" stroke="${PIN.edge}" stroke-width="1.5"/><circle cx="14" cy="12" r="4.6" fill="${PIN.edge}"/>`),
     width: 28,
     height: 34,
     anchorY: 33,
   },
-  stop: { url: svgUrl(22, 22, '<circle cx="11" cy="11" r="9" fill="#fff" stroke="#1a73e8" stroke-width="3"/>'), width: 22, height: 22, anchorY: 11 },
-  shop: { url: svgUrl(15, 15, '<rect x="1.5" y="1.5" width="12" height="12" rx="3" fill="#3c4043" stroke="#fff" stroke-width="1.5"/>'), width: 15, height: 15, anchorY: 7.5 },
+  stop: { url: svgUrl(22, 22, `<circle cx="11" cy="11" r="9" fill="${PIN.edge}" stroke="${PIN.stop}" stroke-width="3"/>`), width: 22, height: 22, anchorY: 11 },
+  shop: { url: svgUrl(15, 15, `<rect x="1.5" y="1.5" width="12" height="12" rx="3" fill="${PIN.shop}" stroke="${PIN.edge}" stroke-width="1.5"/>`), width: 15, height: 15, anchorY: 7.5 },
 } satisfies Record<ScenePin["kind"], { url: string; width: number; height: number; anchorY: number }>;
 
-const CHEVRON = { url: svgUrl(12, 12, '<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'), width: 12, height: 12, anchorY: 6 };
+const CHEVRON = { url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${PIN.edge}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`), width: 12, height: 12, anchorY: 6 };
+
+/** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
+const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2 };
 
 /** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
 const angleOf = (bearingDeg: number) => 90 - bearingDeg;
@@ -49,7 +55,6 @@ const angleOf = (bearingDeg: number) => 90 - bearingDeg;
  * re-tessellate megabytes of track; all dim when a route needs the attention.
  */
 export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], dimmed: boolean, colors: ThemeColors): LayersList {
-  const quiet: Record<Exclude<NetworkClass, "class_i">, RGBA> = { regional: colors.rail.regional, short_line: colors.rail["short line"], passenger: colors.passenger };
   // Class I last, on top.
   return [...NETWORK_CLASSES].reverse().map(
     (c) =>
@@ -63,7 +68,7 @@ export function networkLayers(network: Mainline, drawn: readonly NetworkClass[],
         lineCapRounded: true,
         lineJointRounded: true,
         getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
-        getLineColor: (f) => (c !== "class_i" ? quiet[c] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
+        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
         updateTriggers: { getLineColor: colors },
       }),
   );
@@ -74,13 +79,12 @@ type Chevron = SceneRoute["chevrons"][number];
 type Interchange = SceneRoute["interchanges"][number];
 type AltLeg = Leg & { option: SceneRoute["id"] };
 
-/** Regional and short-line sections are drawn thinner than Class I, as in the legend. */
-const legWidth = (leg: Leg) => (isClassI(leg.railroad) ? 6 : 4);
+const legWidth = (leg: Leg) => (isClassI(leg.railroad) ? ROUTE_PX.classI : ROUTE_PX.other);
 
 /** The selected route: a white casing so it stands out, each section in its line's colour, and chevrons for the direction of travel. */
 function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: number): LayersList {
   return [
-    new PathLayer<Leg>({ id: LAYER.routeCasing, data: route.legs, getPath: (leg) => leg.path, getColor: colors.casing, getWidth: (leg) => legWidth(leg) + 5, ...ROUND, updateTriggers: { getColor: colors } }),
+    new PathLayer<Leg>({ id: LAYER.routeCasing, data: route.legs, getPath: (leg) => leg.path, getColor: colors.casing, getWidth: (leg) => legWidth(leg) + ROUTE_PX.casing, ...ROUND, updateTriggers: { getColor: colors } }),
     new PathLayer<Leg>({
       id: LAYER.route,
       data: route.legs,
@@ -161,7 +165,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       data: alternatives,
       getPath: (leg) => leg.path,
       getColor: fade(colors.casing, 180),
-      getWidth: 6,
+      getWidth: ROUTE_PX.alternative + ROUTE_PX.alternativeCasing,
       ...ROUND,
       updateTriggers: { getColor: colors },
     }),
@@ -170,7 +174,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       data: alternatives,
       getPath: (leg) => leg.path,
       getColor: fade(colors.alternative, 150),
-      getWidth: 4,
+      getWidth: ROUTE_PX.alternative,
       ...ROUND,
       pickable: true,
       autoHighlight: true,
@@ -186,11 +190,11 @@ const TOOLTIP_STYLE: Partial<CSSStyleDeclaration> = {
   backgroundColor: "var(--panel)",
   color: "var(--fg)",
   border: "1px solid var(--line)",
-  borderRadius: "8px",
-  boxShadow: "0 2px 10px rgb(0 0 0 / 0.15)",
+  borderRadius: "var(--radius)",
+  boxShadow: "var(--shadow-1)",
   padding: "5px 9px",
   fontFamily: "var(--sans)",
-  fontSize: "12.5px",
+  fontSize: "12px",
   lineHeight: "1.45",
   maxWidth: "280px",
   marginLeft: "12px",

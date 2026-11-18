@@ -39,7 +39,7 @@ export function routeStringOf(route: RoutePath, stops: PlaceRef[]): RouteString 
   let change: Junction | null = null;
   route.steps.forEach((step, i) => {
     if (step.kind === "interchange") {
-      // A change before the first carrier is a tie the router broke at the start, not a handoff; nor is a change to the same carrier.
+      // A change before the first carrier is a tie the router broke at the start, and a change to the same carrier hands nothing over: both are skipped.
       if (carriers.length && step.from !== step.to) change = { place: step.at, chosen: false, step: i };
     } else if (step.kind === "leg") {
       const carrier = route.legs[step.leg].railroad;

@@ -1,6 +1,5 @@
-"""Small built-in place list (lon, lat) for input and for naming route points.
-Stand-in until a real SPLC/FSAC station lookup exists (Phase 0)."""
-import math
+"""City names and coordinates for place labels and search.
+"""
 
 PLACES = {
     "Austin, TX": (-97.74, 30.27), "Chicago, IL": (-87.63, 41.88), "Houston, TX": (-95.37, 29.76),
@@ -41,11 +40,3 @@ PLACES = {
     "Prince Rupert, BC": (-130.32, 54.31), "Monterrey, NL": (-100.32, 25.69), "Mexico City, CDMX": (-99.13, 19.43),
 }
 
-
-def nearest_place(lon, lat):
-    best, bd = None, 1e9
-    for name, (x, y) in PLACES.items():
-        d = math.hypot((x - lon) * math.cos(math.radians(lat)), y - lat) * 111
-        if d < bd:
-            best, bd = name, d
-    return best if bd < 25 else f"{bd:.0f} km from {best}"

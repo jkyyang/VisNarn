@@ -1,16 +1,26 @@
 /** The Shops screen's parts. Views only. */
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
 import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, PlaceSuggestion, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
-import { usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
-import { moveActive } from "../../map/MapSearch.tsx";
+import { fresh, usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
+import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { readFileText } from "../../ui/files.ts";
+import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
+import { Crosshair, Search } from "../../ui/icons.tsx";
+import { lineColor } from "../../theme.ts";
+import { PHONE_QUERY } from "../../map/config.ts";
+import { clickToSet, errorText, NO_TRACK_NEAR, plural } from "../../words.ts";
+
+/** A typed spot this far or farther from the track it snapped to says how far. */
+const SHOW_SNAP_KM = 1;
+/** Rows of an import preview listed by name; the rest are counted. */
+const PREVIEW_ROWS = 8;
 
 /** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
 function placeHint(resolution: PlaceResolution): { ok: boolean; text: string } {
   if (!resolution.ok) return { ok: false, text: resolution.problem.message };
   const { place } = resolution;
   const lines = place.railroads.length ? ` · ${place.railroads.join(", ")}` : "";
-  if (place.match.confidence === "snapped" && place.match.snapKm >= 1) return { ok: true, text: `Nearest track ${Math.round(place.match.snapKm)} km away${lines}` };
+  if (place.match.confidence === "snapped" && place.match.snapKm >= SHOW_SNAP_KM) return { ok: true, text: `Nearest track ${Math.round(place.match.snapKm)} km away${lines}` };
   return { ok: true, text: `On the network${lines}` };
 }
 
@@ -31,16 +41,13 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
 
   return (
-    <section className="shop-list" aria-label="Shop list">
+    <section className="card shop-list" aria-label="Shop list">
       <div className="shop-list-bar">
         <label htmlFor={searchId} className="visually-hidden">
           Search shops
         </label>
-        <div className="search-box">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.7" />
-            <path d="M10.6 10.6L14 14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-          </svg>
+        <div className="input-box search-box">
+          <Search />
           <input id={searchId} placeholder="Search by name or code" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <button type="button" className="btn btn--primary" onClick={props.onAdd} aria-pressed={props.editing === "new"}>
@@ -71,7 +78,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
                     <span className="shop-name">
                       <ShopPin />
                       <span className={editing ? "strong" : undefined}>{shop.name}</span>
-                      {shop.example && <span className="example-tag">EXAMPLE</span>}
+                      {shop.example && <span className="tag">EXAMPLE</span>}
                     </span>
                   </td>
                   <td className="mono">{shop.code ?? "–"}</td>
@@ -80,7 +87,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
                       // The legend on the map says which colour is which railroad.
                       <span className="rr-bars" title={shop.place.place.railroads.join(", ")}>
                         {shop.place.place.railroads.map((railroad) => (
-                          <i key={railroad} style={{ background: `var(--rr-${railroad})` }} aria-hidden="true" />
+                          <i key={railroad} style={{ background: lineColor(railroad) }} aria-hidden="true" />
                         ))}
                         <span className="visually-hidden">{shop.place.place.railroads.join(", ")}</span>
                       </span>
@@ -106,8 +113,8 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
           </tbody>
         </table>
       </div>
-      <div className="muted small table-foot">
-        {props.shops.length} {props.shops.length === 1 ? "shop" : "shops"}
+      <div className="table-foot">
+        {plural(props.shops.length, "shop")}
         {examples ? ` · ${examples} EXAMPLE` : ""}
       </div>
     </section>
@@ -156,7 +163,7 @@ export function ShopForm(props: {
   // The form opens above the list, which may be scrolled far down: bring it into view and start at its first box.
   // On a phone the card can be taller than the screen, where "nearest" stops short and cuts the heading off.
   useEffect(() => {
-    const phone = window.matchMedia?.("(max-width: 640px)").matches ?? false;
+    const phone = window.matchMedia?.(PHONE_QUERY).matches ?? false;
     sectionRef.current?.scrollIntoView?.({ block: phone ? "start" : "nearest" });
     nameRef.current?.focus({ preventScroll: true });
   }, []);
@@ -173,7 +180,7 @@ export function ShopForm(props: {
   const resolution = usePlace(ref, "position");
   const suggestions = usePlaceSuggestions(suggesting ? locText : "", "position");
   // A stale list belongs to the text before the last keystroke.
-  const list: PlaceSuggestion[] = suggesting && suggestions.status === "ready" && !suggestions.stale ? suggestions.data : [];
+  const list: PlaceSuggestion[] = (suggesting && fresh(suggestions)) || [];
   const listOpen = list.length > 0;
   const closeList = () => {
     setSuggesting(false);
@@ -196,7 +203,7 @@ export function ShopForm(props: {
       closeList();
     }
   };
-  const resolved = resolution.status === "ready" && !resolution.stale ? resolution.data : null;
+  const resolved = fresh(resolution);
   const hint = resolution.status === "ready" ? placeHint(resolution.data) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
   const canSave = !!name.trim() && !!resolved?.ok && !busy;
 
@@ -208,7 +215,7 @@ export function ShopForm(props: {
     try {
       await props.onSave({ name: name.trim(), code: code.trim() || null, location: ref });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the shop.");
+      setError(errorText(e, "Could not save the shop."));
       setBusy(false);
     }
   };
@@ -218,13 +225,13 @@ export function ShopForm(props: {
     try {
       await props.onDelete();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete the shop.");
+      setError(errorText(e, "Could not delete the shop."));
       setBusy(false);
     }
   };
 
   return (
-    <section className="shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
+    <section className="card shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
       <h2>{props.shop ? "Edit shop" : "Add shop"}</h2>
       <form onSubmit={submit}>
         <div className="field">
@@ -260,25 +267,7 @@ export function ShopForm(props: {
               onBlur={closeList}
               placeholder="e.g. Kansas City, MO or -92.27, 34.77"
             />
-            {listOpen && (
-              <ul className="suggestions" role="listbox" id={`${ids}-loc-list`} aria-label="Suggestions for Location">
-                {list.map((suggestion, i) => (
-                  <li
-                    key={`${suggestion.source}-${suggestion.label}-${i}`}
-                    id={`${ids}-loc-list-${i}`}
-                    role="option"
-                    aria-selected={i === active}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      choose(suggestion);
-                    }}
-                  >
-                    <span>{suggestion.label}</span>
-                    <span className="muted small">{suggestion.detail}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {listOpen && <SuggestionList id={`${ids}-loc-list`} label="Suggestions for Location" list={list} active={active} onChoose={choose} />}
           </div>
           {hint && (
             <span id={`${ids}-hint`} className={`hint ${hint.ok ? "hint--ok" : "hint--bad"}`}>
@@ -286,10 +275,7 @@ export function ShopForm(props: {
             </span>
           )}
           <button type="button" className="btn btn--outline" aria-pressed={props.picking} onClick={props.onTogglePick}>
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
+            <Crosshair />
             {props.picking ? "Click the map…" : "Pick on map"}
           </button>
         </div>
@@ -298,20 +284,7 @@ export function ShopForm(props: {
             {error}
           </p>
         )}
-        {/* Its own row, away from where "Delete" was, with "Keep" focused: a double click cannot delete. */}
-        {props.onDelete && confirmDelete && (
-          <div className="confirm-row" role="group" aria-label="Delete this shop">
-            <span>Delete this shop?</span>
-            <span className="confirm-actions">
-              <button type="button" className="btn btn--small" onClick={() => setConfirmDelete(false)} autoFocus>
-                Keep it
-              </button>
-              <button type="button" className="btn btn--small btn--danger" onClick={remove} disabled={busy}>
-                Yes, delete this shop
-              </button>
-            </span>
-          </div>
-        )}
+        {props.onDelete && confirmDelete && <ConfirmDelete question="Delete this shop?" busy={busy} onConfirm={remove} onKeep={() => setConfirmDelete(false)} />}
         <div className="actions">
           {props.onDelete && !confirmDelete && (
             <button type="button" className="btn btn--quiet-danger" onClick={() => setConfirmDelete(true)}>
@@ -344,12 +317,12 @@ function IssueList(props: { issues: RowIssue[] }): ReactElement | null {
   );
 }
 
-type Preview<T> = { fileName: string; text: string; report: ImportReport<T> };
+type Preview = { fileName: string; text: string; report: ImportReport<ShopView> };
 
 /** Choose a file, preview it (commit false), then save it (commit true). */
-function useImport<T>(run: (request: ImportRequest) => Promise<ImportReport<T>>) {
-  const [preview, setPreview] = useState<Preview<T> | null>(null);
-  const [saved, setSaved] = useState<ImportReport<T> | null>(null);
+function useImport(run: (request: ImportRequest) => Promise<ImportReport<ShopView>>) {
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [saved, setSaved] = useState<ImportReport<ShopView> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -365,7 +338,7 @@ function useImport<T>(run: (request: ImportRequest) => Promise<ImportReport<T>>)
       const report = await run({ source: { kind: "csv", fileName: file.name, text }, commit: false });
       setPreview({ fileName: file.name, text, report });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not read the file.");
+      setError(errorText(e, "Could not read the file."));
     } finally {
       setBusy(false);
     }
@@ -379,7 +352,7 @@ function useImport<T>(run: (request: ImportRequest) => Promise<ImportReport<T>>)
       setSaved(report);
       setPreview(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
+      setError(errorText(e, "Could not save."));
     } finally {
       setBusy(false);
     }
@@ -425,7 +398,7 @@ const ImportIcon = () => (
 export function ShopImportCard(props: { run: (request: ImportRequest) => Promise<ImportReport<ShopView>> }): ReactElement {
   const flow = useImport(props.run);
   return (
-    <section className="import-card" aria-label="Import shop list">
+    <section className="card import-card" aria-label="Import shop list">
       <div className="import-row">
         <ImportIcon />
         <div className="grow">
@@ -447,12 +420,12 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
           </p>
           {flow.preview.report.ready.length > 0 && (
             <ul className="import-ready">
-              {flow.preview.report.ready.slice(0, 8).map((shop, i) => (
+              {flow.preview.report.ready.slice(0, PREVIEW_ROWS).map((shop, i) => (
                 <li key={`${shop.name}-${i}`}>
                   {shop.name} {shop.code && <span className="mono muted small">{shop.code}</span>}
                 </li>
               ))}
-              {flow.preview.report.ready.length > 8 && <li className="muted">and {flow.preview.report.ready.length - 8} more</li>}
+              {flow.preview.report.ready.length > PREVIEW_ROWS && <li className="muted">and {flow.preview.report.ready.length - PREVIEW_ROWS} more</li>}
             </ul>
           )}
           <IssueList issues={flow.preview.report.issues} />
@@ -461,14 +434,14 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
               Cancel
             </button>
             <button type="button" className="btn btn--primary" disabled={!flow.preview.report.ready.length || flow.busy} onClick={flow.commit}>
-              Save {flow.preview.report.ready.length} {flow.preview.report.ready.length === 1 ? "shop" : "shops"}
+              Save {plural(flow.preview.report.ready.length, "shop")}
             </button>
           </div>
         </div>
       )}
       {flow.saved && (
         <p className="ok-note" role="status">
-          Saved {flow.saved.ready.length} {flow.saved.ready.length === 1 ? "shop" : "shops"}.
+          Saved {plural(flow.saved.ready.length, "shop")}.
         </p>
       )}
       {flow.error && (
@@ -489,13 +462,10 @@ export function PickPrompt(props: { missed: boolean; onCancel: () => void }): Re
     (prompt?.closest(".map") ?? prompt)?.scrollIntoView?.({ block: "nearest" });
   }, []);
   return (
-    <div ref={ref} className="map-card pick-prompt" role="status">
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
+    <div ref={ref} className="card card--float map-card pick-prompt" role="status">
+      <Crosshair />
       <span>
-        {props.missed ? "No track near there · " : "Click the map to set the shop · "}
+        {props.missed ? `${NO_TRACK_NEAR} · ` : `${clickToSet("the shop")} · `}
         <kbd>Esc</kbd> to cancel
       </span>
       <button type="button" className="btn btn--dark" onClick={props.onCancel}>

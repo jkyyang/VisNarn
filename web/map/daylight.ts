@@ -3,8 +3,8 @@
  * place, and what the map should look like then. Pure numbers, no map code.
  *
  * Sun position: the low-precision formulas of the Astronomical Almanac (as used by NOAA's solar
- * calculator), good to about 0.01° in declination for 1950–2050. No refraction: the map only needs
- * to know day from dusk from night, not the minute of sunrise.
+ * calculator), good to about 0.01° in declination for 1950–2050. No refraction: telling day, dusk
+ * and night apart is all the map needs.
  */
 import type { LngLat } from "../../shared/geo.ts";
 
@@ -25,10 +25,7 @@ export interface MapLook {
   phase: LightPhase;
 }
 
-export const LIGHT_WORDS: Record<LightPhase, string> = { day: "Day", sunrise: "Sunrise", sunset: "Sunset", night: "Night" };
-
 const RAD = Math.PI / 180;
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const wrap180 = (deg: number) => ((((deg + 180) % 360) + 360) % 360) - 180;
 
 /** Days since J2000.0 (2000-01-01 12:00 UT). */
@@ -71,22 +68,29 @@ const FIXED: Record<Exclude<LightMode, "auto">, MapLook> = {
 };
 
 /**
+ * Sun heights (degrees) where night begins to fall and where it is complete. 10° of sun height is
+ * about 1,100 km on the ground; city lights are half on at −3° and 90% on by −6°, the end of civil
+ * twilight. (−12° to +1° is softer, about 1,450 km, but the edge of night is harder to see.)
+ */
+export const TWILIGHT_NIGHT_DEG = -8;
+export const TWILIGHT_DAY_DEG = 2;
+
+/**
  * Below this sun height the map centre counts as night: where the night tiles (./nightTiles.ts)
  * are half lit by city lights, so the colours and the picture under them turn together.
  */
-export const NIGHT_BASE_DEG = -3;
+const NIGHT_BASE_DEG = (TWILIGHT_NIGHT_DEG + TWILIGHT_DAY_DEG) / 2;
 
-/**
- * What the map looks like at its centre. Day and Night are fixed; Auto follows the sun: the dark
- * colours take over 3° after sunset, and the button says Sunrise or Sunset while the light is warm
- * (from 8° above the horizon to 10° below it).
- */
+/** The light is warm, and the button says Sunrise or Sunset, while the sun is between these heights. */
+const WARM_HIGH_DEG = 5.75;
+const WARM_LOW_DEG = -7.75;
+
+/** What the map looks like at its centre. Day and Night are fixed; Auto follows the sun. */
 export function mapLook(mode: LightMode, sun: Sun): MapLook {
   if (mode !== "auto") return FIXED[mode];
   const alt = sun.altitudeDeg;
-  const warm = clamp01(1 - Math.abs(alt + 1) / 9);
   const base = alt < NIGHT_BASE_DEG ? "night" : "day";
-  const morning = sun.azimuthDeg < 180;
-  const phase: LightPhase = warm >= 0.25 ? (morning ? "sunrise" : "sunset") : base;
+  const warm = alt >= WARM_LOW_DEG && alt <= WARM_HIGH_DEG;
+  const phase: LightPhase = warm ? (sun.azimuthDeg < 180 ? "sunrise" : "sunset") : base;
   return { base, phase };
 }

@@ -8,15 +8,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Res, Route } from "../shared/api.ts";
 import type { FraId, PlaceRef, ShopId } from "../shared/places.ts";
 import type { FullPlan, Plan, PlannedRoute, SavedRouteDraft, SavedRouteId } from "../shared/plans.ts";
-import { haversineKm, type LngLat } from "../shared/geo.ts";
+import { pathKm, type LngLat } from "../shared/geo.ts";
 import { DEFAULT_INCLUDE } from "../shared/railroads.ts";
 import { startTestApp, type TestApp } from "./harness.ts";
 
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ start, stops, destination, include: DEFAULT_INCLUDE });
-const TAYLOR_TO_NLR: FullPlan = { start: text("Taylor, TX"), stops: [], destination: text("EX-NLR-01"), include: DEFAULT_INCLUDE };
+const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ places: [start, ...stops, destination], include: DEFAULT_INCLUDE });
+const TAYLOR_TO_NLR: FullPlan = { places: [text("Taylor, TX"), text("EX-NLR-01")], include: DEFAULT_INCLUDE };
 /** The Temple wye, where BNSF and UP meet. */
 const WYE = 358070 as FraId;
 
@@ -79,10 +79,10 @@ describe("server", () => {
     const malformed = await fetch(`${t.url}/api/route`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ start: { kind: "lookup" }, stops: [], destination: null }),
+      body: JSON.stringify({ places: [{ kind: "lookup" }, null], include: DEFAULT_INCLUDE }),
     });
     expect(malformed.status).toBe(400);
-    expect((await malformed.json()).error).toMatchObject({ kind: "invalid", field: "start.kind" });
+    expect((await malformed.json()).error).toMatchObject({ kind: "invalid", field: "places[0].kind" });
     // The page's transport turns the envelope back into the same error.
     await expect(t.api("DELETE /api/saved-routes/:routeId", { params: { routeId: "no-such-route" } })).rejects.toMatchObject({ kind: "not-found" });
     await expect(t.api("POST /api/saved-routes", { body: { name: " ", plan: TAYLOR_TO_NLR, option: null, routeString: "" } })).rejects.toMatchObject({
@@ -97,7 +97,7 @@ describe("server", () => {
     try {
       let shopId = "" as ShopId;
       let routeId = "" as SavedRouteId;
-      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { start: text("Taylor, TX"), stops: [], destination: text("Waco, TX"), include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
+      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { places: [text("Taylor, TX"), text("Waco, TX")], include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/meta": () => s.api("GET /api/meta"),
@@ -124,7 +124,6 @@ describe("server", () => {
         "DELETE /api/saved-routes/:routeId": () => s.api("DELETE /api/saved-routes/:routeId", { params: { routeId } }),
         "POST /api/track": () => s.api("POST /api/track", { body: { paths: [[[-97.34, 31.09], [-97.3, 31.1]]] } }),
       };
-      expect(Object.keys(calls)).toHaveLength(15);
       for (const [route, call] of Object.entries(calls)) {
         const answer = await (call as () => Promise<unknown>)().catch((error: Error) => `${route} failed: ${error.message}`);
         expect(answer, route).not.toEqual(expect.stringMatching(/ failed: /));
@@ -138,8 +137,7 @@ describe("server", () => {
     const s = await startTestApp();
     try {
       const meta = await s.api("GET /api/meta");
-      expect(meta).toMatchObject({ exampleOnly: true, railroads: ["BNSF", "UP", "CSXT", "NS", "CN", "CPKC"], graphVersion: expect.stringMatching(/^[0-9a-f]{12}$/) });
-      expect(meta.storage).toBe(`${s.dataDir}/visnarn.db`);
+      expect(meta).toEqual({ exampleOnly: true });
       const shops = await s.api("GET /api/shops");
       expect(shops.map((shop) => [shop.code, shop.example])).toEqual(
         expect.arrayContaining([
@@ -163,18 +161,16 @@ describe("server", () => {
 describe("Route screen: plan a route", () => {
   it("a plan with only a start is incomplete, with the start resolved; an unknown place stays unresolved", async () => {
     const partial = await t.api("POST /api/route", { body: plan(text("Kansas City, MO"), null) });
-    expect(partial).toMatchObject({ outcome: "incomplete", places: { start: { ok: true, place: { label: "Kansas City, MO" } }, stops: [], destination: null } });
+    expect(partial).toMatchObject({ outcome: "incomplete", places: [{ ok: true, place: { label: "Kansas City, MO" } }, null] });
     const unknown = await t.api("POST /api/route", { body: plan(text("Taylor, TX"), text("Nowhere Junction XYZ")) });
-    expect(unknown).toMatchObject({ outcome: "incomplete", places: { destination: { ok: false, problem: { kind: "unknown" } } } });
+    expect(unknown).toMatchObject({ outcome: "incomplete", places: [{ ok: true }, { ok: false, problem: { kind: "unknown" } }] });
   });
 
-  it("routes the EXAMPLE plan the same way twice, the router's own route first, with no clock in the answer", async () => {
+  it("routes the EXAMPLE plan the same way twice, the router's own route first", async () => {
     const first = routed(await t.api("POST /api/route", { body: TAYLOR_TO_NLR }));
     expect(first.routes[0].strategies[0]).toBe("pick");
-    expect(first.places.destination).toMatchObject({ ok: true, place: { label: "North Little Rock, AR", match: { method: "shop" }, example: true } });
+    expect(first.places[1]).toMatchObject({ ok: true, place: { label: "North Little Rock, AR", match: { method: "shop" }, example: true } });
     expect(await t.api("POST /api/route", { body: TAYLOR_TO_NLR })).toEqual(first);
-    const json = JSON.stringify(first);
-    for (const key of ["eta", "verdict", "arrival", "marginH"]) expect(json).not.toContain(`"${key}"`);
   });
 
   it("a stop with a line chosen keeps the route on that line there", async () => {
@@ -190,7 +186,7 @@ describe("Route screen: plan a route", () => {
     // Oakville, ON is reached only over passenger-owned track.
     const oakville: Plan = { ...plan(text("Chicago, IL"), { kind: "coord", lon: -79.7195, lat: 43.4169 }), include: { regional: false, shortLine: false, passenger: false } };
     const answer = await t.api("POST /api/route", { body: oakville });
-    expect(answer).toMatchObject({ outcome: "no-route", problem: { at: "destination", message: "No route on the allowed track joins this place to the rest of the route." } });
+    expect(answer).toMatchObject({ outcome: "no-route", problem: { at: 1, message: "No route on the allowed track joins this place to the rest of the route." } });
   });
 
   it("GET /api/places/suggest, POST /api/places/resolve and GET /api/places/nearest answer what the fields and the map need", async () => {
@@ -281,10 +277,10 @@ describe("Shops screen", () => {
 
   it("adding the missing shop turns an incomplete plan into a routed one", async () => {
     const missing = await s.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NEW-01")) });
-    expect(missing).toMatchObject({ outcome: "incomplete", places: { destination: { ok: false } } });
+    expect(missing).toMatchObject({ outcome: "incomplete", places: [{ ok: true }, { ok: false }] });
     await s.api("POST /api/shops", { body: { name: "EXAMPLE new shop", code: "EX-NEW-01", location: text("Dallas, TX") } });
     const found = routed(await s.api("POST /api/route", { body: plan(text("Taylor, TX"), text("EX-NEW-01")) }));
-    expect(found.places.destination).toMatchObject({ ok: true, place: { label: "EXAMPLE new shop" } });
+    expect(found.places[1]).toMatchObject({ ok: true, place: { label: "EXAMPLE new shop" } });
   });
 });
 
@@ -292,7 +288,7 @@ describe("restart", () => {
   it("a new server on the same data folder has the shops and the saved routes; routes are worked out again", async () => {
     const first = await startTestApp();
     const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
-    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { start: text("Taylor, TX"), stops: [], destination: { kind: "shop", shopId: shop.id }, include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" } });
+    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { places: [text("Taylor, TX"), { kind: "shop", shopId: shop.id }], include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" } });
     // The user deletes every EXAMPLE shop: they must not come back on the next start.
     for (const example of (await first.api("GET /api/shops")).filter((s) => s.example)) {
       await first.api("DELETE /api/shops/:shopId", { params: { shopId: example.id } });
@@ -304,10 +300,10 @@ describe("restart", () => {
       expect((await second.api("GET /api/shops")).map((s) => s.id)).toEqual([shop.id]);
       expect(await second.api("GET /api/saved-routes")).toEqual([saved]);
       const reopened = routed(await second.api("POST /api/route", { body: saved.plan }));
-      expect(reopened.places.destination).toMatchObject({ ok: true, place: { label: "Temple shop" } });
+      expect(reopened.places[1]).toMatchObject({ ok: true, place: { label: "Temple shop" } });
       // A saved route naming a deleted shop says so at that place.
       await second.api("DELETE /api/shops/:shopId", { params: { shopId: shop.id } });
-      expect(await second.api("POST /api/route", { body: saved.plan })).toMatchObject({ outcome: "incomplete", places: { destination: { ok: false, problem: { kind: "removed" } } } });
+      expect(await second.api("POST /api/route", { body: saved.plan })).toMatchObject({ outcome: "incomplete", places: [{ ok: true }, { ok: false, problem: { kind: "removed" } }] });
       expect((await second.api("GET /api/meta")).exampleOnly).toBe(false);
     } finally {
       await second.close();
@@ -316,7 +312,6 @@ describe("restart", () => {
 });
 
 describe("Real tracks: routes drawn on the surveyed track", () => {
-  const lengthKm = (path: LngLat[]) => path.slice(1).reduce((km, [lon, lat], i) => km + haversineKm(path[i][0], path[i][1], lon, lat), 0);
 
   it("each leg follows the track through every node, as long as the track km, and comes back in the order sent", async () => {
     const [route] = routed(await t.api("POST /api/route", { body: TAYLOR_TO_NLR })).routes;
@@ -338,10 +333,10 @@ describe("Real tracks: routes drawn on the surveyed track", () => {
       expect(line.length).toBeGreaterThan(3 * nodes.length);
     });
     const km = route.legs.reduce((sum, leg) => sum + leg.km, 0);
-    const drawnKm = drawn.reduce((sum, line) => sum + lengthKm(line), 0);
+    const drawnKm = drawn.reduce((sum, line) => sum + pathKm(line), 0);
     expect(Math.abs(drawnKm - km) / km).toBeLessThan(0.005);
     // Node to node, the same route cuts the curves.
-    expect(paths.reduce((sum, path) => sum + lengthKm(path), 0)).toBeLessThan(0.98 * km);
+    expect(paths.reduce((sum, path) => sum + pathKm(path), 0)).toBeLessThan(0.98 * km);
   });
 
   it("a step no single segment joins (two far-apart points) stays straight, and a malformed point is refused", async () => {

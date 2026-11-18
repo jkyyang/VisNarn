@@ -11,8 +11,9 @@ import { go, HOME, type Screen } from "../../app/routes.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
 import { MapContent } from "../../map/MapStage.tsx";
 import { chosenRoute, planScene, type SceneTarget } from "../../map/scene.ts";
+import { errorText } from "../../words.ts";
 import { RoutePanel } from "./RoutePanel.tsx";
-import { insertIndex, isFull, usePlanSession } from "./session.ts";
+import { fullPlan, insertIndex, isEmpty, placeAtEnd, usePlanSession } from "./session.ts";
 
 const NO_SHOPS: ShopView[] = [];
 
@@ -22,8 +23,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const saved = screen.saved ? (savedRoutes.find((route) => route.id === screen.saved) ?? null) : null;
   const { session, dispatch, clickMap, clickPlace } = usePlanSession(screen.saved, saved);
   const plan = session.plan.present;
-  const empty = plan.start === null && plan.destination === null && plan.stops.length === 0;
-  const planned = usePlannedRoute(empty ? null : plan);
+  const planned = usePlannedRoute(isEmpty(plan) ? null : plan);
   const shops = useShops();
   const [clickError, setClickError] = useState<string | null>(null);
 
@@ -47,8 +47,9 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   };
 
   const onSave = async (name: string, routeString: string) => {
-    if (!isFull(plan) || !chosen) return;
-    const route = await saveRoute({ name, plan, option: chosen.strategies[0], routeString }, screen.saved);
+    const full = fullPlan(plan);
+    if (!full || !chosen) return;
+    const route = await saveRoute({ name, plan: full, option: chosen.strategies[0], routeString }, screen.saved);
     if (screen.saved) return;
     // The session keeps its undo history under the new id; the URL now names the saved route.
     dispatch({ type: "saved", id: route.id });
@@ -84,13 +85,13 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         include={plan.include}
         onPick={(lon, lat, km) => {
           setClickError(null);
-          clickMap(lon, lat, km, places, chosen?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(error instanceof Error ? error.message : "The click could not be placed."));
+          clickMap(lon, lat, km, places, chosen?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(errorText(error, "The click could not be placed.")));
         }}
         onSelect={onSelect}
         placeActions={[
-          { label: "Set as start", run: (found) => dispatch({ type: "setPlace", field: "start", ref: found.ref }) },
-          { label: "Add as stop", run: (found) => dispatch({ type: "addStop", ref: found.ref, index: insertIndex(plan, places, found) }) },
-          { label: "Set as destination", run: (found) => dispatch({ type: "setPlace", field: "destination", ref: found.ref }) },
+          { label: "Set as start", run: (found) => dispatch(placeAtEnd(plan, "start", found.ref)) },
+          { label: "Add as stop", run: (found) => dispatch({ type: "insert", at: insertIndex(plan, places, found), ref: found.ref }) },
+          { label: "Set as destination", run: (found) => dispatch(placeAtEnd(plan, "destination", found.ref)) },
         ]}
         history={{
           undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,

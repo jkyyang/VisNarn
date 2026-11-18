@@ -7,6 +7,7 @@
  */
 import type { Request, Res, Route } from "../../shared/api.ts";
 import type { App } from "../app.ts";
+import { SUGGESTIONS_SHOWN } from "../places/directory.ts";
 import { savedRouteId, shopId } from "./decode.ts";
 
 export interface HandlerContext {
@@ -20,7 +21,7 @@ export type Handlers = { [R in Route]: (request: Request<R>, context: HandlerCon
 export const handlers: Handlers = {
   "GET /api/meta": (_request, { app }) => app.meta(),
 
-  "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, 8),
+  "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, SUGGESTIONS_SHOWN),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
   "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm),
 

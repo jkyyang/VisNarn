@@ -1,5 +1,5 @@
 /**
- * The marks over the route that are HTML, not deck.gl: a small rounded pill per route, beside its line
+ * The HTML marks over the route, drawn as DOM markers above the deck.gl canvas: a small rounded pill per route, beside its line
  * where the routes part (the selected one filled, the others saying how they differ), and an amber disc at each turn-back
  * with its details on hover or tap (a small badge beside a pin it would otherwise hide). MapLibre positions them as markers, so they move with the map; the
  * faces themselves are in ./RouteMarkFaces.tsx, which page tests draw without a map.
@@ -8,6 +8,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useState, type ReactElement } from "react";
 import { Marker, useMap } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
+import { PIN_ICONS } from "./layers.ts";
 import { PILL_HEIGHT_PX, pillWidthPx, placePills, turnBackShift, type Box, type PillPlace, type Point } from "./pills.ts";
 import { PillFace, TurnBackMark } from "./RouteMarkFaces.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
@@ -16,6 +17,10 @@ type RouteScene = Extract<MapScene, { kind: "route" }>;
 
 /** Room the map's own edges take: the round buttons on the right, the attribution at the bottom. */
 const EDGE = { side: 8, right: 60, bottom: 28 };
+
+/** Matches .turn-mark, and .route-mark--badge .turn-mark for the small one beside a pin; with a little air. */
+const TURN_MARK_PX = 22;
+const TURN_BADGE_PX = 16;
 
 const centred = (x: number, y: number, size: number): Box => ({ left: x - size / 2, top: y - size / 2, right: x + size / 2, bottom: y + size / 2 });
 
@@ -35,13 +40,13 @@ function layout(map: MapLibreMap, scene: RouteScene): Placed {
   const obstacles: Box[] = [];
   const pins = scene.pins.map((pin) => ({ kind: pin.kind, ...point(pin.position) }));
   for (const { kind, x, y } of pins) {
-    if (kind === "destination") obstacles.push({ left: x - 14, top: y - 34, right: x + 14, bottom: y });
-    else obstacles.push(centred(x, y, kind === "shop" ? 14 : 24));
+    const icon = PIN_ICONS[kind];
+    obstacles.push({ left: x - icon.width / 2, top: y - icon.anchorY, right: x + icon.width / 2, bottom: y - icon.anchorY + icon.height });
   }
   const turns = scene.turnBacks.map((turnBack) => {
     const at = point(turnBack.position);
     const shift = turnBackShift(at, pins);
-    obstacles.push(shift ? centred(at.x + shift.x, at.y + shift.y, 18) : centred(at.x, at.y, 26));
+    obstacles.push(shift ? centred(at.x + shift.x, at.y + shift.y, TURN_BADGE_PX + 2) : centred(at.x, at.y, TURN_MARK_PX + 4));
     return shift;
   });
   if (!scene.pills.length) return { pills: [], turns };

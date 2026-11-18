@@ -9,7 +9,7 @@ import type { Plan, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shar
 import { read, useQuery, write } from "./query.ts";
 
 export type { AppError, Meta } from "../../shared/app.ts";
-export type { QueryState } from "./query.ts";
+export { fresh, type QueryState } from "./query.ts";
 
 // ---- reads ----
 export const useMeta = () => useQuery("GET /api/meta", {});

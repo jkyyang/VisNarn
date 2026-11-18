@@ -18,3 +18,8 @@ export function cityPoint(graph: RailGraph, name: string): Point {
   if (!place) throw new Error(`No city named "${name}" in graph_meta.json.`);
   return { label: name, lon: place[0], lat: place[1] };
 }
+
+/** A network node as an exact point. */
+export function nodePoint(graph: RailGraph, node: number): Point {
+  return { label: `FRA node ${graph.fraId(node)}`, lon: graph.lon[node], lat: graph.lat[node], node };
+}

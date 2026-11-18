@@ -1,17 +1,21 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { Bounds } from "../../shared/geo.ts";
+import { FIT_MAX_ZOOM, FIT_MS } from "./config.ts";
 
 /**
  * Room for the floating controls, and at the sides for the labels that hang off the outermost
  * pins. A wide map can spare that room; a phone cannot.
  */
+/** A map this wide has room for the layers card beside a route. */
+const WIDE_MAP_PX = 640;
+
 function fitOptions(mapWidth: number) {
   const side = Math.round(Math.min(150, Math.max(40, mapWidth * 0.14)));
   // On a wide map the layers card (about 200 px) floats top-right: keep the route out from under it.
   // On a phone the round buttons take the right edge: keep pins and their labels clear of them.
-  const right = mapWidth >= 640 ? Math.max(side, 240) : Math.max(side, 72);
-  return { padding: { top: 72, bottom: 84, left: side, right }, maxZoom: 11 };
+  const right = mapWidth >= WIDE_MAP_PX ? Math.max(side, 240) : Math.max(side, 72);
+  return { padding: { top: 72, bottom: 84, left: side, right }, maxZoom: FIT_MAX_ZOOM };
 }
 
 type View = { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
@@ -70,9 +74,8 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
     // the user put it unless the route ran off it. "Fit whole route" always moves it.
     if (!first && !asked && !appeared && !shouldRefit(map.getBounds(), before, bounds)) return;
     const options = fitOptions(map.getContainer().clientWidth);
-    map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : 800 });
-    // Keyed on the numbers, not the array: a re-check that lands on the same route must not
-    // pull the camera back from wherever the user has panned to.
+    map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : FIT_MS });
+    // Keyed on the numbers: a re-check that lands on the same route leaves the camera wherever the user has panned to.
   }, [map, key, nonce]);
 
   return null;

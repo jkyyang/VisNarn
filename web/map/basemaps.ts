@@ -3,17 +3,17 @@
  * - Map: OpenFreeMap vector styles (OpenStreetMap data), light "liberty" / dark "dark".
  * - Satellite: Esri World Imagery + Esri boundaries & places labels.
  * - Optional overlay, Real tracks: the rail lines in the same OpenFreeMap vector tiles.
- * Check each provider's terms before production use (Esri imagery needs an ArcGIS account for commercial apps).
  */
 import type { StyleSpecification } from "maplibre-gl";
 
 export type BasemapKind = "map" | "satellite";
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+const OPENFREEMAP = "https://tiles.openfreemap.org";
 
 const SATELLITE: StyleSpecification = {
   version: 8,
-  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+  glyphs: `${OPENFREEMAP}/fonts/{fontstack}/{range}.pbf`,
   sources: {
     imagery: {
       type: "raster",
@@ -37,8 +37,8 @@ const SATELLITE: StyleSpecification = {
 
 export function basemapStyle(kind: BasemapKind, dark: boolean): string | StyleSpecification {
   if (kind === "satellite") return SATELLITE;
-  return `https://tiles.openfreemap.org/styles/${dark ? "dark" : "liberty"}`;
+  return `${OPENFREEMAP}/styles/${dark ? "dark" : "liberty"}`;
 }
 
 /** OpenFreeMap's vector tiles (OpenMapTiles schema) as TileJSON, which also carries their attribution. */
-export const OPENFREEMAP_TILES = "https://tiles.openfreemap.org/planet";
+export const OPENFREEMAP_TILES = `${OPENFREEMAP}/planet`;

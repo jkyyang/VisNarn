@@ -118,14 +118,14 @@ describe("Shops screen", () => {
     openPage("/shops");
     await user.click(await screen.findByRole("button", { name: "Edit Calgary, AB" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
-    // A second click where "Delete" was, or Enter, cannot delete: that button is gone and "Keep it" has focus.
-    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Keep it" })).toHaveFocus();
+    // Keep has focus, so Enter or a second click cannot delete.
+    const confirm = () => screen.queryByRole("group", { name: "Delete this shop?" });
+    expect(within(confirm()!).getByRole("button", { name: "Keep" })).toHaveFocus();
     await user.keyboard("{Enter}");
-    expect(screen.queryByRole("button", { name: "Yes, delete this shop" })).not.toBeInTheDocument();
+    expect(confirm()).not.toBeInTheDocument();
     expect(fake.state.shops).toHaveLength(6);
     await user.click(screen.getByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Yes, delete this shop" }));
+    await user.click(within(confirm()!).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(names()).not.toContain("Calgary, ABEXAMPLE"));
     expect(fake.state.shops).toHaveLength(5);
   });

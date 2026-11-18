@@ -1,5 +1,5 @@
 /**
- * EXAMPLE data for page tests: the six shops of the mockups and made-up track between a few cities.
+ * EXAMPLE data for page tests: six shops and made-up track between a few cities.
  * Not company data, and never imported by the app.
  */
 import type { LngLat } from "../../shared/geo.ts";
@@ -77,7 +77,7 @@ export interface LegSpec {
 
 export interface PathSpec {
   strategies: RouteStrategy[];
-  /** Real track km, as the mockups have them. */
+  /** Real track km. */
   km: number;
   legs: LegSpec[];
   /** Turn-backs, each before the leg with that index. */

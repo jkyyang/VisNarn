@@ -1,11 +1,12 @@
 /** The engine's contract as the server sees it: stable ids in and out, alternatives, turn-back facts. */
 import { beforeAll, describe, expect, it } from "vitest";
-import { haversineKm, type LngLat } from "../shared/geo.ts";
+import { haversineKm, pathKm, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
 import { DEFAULT_INCLUDE, type Line, type Railroad } from "../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RoutePath } from "../shared/route.ts";
 import { loadNetwork } from "./load.ts";
 import { ALL_RAILROADS_MASK } from "./core/graph.ts";
+import { nodePoint } from "./core/testing.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 import { combine, createCarRouter, tripKey, type CarRouter, type RouteResult, type Trip } from "./trip.ts";
 
@@ -22,7 +23,7 @@ const city = (name: string, railroad: Railroad | null = null): Waypoint => {
   if (!c) throw new Error(`no city ${name}`);
   return { label: c.name, lon: c.lon, lat: c.lat, fraId: null, railroad };
 };
-const trip = (start: Waypoint, destination: Waypoint, stops: Waypoint[] = []): Trip => ({ start, stops, destination, include: DEFAULT_INCLUDE });
+const trip = (start: Waypoint, destination: Waypoint, stops: Waypoint[] = []): Trip => ({ points: [start, ...stops, destination], include: DEFAULT_INCLUDE });
 const exampleTrip = (): Trip => trip(city("Temple, TX"), city("North Little Rock, AR"));
 /** Arriving at Temple from Taylor, the route can only head for Little Rock by turning back on yard track. */
 const viaTemple = (): Trip => trip(city("Taylor, TX"), city("North Little Rock, AR"), [city("Temple, TX")]);
@@ -91,7 +92,7 @@ describe("createCarRouter().route", () => {
     const graph = coreOf(network);
     const nlr = network.city("North Little Rock, AR")!;
     const same = (i: number) => {
-      const asNode = [...graph.serving(graph.nodePoint(i), { allowedMask: ALL_RAILROADS_MASK, passenger: true })];
+      const asNode = [...graph.serving(nodePoint(graph, i), { allowedMask: ALL_RAILROADS_MASK, passenger: true })];
       const asCoordinates = [...graph.serving({ label: "", lon: graph.lon[i], lat: graph.lat[i] }, { allowedMask: ALL_RAILROADS_MASK, passenger: true })];
       return asNode.length > 1 && JSON.stringify(asNode) === JSON.stringify(asCoordinates);
     };
@@ -103,15 +104,15 @@ describe("createCarRouter().route", () => {
     const exact = network.node(graph.fraId(node!))!;
     const byId: Waypoint = { label: "shop", lon: exact.lon, lat: exact.lat, fraId: exact.fraId, railroad: null };
     const byCoordinates: Waypoint = { ...byId, fraId: null };
-    const one = routed({ ...exampleTrip(), destination: byId });
-    const other = routed({ ...exampleTrip(), destination: byCoordinates });
+    const one = routed(trip(city("Temple, TX"), byId));
+    const other = routed(trip(city("Temple, TX"), byCoordinates));
     expect(other.path).toEqual(one.path);
   });
 
   it("reaches a shop on a short line only when short lines are included (Ville Platte, LA: UP is 20 km away)", () => {
     const villePlatte: Waypoint = { label: "Ville Platte, LA", lon: -92.271, lat: 30.688, fraId: null, railroad: null };
     const toVillePlatte = trip(city("Baton Rouge, LA"), villePlatte);
-    expect(router.route(toVillePlatte, "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: "destination" } });
+    expect(router.route(toVillePlatte, "pick")).toMatchObject({ ok: false, noRoute: { kind: "not-served", at: 1 } });
     const { path } = routed({ ...toVillePlatte, include: { regional: false, shortLine: true, passenger: true } });
     const last = path.legs[path.legs.length - 1];
     expect(last.railroad).toBe("short line");
@@ -125,17 +126,17 @@ describe("createCarRouter().route", () => {
     expect(router.route(trip(city("Temple, TX"), oakville), "pick").ok).toBe(true);
     expect(router.route({ ...trip(city("Temple, TX"), oakville), include: noPassenger }, "pick")).toEqual({
       ok: false,
-      noRoute: { kind: "no-path", at: "destination", message: "No route from the start to the destination on the track allowed, without turning back outside a yard." },
+      noRoute: { kind: "no-path", at: 1, message: "no route from point 1 to point 2 on the track allowed without turning back outside a yard" },
     });
-    // Leaving from Oakville, Oakville is still the place cut off: not the destination, not the first stop.
+    // Leaving from Oakville, Oakville is still the place cut off, with or without a stop.
     const from: Trip = { ...trip(oakville, city("North Little Rock, AR")), include: noPassenger };
-    expect(router.route(from, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "start" } });
-    expect(router.route({ ...from, stops: [city("Chicago, IL")] }, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: "start" } });
+    expect(router.route(from, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: 0 } });
+    expect(router.route({ ...from, points: [oakville, city("Chicago, IL"), city("North Little Rock, AR")] }, "pick")).toMatchObject({ ok: false, noRoute: { kind: "no-path", at: 0 } });
   });
 
   it("honours a waypoint's railroad: a stop pinned to BNSF is not reached on UP", () => {
     for (const railroad of ["BNSF", "UP"] as const) {
-      const { path } = routed({ ...exampleTrip(), stops: [city("Fort Worth, TX", railroad)] });
+      const { path } = routed(trip(city("Temple, TX"), city("North Little Rock, AR"), [city("Fort Worth, TX", railroad)]));
       const stopRow = path.steps.findIndex((s) => s.kind === "stop");
       expect(stopRow).toBeGreaterThan(0);
       expect(railroadAtStep(path, stopRow)).toBe(railroad);
@@ -189,7 +190,7 @@ describe("createCarRouter().route", () => {
     }
   });
 
-  it("names the stop, not the next place, when every way into the stop faces away from the rest of the trip", () => {
+  it("names the stop when every way into it faces away from the rest of the trip", () => {
     // FRA node 362313 (south Dallas, UP) lies on a branch that dead-ends south of it: from Taylor the car
     // can only arrive heading south, and Texarkana is back north. Alone, both legs route.
     const node = network.node(362313 as FraId)!;
@@ -200,19 +201,19 @@ describe("createCarRouter().route", () => {
     routed(trip(dallas, texarkana));
     expect(router.route(trip(taylor, texarkana, [dallas]), "pick")).toEqual({
       ok: false,
-      noRoute: { kind: "dead-end", at: 0, message: "Stop 1 is reached, but the route cannot go on from it to the destination without turning back outside a yard." },
+      noRoute: { kind: "dead-end", at: 1, message: "point 2 is reached but cannot be left toward point 3 without turning back outside a yard" },
     });
   });
 
   it("answers not-served, naming the waypoint, when coordinates are over 15 km from allowed mainline", () => {
     const desert: Waypoint = { label: "EXAMPLE desert shop", lon: -116.5, lat: 40.0, fraId: null, railroad: null };
-    expect(router.route({ ...exampleTrip(), destination: desert }, "pick")).toEqual({
+    expect(router.route(trip(city("Temple, TX"), desert), "pick")).toEqual({
       ok: false,
-      noRoute: { kind: "not-served", at: "destination", message: "No allowed railroad has mainline within 15 km of the destination." },
+      noRoute: { kind: "not-served", at: 1, message: "no allowed railroad has mainline within 15 km of point 2" },
     });
-    expect(router.route({ ...exampleTrip(), stops: [city("Fort Worth, TX", "CSXT")] }, "pick")).toEqual({
+    expect(router.route(trip(city("Temple, TX"), city("North Little Rock, AR"), [city("Fort Worth, TX", "CSXT")]), "pick")).toEqual({
       ok: false,
-      noRoute: { kind: "not-served", at: 0, message: "CSXT has no mainline within 15 km of stop 1." },
+      noRoute: { kind: "not-served", at: 1, message: "CSXT has no mainline within 15 km of point 2" },
     });
   });
 
@@ -227,7 +228,7 @@ describe("createCarRouter().route", () => {
     for (const strategy of ROUTE_STRATEGIES) {
       const { path } = routed(exampleTrip(), strategy);
       const legKm = path.legs.reduce((s, leg) => s + leg.km, 0);
-      const drawn = path.legs.reduce((s, leg) => s + leg.path.slice(1).reduce((t, p, i) => t + haversineKm(leg.path[i][0], leg.path[i][1], p[0], p[1]), 0), 0);
+      const drawn = path.legs.reduce((s, leg) => s + pathKm(leg.path), 0);
       expect(path.km, strategy).toBeCloseTo(legKm, 6);
       // A drawn line is a little shorter than the track it follows; a 100 km or 500 km penalty would show here.
       expect(path.km, strategy).toBeGreaterThanOrEqual(drawn - 0.5);
@@ -250,7 +251,7 @@ describe("combine / tripKey", () => {
     expect(results.map((r) => r.ok && r.path.strategies)).toEqual(ROUTE_STRATEGIES.map((s) => [s]));
   });
 
-  it("shows one line once: the same track under other railroad names, or a few metres of parallel track, is not a second option", () => {
+  it("shows one line once when routes share track under other names or run a few metres apart", () => {
     const lines = (trip: Trip) => {
       const combined = combine(ROUTE_STRATEGIES.map((s) => router.route(trip, s)));
       if (!combined.ok) throw new Error("no route");
@@ -277,7 +278,7 @@ describe("combine / tripKey", () => {
     // Taylor → Temple → Oakville, ON: "pick" and "fewest interchanges" ran the same BNSF + CN line, 18 m
     // apart in length, but only 92 % of their points matched (a stretch of parallel yard track). One card.
     const oakville = { label: "Oakville, ON", lon: -79.7195, lat: 43.4169, fraId: null, railroad: null };
-    const toOakville = lines({ ...viaTemple(), destination: oakville });
+    const toOakville = lines(trip(city("Taylor, TX"), oakville, [city("Temple, TX")]));
     const look = (p: RoutePath) => `${p.interchanges}|${p.turnBacks.length}|${Math.round(p.km)}`;
     expect(new Set(toOakville.map(look)).size).toBe(toOakville.length);
     // Fargo → Minneapolis → Edmonton: BNSF to Winnipeg then CN, twice, 10 m apart. One card.
@@ -288,7 +289,7 @@ describe("combine / tripKey", () => {
 
   it("is no-route when the pick found none, whatever the others found", () => {
     const fine = router.route(exampleTrip(), "shortest");
-    const none: RouteResult = { ok: false, noRoute: { kind: "no-path", at: "destination", message: "No route." } };
+    const none: RouteResult = { ok: false, noRoute: { kind: "no-path", at: 1, message: "no route" } };
     expect(combine([none, fine])).toEqual({ ok: false, noRoute: none.noRoute });
     expect(combine([fine, none])).toMatchObject({ ok: true });
   });
@@ -296,12 +297,13 @@ describe("combine / tripKey", () => {
   it("tripKey ignores labels and changes with the network version, any waypoint, or the track included", () => {
     const base = viaTemple();
     const key = tripKey("v1", base);
-    expect(tripKey("v1", { ...base, start: { ...base.start, label: "Somewhere else" }, destination: { ...base.destination, label: "EXAMPLE shop" } })).toBe(key);
+    const [start, stop, destination] = base.points;
+    expect(tripKey("v1", { ...base, points: [{ ...start, label: "Somewhere else" }, stop, { ...destination, label: "EXAMPLE shop" }] })).toBe(key);
     const changed: Trip[] = [
-      { ...base, start: { ...base.start, lon: base.start.lon + 0.01 } },
-      { ...base, start: { ...base.start, railroad: "UP" } },
-      { ...base, destination: { ...base.destination, fraId: 358070 as FraId } },
-      { ...base, stops: [city("Fort Worth, TX")] },
+      { ...base, points: [{ ...start, lon: start.lon + 0.01 }, stop, destination] },
+      { ...base, points: [{ ...start, railroad: "UP" }, stop, destination] },
+      { ...base, points: [start, stop, { ...destination, fraId: 358070 as FraId }] },
+      { ...base, points: [start, city("Fort Worth, TX"), destination] },
       { ...base, include: { ...DEFAULT_INCLUDE, shortLine: true } },
     ];
     for (const other of changed) expect(tripKey("v1", other)).not.toBe(key);

@@ -7,12 +7,13 @@ import { addProtocol, RasterTileSource, type LayerSpecification, type StyleSpeci
 import { useEffect } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import { BLACK_MARBLE_ATTRIBUTION, BLACK_MARBLE_MAX_ZOOM } from "../data/blackMarble.ts";
+import { AUTO_DARK_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
 import { loadNightTile, NIGHT_PROTOCOL, nightBucket, nightTileUrl, TILE_PX, type NightTileMode } from "./nightTiles.ts";
 
 const LIGHTS_ID = "night-lights";
 
 let protocolAdded = false;
-/** The protocol is global to MapLibre, not to one map: added once. */
+/** The protocol is registered on MapLibre itself, so it is added once for every map. */
 function ensureProtocol(): void {
   if (protocolAdded) return;
   addProtocol(NIGHT_PROTOCOL, loadNightTile);
@@ -79,15 +80,15 @@ export const OCEAN_FROM_SPACE = "#1d4670";
 
 /**
  * In Auto, the street map's water turns the deep blue of the Earth from space when zoomed out, so
- * the edge of night reads as day turning to night, not as a dark smudge over pale blue. It is the
- * map's own colour again by zoom 7, where Auto switches to the dark street map at night
- * (AUTO_DARK_ZOOM in ./MapCanvas.tsx). Satellite has no "water" layer and is left alone.
+ * the edge of night reads as day turning to night. It is the map's own colour again by AUTO_DARK_ZOOM
+ * (./config.ts), where Auto switches to the dark street map at night. Satellite has no "water" layer
+ * and is left alone.
  */
 export function paintOcean(map: PaintMap, style: StyleSpecification, fromSpace: boolean): void {
   if (!style.layers.some((layer) => layer.id === "water")) return;
   const own = ownPaint(map, style, "water", "fill-color");
   // A zoom ramp can only end on a plain colour; any other own paint stays as it is.
-  const space = typeof own === "string" ? ["interpolate", ["linear"], ["zoom"], 5, OCEAN_FROM_SPACE, 7, own] : own;
+  const space = typeof own === "string" ? ["interpolate", ["linear"], ["zoom"], OCEAN_SPACE_ZOOM, OCEAN_FROM_SPACE, AUTO_DARK_ZOOM, own] : own;
   map.setPaintProperty("water", "fill-color", fromSpace ? space : own);
 }
 

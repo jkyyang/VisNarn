@@ -1,8 +1,10 @@
 /** Which track a route may use: regional railroads, short lines and passenger-owned track, on a small made-up network. */
 import { describe, expect, it } from "vitest";
-import { RAILROADS } from "../../shared/railroads.ts";
+import { LINES, RAILROADS } from "../../shared/railroads.ts";
 import { REGIONAL, RailGraph, SHORT_LINE, type GraphMeta } from "./graph.ts";
+import { REVERSE_KM } from "../rules.ts";
 import { Router, type RouteOptions } from "./router.ts";
+import { nodePoint } from "./testing.ts";
 
 const BNSF = 1 << RAILROADS.indexOf("BNSF");
 const PASSENGER_OWNED = 2;
@@ -51,7 +53,7 @@ function graphBin(): RailGraph {
   for (const [a, b] of edges) u16(heading(nodes[a], nodes[b]));
   for (const [a, b] of edges) u16(heading(nodes[b], nodes[a]));
   for (const [, , w] of edges) u8(w.flags);
-  const meta: GraphMeta = { railroads: [...RAILROADS], pad, subdivs: [""], fra_ids: nodes.map((_, i) => 1000 + i), places: { "A, XX": nodes[A] } };
+  const meta: GraphMeta = { lines: [...LINES], pad, subdivs: [""], fra_ids: nodes.map((_, i) => 1000 + i), places: { "A, XX": nodes[A] } };
   return new RailGraph(buf, meta);
 }
 
@@ -62,8 +64,9 @@ const route = (to: number, include: Partial<{ regional: boolean; shortLine: bool
     allowedMask: BNSF | (include.regional ? 1 << REGIONAL : 0) | (include.shortLine ? 1 << SHORT_LINE : 0),
     passenger: include.passenger ?? false,
     interchangeKm: 1,
+    reverseKm: REVERSE_KM,
   };
-  return router.route([graph.nodePoint(A), graph.nodePoint(to)], opt);
+  return router.route([nodePoint(graph, A), nodePoint(graph, to)], opt);
 };
 const way = (r: ReturnType<typeof route>) => ({ km: r.km, lines: r.legs.map((leg) => leg.railroad) });
 

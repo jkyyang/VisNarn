@@ -3,8 +3,8 @@
  * direct rendering of a scene, and the screens build scenes from domain values with the functions below.
  */
 import { haversineKm, type Bounds, type LngLat } from "../../shared/geo.ts";
-import type { PlaceRef, PlaceResolution, ResolvedPlace, ShopId, ShopView } from "../../shared/places.ts";
-import type { PlannedRoute } from "../../shared/plans.ts";
+import { resolvedOf, type PlaceRef, type ResolvedPlace, type ShopId, type ShopView } from "../../shared/places.ts";
+import { placeKind, type PlannedRoute } from "../../shared/plans.ts";
 import type { Line } from "../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../../shared/route.ts";
 import { pillText } from "../words.ts";
@@ -215,11 +215,10 @@ class BoundsBuilder {
   }
 }
 
-const placed = (resolution: PlaceResolution | null | undefined): ResolvedPlace | null => (resolution?.ok ? resolution.place : null);
 const at = (place: ResolvedPlace): LngLat => [place.lon, place.lat];
 
-/** A shop's place that is the plan's start or destination already: its pin marks it. */
-const isEnd = (shop: ResolvedPlace, ends: (ResolvedPlace | null)[]) => ends.some((end) => end?.match.method === "shop" && end.lon === shop.lon && end.lat === shop.lat);
+/** A shop that is a place of the plan already: its pin marks it. */
+const inPlaces = (shop: ResolvedPlace, places: (ResolvedPlace | null)[]) => places.some((place) => place?.match.method === "shop" && place.lon === shop.lon && place.lat === shop.lat);
 
 /**
  * The planner's map: the chosen route on top of the others, the pills that tell them apart, the
@@ -230,27 +229,27 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   const { planned, option, shops } = input;
   const routes = planned?.outcome === "routed" ? planned.routes : null;
   const chosen = routes ? chosenRoute(routes, option) : null;
-  const start = placed(planned?.places.start);
-  const destination = placed(planned?.places.destination);
+  const places = (planned?.places ?? []).map(resolvedOf);
 
-  // The ends sit where the chosen route starts and ends on the track.
+  // The first and last places sit where the chosen route starts and ends on the track.
   const firstLeg = chosen?.legs.find((leg) => leg.path.length);
-  const lastLeg = chosen ? [...chosen.legs].reverse().find((leg) => leg.path.length) : undefined;
-  const startAt = firstLeg?.path[0] ?? (start ? at(start) : null);
-  const destinationAt = lastLeg?.path[lastLeg.path.length - 1] ?? (destination ? at(destination) : null);
+  const lastLeg = chosen?.legs.findLast((leg) => leg.path.length);
+  const first = places.findIndex(Boolean);
+  const last = places.findLastIndex(Boolean);
 
   const pins: ScenePin[] = [];
   for (const shop of shops) {
-    const place = placed(shop.place);
-    if (!place || isEnd(place, [start, destination])) continue;
+    const place = resolvedOf(shop.place);
+    if (!place || inPlaces(place, places)) continue;
     pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id });
   }
-  if (start && startAt) pins.push({ kind: "start", glyph: "", label: start.label, position: startAt, shopId: null });
-  (planned?.places.stops ?? []).forEach((resolution, i) => {
-    const stop = placed(resolution);
-    if (stop) pins.push({ kind: "stop", glyph: String(i + 1), label: stop.label, position: at(stop), shopId: null });
+  places.forEach((place, i) => {
+    if (!place) return;
+    const kind = placeKind(i, places.length);
+    const position = (i === first ? firstLeg?.path[0] : i === last ? lastLeg?.path.at(-1) : undefined) ?? at(place);
+    // A stop's number is its row: the start is row 0.
+    pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null });
   });
-  if (destination && destinationAt) pins.push({ kind: "destination", glyph: "", label: destination.label, position: destinationAt, shopId: null });
 
   if (!routes || !chosen) return { kind: "route", selected: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
 

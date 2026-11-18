@@ -1,27 +1,30 @@
 /**
  * The route planner's panel: the places in travel order, the routes found, the sections of the chosen
- * one, and saving it. One short hint line is the only sentence; everything else is rows, chips and
- * pins. Views: props in, markup out (PlaceField aside).
+ * one, and saving it. Views take props and return markup; PlaceField also fetches its own suggestions.
  */
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
-import type { PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ResolvedPlace } from "../../../shared/places.ts";
-import type { PlanField, PlannedRoute, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
+import { resolvedOf, type PlaceRef, type PlaceSuggestion, type ResolvedPlace } from "../../../shared/places.ts";
+import { placeKind, type PlaceKind, type PlannedRoute, type SavedRoute, type SavedRouteId } from "../../../shared/plans.ts";
 import { RAILROADS, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
-import { usePlaceSuggestions } from "../../data/hooks.ts";
+import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtKmShort } from "../../format.ts";
 import { chosenRoute } from "../../map/scene.ts";
 import { lineColor } from "../../theme.ts";
-import { RailroadChip } from "../../ui/badges.tsx";
-import { interchangesWord, lineName, placeProblem, routeName, shortPlace } from "../../words.ts";
-import { samePlan, type PlanAction, type PlanSession } from "./session.ts";
+import { RailroadChips, TurnBadge } from "../../ui/badges.tsx";
+import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
+import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
+import { Cross, Crosshair } from "../../ui/icons.tsx";
+import { useReorder } from "../../ui/reorder.ts";
+import { clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
+import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
 export interface RoutePanelProps {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
-  /** Null until the first answer; `stale` while a newer one is on its way (the panel dims, it does not blank). */
+  /** Null until the first answer. `stale` while a newer answer is on its way; the panel dims until it lands. */
   planned: { result: PlannedRoute; stale: boolean } | null;
   error: string | null;
   selected: RouteStrategy | null;
@@ -35,41 +38,41 @@ export interface RoutePanelProps {
   onNew: () => void;
 }
 
+/** Shorter railroad stretches are left out of the sections. */
+const MIN_SECTION_KM = 0.5;
+
 // ---- small marks ----
 
-const StartPin = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="5.5" fill="var(--panel)" stroke="var(--pin-a)" strokeWidth="2.5" />
-  </svg>
-);
-const DestinationPin = () => (
-  <svg width="16" height="20" viewBox="0 0 18 22" aria-hidden="true">
-    <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--shop)" />
-    <circle cx="9" cy="9" r="2.8" fill="#fff" />
-  </svg>
-);
-const StopPin = ({ n }: { n: number }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-    <circle cx="9" cy="9" r="7" fill="var(--panel)" stroke="var(--route)" strokeWidth="2.2" />
-    <text x="9" y="12.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--route)">
-      {n}
-    </text>
-  </svg>
-);
-const Crosshair = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-const Cross = () => (
+/** A place's mark, the same in the rows, the sections and on the map: a ring, a numbered stop, a drop. */
+function PlacePin({ kind, n }: { kind: PlaceKind; n: number }): ReactElement {
+  switch (kind) {
+    case "start":
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="5.5" fill="var(--panel)" stroke="var(--pin-a)" strokeWidth="2.5" />
+        </svg>
+      );
+    case "stop":
+      return (
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <circle cx="9" cy="9" r="7" fill="var(--panel)" stroke="var(--route)" strokeWidth="2.2" />
+          <text x="9" y="12.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="var(--route)">
+            {n}
+          </text>
+        </svg>
+      );
+    case "destination":
+      return (
+        <svg width="16" height="20" viewBox="0 0 18 22" aria-hidden="true">
+          <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--shop)" />
+          <circle cx="9" cy="9" r="2.8" fill="var(--panel)" />
+        </svg>
+      );
+  }
+}
+const Grip = () => (
   <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
-);
-const Arrow = ({ up }: { up: boolean }) => (
-  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-    <path d={up ? "M7 11V3M3.5 6.5L7 3l3.5 3.5" : "M7 3v8M3.5 7.5L7 11l3.5-3.5"} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M2 4.5h10M2 7h10M2 9.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
 const FoundMark = () => (
@@ -78,18 +81,6 @@ const FoundMark = () => (
     <path d="M4.2 7.2l1.9 1.9 3.7-4" fill="none" stroke="var(--panel)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
-
-/** The one line that says what a click does next, or what went wrong; empty when a field's own line already says it. */
-function HintLine(props: { text: string; children?: ReactNode }): ReactElement {
-  return (
-    <div className="hint-row">
-      <p className="hint-line" role="status">
-        {props.text}
-      </p>
-      {props.children}
-    </div>
-  );
-}
 
 // ---- places ----
 
@@ -112,33 +103,40 @@ function givenText(ref: PlaceRef, failed: boolean): string {
 /** The same spot on the ground, for finding a place's label in an answer to an earlier plan. */
 const spotKey = (ref: PlaceRef) => (ref.kind === "node" ? `node:${ref.fraId}` : JSON.stringify(ref));
 
+/** "Start", "Stop 2", "Destination": a row's name, its placeholder and the start of its button labels. */
+const rowName = (at: number, count: number) => {
+  const kind = placeKind(at, count);
+  return kind === "stop" ? `Stop ${at}` : kind === "start" ? "Start" : "Destination";
+};
+
 /**
- * One place input with autocomplete, a pick-on-map button, and the one line under it when the place
- * did not resolve. The typed text is its own while focused: Enter takes the highlighted suggestion,
- * else the first one, else the text as typed; leaving the box puts back what is set.
- *
- * A self-contained input widget: it asks the server for suggestions itself (usePlaceSuggestions).
+ * One place input with autocomplete, a pick-on-map button, a remove button, and the one line under it
+ * when the place did not resolve. The typed text is its own while focused: Enter takes the highlighted
+ * suggestion, else the first one, else the text as typed; leaving the box puts back what is set.
  */
-export function PlaceField(props: {
+function PlaceField(props: {
   label: string;
-  role: PlaceRole;
+  kind: PlaceKind;
   committed: { ref: PlaceRef | null; label: string };
   problem: string | null;
   found: boolean;
   picking: boolean;
+  /** "Remove" takes the row out; "Clear" empties one of the last two. Null: nothing to clear. */
+  remove: "Remove" | "Clear" | null;
   onCommit: (ref: PlaceRef | null) => void;
   onTogglePick: () => void;
+  onRemove: () => void;
 }): ReactElement {
   const id = useId();
   const listId = useId();
   const problemId = useId();
   const [draft, setDraft] = useState<string | null>(null);
-  // -1: nothing highlighted yet.
   const [active, setActive] = useState(-1);
   const typing = draft !== null;
-  const suggestions = usePlaceSuggestions(draft ?? "", props.role);
+  // The ends look in Your shops first; a stop is a position on the track (as the server resolves them).
+  const suggestions = usePlaceSuggestions(draft ?? "", props.kind === "stop" ? "position" : "shop");
   // A stale list belongs to the text before the last keystroke.
-  const list: PlaceSuggestion[] = typing && suggestions.status === "ready" && !suggestions.stale ? suggestions.data : [];
+  const list: PlaceSuggestion[] = (typing && fresh(suggestions)) || [];
   const open = list.length > 0;
 
   const done = (ref: PlaceRef | null) => {
@@ -149,8 +147,7 @@ export function PlaceField(props: {
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
-      const step = event.key === "ArrowDown" ? 1 : -1;
-      setActive((i) => (i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + step + list.length) % list.length));
+      setActive(moveActive(active, event.key, list.length));
     } else if (event.key === "Enter") {
       event.preventDefault();
       if (!typing) return;
@@ -166,7 +163,7 @@ export function PlaceField(props: {
 
   return (
     <div className={`place-field${props.picking ? " is-picking" : ""}${props.problem ? " is-wrong" : ""}`}>
-      <div className="place-box">
+      <div className="input-box place-box">
         <label htmlFor={id} className="visually-hidden">
           {props.label}
         </label>
@@ -180,6 +177,7 @@ export function PlaceField(props: {
           aria-invalid={props.problem ? true : undefined}
           aria-describedby={props.problem ? problemId : undefined}
           autoComplete="off"
+          enterKeyHint="go"
           placeholder={props.label}
           value={draft ?? props.committed.label}
           onChange={(e) => {
@@ -196,31 +194,13 @@ export function PlaceField(props: {
         <button type="button" className="icon-btn small pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
           <Crosshair />
         </button>
-        {props.committed.ref && (
-          <button type="button" className="icon-btn small" aria-label={`Clear ${props.label}`} title="Clear" onClick={() => done(null)}>
+        {props.remove && (
+          <button type="button" className="icon-btn small" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
             <Cross />
           </button>
         )}
       </div>
-      {open && (
-        <ul className="suggestions" role="listbox" id={listId} aria-label={`Suggestions for ${props.label}`}>
-          {list.map((suggestion, i) => (
-            <li
-              key={`${suggestion.source}-${suggestion.label}-${i}`}
-              id={`${listId}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                done(suggestion.ref);
-              }}
-            >
-              <span>{suggestion.label}</span>
-              <span className="muted small">{suggestion.detail}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <SuggestionList id={listId} label={`Suggestions for ${props.label}`} list={list} active={active} onChoose={(suggestion) => done(suggestion.ref)} />}
       {props.problem && (
         <span id={problemId} className="place-problem">
           {props.problem}
@@ -230,17 +210,17 @@ export function PlaceField(props: {
   );
 }
 
-/** "Next carrier: Router's pick | BNSF | UP": the railroad that takes the car on at a stop where several meet. */
-function LineChips(props: { stop: number; railroads: Railroad[]; line: Railroad | null; onChoose: (railroad: Railroad | null) => void }): ReactElement {
+/** "Next carrier: Router's pick | BNSF | UP": the railroad that takes the car on at a place where several meet. */
+function LineChips(props: { label: string; railroads: Railroad[]; line: Railroad | null; onChoose: (railroad: Railroad | null) => void }): ReactElement {
   const choices: (Railroad | null)[] = [null, ...RAILROADS.filter((railroad) => props.railroads.includes(railroad))];
   return (
-    <span className="line-chips" role="radiogroup" aria-label={`Next carrier at stop ${props.stop}`}>
+    <span className="line-chips" role="radiogroup" aria-label={`Next carrier at ${props.label}`}>
       <span className="line-chips-label" aria-hidden="true">
         Next carrier
       </span>
       {choices.map((railroad) => (
         <button key={railroad ?? "any"} type="button" role="radio" aria-checked={props.line === railroad} className="line-chip" onClick={() => props.onChoose(railroad)}>
-          {railroad && <span className="rr-swatch" style={{ background: `var(--rr-${railroad})` }} aria-hidden="true" />}
+          {railroad && <span className="rr-swatch" style={{ background: lineColor(railroad) }} aria-hidden="true" />}
           {railroad ?? "Router's pick"}
         </button>
       ))}
@@ -248,39 +228,73 @@ function LineChips(props: { stop: number; railroads: Railroad[]; line: Railroad 
   );
 }
 
-function StopRow(props: {
-  index: number;
-  count: number;
-  stop: PlaceRef;
-  place: ResolvedPlace | null;
-  failed: boolean;
-  problem: string | null;
+/** The place list: one row per place, in travel order, each with the same input, buttons and drag handle. */
+function PlaceList(props: {
+  session: PlanSession;
   dispatch: (action: PlanAction) => void;
+  /** The answer the labels come from: matched by spot, so they survive a reorder. */
+  named: Map<string, ResolvedPlace>;
+  /** The answer to the plan as it is now: its places line up with the rows. */
+  current: PlannedRoute | null;
 }): ReactElement {
-  const { index, stop, place, dispatch } = props;
-  const n = index + 1;
-  const label = place?.label ?? givenText(stop, props.failed);
-  const lines = stop.kind === "node" && place && place.railroads.length > 1 ? place.railroads : null;
+  const { session, dispatch, named, current } = props;
+  const { places } = session.plan.present;
+  const count = places.length;
+  const hintId = useId();
+  const labelOf = (at: number) => {
+    const ref = places[at];
+    return ref ? (named.get(spotKey(ref))?.label ?? givenText(ref, current?.places[at]?.ok === false)) : "";
+  };
+  // Keyed by spot, so a row slides from where its place was; empty rows by their order among the empty.
+  const keys = places.map((ref, at) => (ref ? spotKey(ref) : `empty-${places.slice(0, at).filter((p) => p === null).length}`));
+  const reorder = useReorder(keys, (from, to) => dispatch({ type: "move", from, to }), (at) => [rowName(at, count), labelOf(at)].filter(Boolean).join(", "));
+  const problemAt = (at: number): string | null => {
+    if (!current) return null;
+    return placeProblem(current.places[at] ?? null) ?? (current.outcome === "no-route" && current.problem.at === at ? current.problem.message : null);
+  };
+
   return (
-    <li className={`stop-row${props.problem ? " is-wrong" : ""}`}>
-      <span className="place-pin">
-        <StopPin n={n} />
+    <>
+      <ol className="place-list" ref={reorder.listRef}>
+        {places.map((ref, at) => {
+          const kind = placeKind(at, count);
+          const name = rowName(at, count);
+          const place = ref ? (named.get(spotKey(ref)) ?? null) : null;
+          const lines = ref?.kind === "node" && kind !== "destination" && place && place.railroads.length > 1 ? place.railroads : null;
+          const problem = problemAt(at);
+          return (
+            // By position: a row keeps its typed draft while the place in it changes.
+            <li key={at} className={`place-row${reorder.grabbed === at ? " is-grabbed" : ""}`}>
+              <span className="place-pin">
+                <PlacePin kind={kind} n={at} />
+              </span>
+              <PlaceField
+                label={name}
+                kind={kind}
+                committed={{ ref, label: labelOf(at) }}
+                problem={problem}
+                found={!!resolvedOf(current?.places[at])}
+                picking={session.pick === at}
+                remove={count > 2 ? "Remove" : ref ? "Clear" : null}
+                onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
+                onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
+                onRemove={() => dispatch({ type: "remove", at })}
+              />
+              <button type="button" className="icon-btn small drag-handle" aria-label={`Move ${name}`} aria-describedby={hintId} {...reorder.handleProps(at)}>
+                <Grip />
+              </button>
+              {lines && ref?.kind === "node" && <LineChips label={name} railroads={lines} line={ref.railroad} onChoose={(railroad) => dispatch({ type: "setLine", at, railroad })} />}
+            </li>
+          );
+        })}
+      </ol>
+      <span id={hintId} className="visually-hidden">
+        Space grabs, arrows move, Space drops, Escape puts back.
       </span>
-      <span className="stop-name">{label}</span>
-      {lines && stop.kind === "node" && <LineChips stop={n} railroads={lines} line={stop.railroad} onChoose={(railroad) => dispatch({ type: "setLine", index, railroad })} />}
-      <span className="stop-actions">
-        <button type="button" className="icon-btn small" aria-label={`Move stop ${n} up`} disabled={index === 0} onClick={() => dispatch({ type: "moveStop", from: index, to: index - 1 })}>
-          <Arrow up />
-        </button>
-        <button type="button" className="icon-btn small" aria-label={`Move stop ${n} down`} disabled={index === props.count - 1} onClick={() => dispatch({ type: "moveStop", from: index, to: index + 1 })}>
-          <Arrow up={false} />
-        </button>
-        <button type="button" className="icon-btn small" aria-label={`Remove stop ${n}`} onClick={() => dispatch({ type: "removeStop", index })}>
-          <Cross />
-        </button>
+      <span className="visually-hidden" aria-live="polite">
+        {reorder.announcement}
       </span>
-      {props.problem && <span className="place-problem">{props.problem}</span>}
-    </li>
+    </>
   );
 }
 
@@ -296,12 +310,12 @@ const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; tip: string }[] 
 function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackIncluded) => void }): ReactElement {
   return (
     <div className="track-choice" role="group" aria-label="Track">
-      <label title="Class I: the 6 big railroads">
+      <label className="check" title={`Class I: the ${RAILROADS.length} big railroads`}>
         <input type="checkbox" checked disabled />
         Class I
       </label>
       {SMALLER_TRACK.map(({ key, label, tip }) => (
-        <label key={key} title={tip}>
+        <label key={key} className="check" title={tip}>
           <input type="checkbox" checked={props.include[key]} onChange={(event) => props.onChange({ ...props.include, [key]: event.target.checked })} />
           {label}
         </label>
@@ -321,23 +335,19 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
         const turns = route.turnBacks.length;
         return (
           <button key={route.strategies[0]} type="button" className={`route-row${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => props.onSelect(route.strategies[0])}>
-            <span className="route-row-rr">
-              {route.railroads.map((railroad) => (
-                <RailroadChip key={railroad} railroad={railroad} />
-              ))}
-            </span>
+            <RailroadChips railroads={route.railroads} />
             <span className="route-row-km">{fmtKmShort(route.km)}</span>
             {route.interchanges > 0 && (
-              // A short chip, not the word, so the row stays one line on a phone.
+              // A short chip keeps the row on one line on a phone.
               <span className="ix-chip" title={interchangesWord(route.interchanges)}>
                 <span aria-hidden="true">⇄{route.interchanges}</span>
                 <span className="visually-hidden">{interchangesWord(route.interchanges)}</span>
               </span>
             )}
             {turns > 0 && (
-              <span className="turn-chip" title={route.turnBacks.map((t) => t.at.near).join(", ")}>
-                <span aria-hidden="true">↩{turns > 1 ? turns : ""}</span>
-                <span className="visually-hidden">{turns === 1 ? "1 turn-back" : `${turns} turn-backs`}</span>
+              <span title={route.turnBacks.map((t) => t.at.near).join(", ")}>
+                <TurnBadge count={turns} />
+                <span className="visually-hidden">{plural(turns, "turn-back")}</span>
               </span>
             )}
           </button>
@@ -354,22 +364,25 @@ function JunctionChips({ junction }: { junction: RouteString["junctions"][number
   return (
     <>
       {" "}
-      <span className={`who-chip${junction.chosen ? " is-chosen" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
+      <span className={`tag${junction.chosen ? " tag--accent" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
     </>
   );
 }
 
-/** The chosen route read top to bottom: start, each railroad's stretch with its km, railroad changes, stops, turn-backs, destination. */
-function Sections(props: { route: RoutePath; string: RouteString; start: string; destination: string }): ReactElement {
-  const { route } = props;
+/**
+ * The chosen route read top to bottom: start, each railroad's stretch with its km, railroad changes,
+ * stops, turn-backs, destination. `rows` are the place rows the route runs through, so a stop shows its row's number.
+ */
+function Sections(props: { route: RoutePath; string: RouteString; places: ResolvedPlace[]; rows: number[] }): ReactElement {
+  const { route, places } = props;
   const junctionAt = new Map(props.string.junctions.map((junction) => [junction.step, junction]));
-  const rows: SectionRow[] = [{ key: "start", mark: <StartPin />, text: shortPlace(props.start), kind: "place" }];
+  const rows: SectionRow[] = [{ key: "start", mark: <PlacePin kind="start" n={0} />, text: shortPlace(places[0]?.label ?? ""), kind: "place" }];
   route.steps.forEach((step, i) => {
     const key = `${step.kind}-${i}`;
     switch (step.kind) {
       case "leg": {
         const leg = route.legs[step.leg];
-        if (!leg || leg.km < 0.5) return;
+        if (!leg || leg.km < MIN_SECTION_KM) return;
         rows.push({
           key,
           mark: <span className="section-bar" style={{ background: lineColor(leg.railroad) }} />,
@@ -398,15 +411,15 @@ function Sections(props: { route: RoutePath; string: RouteString; start: string;
         return;
       }
       case "stop":
-        rows.push({ key, mark: <StopPin n={step.stop + 1} />, text: shortPlace(step.label), kind: "place" });
+        rows.push({ key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: shortPlace(step.label), kind: "place" });
         return;
       case "turn-back": {
         const turnBack = route.turnBacks[step.turnBack];
-        rows.push({ key, mark: <span className="section-turn">↩</span>, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back", kind: "turn-back" });
+        rows.push({ key, mark: <TurnBadge />, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back", kind: "turn-back" });
         return;
       }
       case "destination":
-        rows.push({ key, mark: <DestinationPin />, text: shortPlace(props.destination), kind: "place" });
+        rows.push({ key, mark: <PlacePin kind="destination" n={0} />, text: shortPlace(places.at(-1)?.label ?? ""), kind: "place" });
         return;
     }
   });
@@ -449,7 +462,7 @@ function SaveBar(props: { initial: string; canSave: boolean; changed: (name: str
     try {
       await props.onSave(name.trim());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the route.");
+      setError(errorText(e, "Could not save the route."));
     } finally {
       setBusy(false);
     }
@@ -483,7 +496,7 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
   const remove = (id: SavedRouteId) =>
     props.onRemove(id).then(
       () => setConfirming(null),
-      (e: unknown) => setError(e instanceof Error ? e.message : "Could not delete the route."),
+      (e: unknown) => setError(errorText(e, "Could not delete the route.")),
     );
   return (
     // Open while the plan is empty, folded while one is open, until the person opens or folds it.
@@ -501,15 +514,7 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
         {props.saved.map((route) => (
           <li key={route.id} className={route.id === props.current ? "is-current" : undefined}>
             {confirming === route.id ? (
-              <span className="confirm-inline" role="group" aria-label={`Delete ${route.name}`}>
-                <span>Delete?</span>
-                <button type="button" className="btn btn--small btn--danger" onClick={() => void remove(route.id)}>
-                  Delete
-                </button>
-                <button type="button" className="btn btn--small" onClick={() => setConfirming(null)} autoFocus>
-                  Keep
-                </button>
-              </span>
+              <ConfirmDelete question="Delete this route?" label={`Delete ${route.name}`} onConfirm={() => void remove(route.id)} onKeep={() => setConfirming(null)} />
             ) : (
               <>
                 <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })} aria-current={route.id === props.current ? "page" : undefined}>
@@ -534,124 +539,83 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
 
 // ---- the panel ----
 
-const resolvedOf = (resolution: PlaceResolution | null | undefined): ResolvedPlace | null => (resolution?.ok ? resolution.place : null);
-
-/** Places / hint · routes · sections · save · saved routes. */
+/** Places and what a click does next · routes · sections · save · saved routes. */
 export function RoutePanel(props: RoutePanelProps): ReactElement {
   const { session, dispatch, planned, open } = props;
   const plan = session.plan.present;
   const result = planned?.result ?? null;
-  // An answer to the plan as it is now: its places line up with the rows by position.
   const current = planned && !planned.stale ? planned.result : null;
-  const empty = plan.start === null && plan.destination === null && plan.stops.length === 0;
+  const empty = isEmpty(plan);
 
-  // Labels can come from an earlier answer while the next is on its way, matched by the spot, not the row.
   const named = new Map<string, ResolvedPlace>();
-  if (result) for (const resolution of [result.places.start, ...result.places.stops, result.places.destination]) {
+  for (const resolution of result?.places ?? []) {
     const place = resolvedOf(resolution);
     if (place) named.set(spotKey(place.ref), place);
   }
-  const placeOf = (ref: PlaceRef | null) => (ref ? (named.get(spotKey(ref)) ?? null) : null);
-  const problemAt = (at: PlanField | number, resolution: PlaceResolution | null | undefined): string | null => {
-    if (!current) return null;
-    const own = placeProblem(resolution ?? null);
-    if (own) return own;
-    return current.outcome === "no-route" && current.problem.at === at ? current.problem.message : null;
-  };
-
-  const end = (field: PlanField, label: string) => {
-    const ref = plan[field];
-    const place = placeOf(ref);
-    return (
-      <div className="plan-row">
-        <span className="place-pin">{field === "start" ? <StartPin /> : <DestinationPin />}</span>
-        <PlaceField
-          label={label}
-          role="shop"
-          committed={{ ref, label: ref ? (place?.label ?? givenText(ref, current?.places[field]?.ok === false)) : "" }}
-          problem={problemAt(field, current?.places[field])}
-          found={!!current && !!resolvedOf(current.places[field])}
-          picking={session.pick === field}
-          onCommit={(next) => dispatch({ type: "setPlace", field, ref: next })}
-          onTogglePick={() => dispatch({ type: "pick", field: session.pick === field ? null : field })}
-        />
-      </div>
-    );
-  };
 
   const routes = result?.outcome === "routed" ? result.routes : null;
+  const target = nextTarget(session);
+  const word = (at: number) => (placeKind(at, plan.places.length) === "stop" ? "" : "the ") + rowName(at, plan.places.length).toLowerCase();
   const hint =
     props.error ??
     (session.missed
-      ? "No track near there."
-      : session.pick === "start"
-        ? "Click the map to set the start."
-        : session.pick === "destination"
-          ? "Click the map to set the destination."
-          : plan.start === null
-            ? "Click the start on the map, or type it."
-            : plan.destination === null
-              ? "Click the destination."
-              : routes
-                ? "Click the map to add a stop."
-                : "");
+      ? `${NO_TRACK_NEAR}.`
+      : session.pick !== null
+        ? `${clickToSet(word(session.pick))}.`
+        : empty
+          ? "Click the start on the map, or type it."
+          : target !== null
+            ? `${clickToSet(word(target))}.`
+            : routes
+              ? "Click the map to add a stop."
+              : "");
 
+  const full = fullPlan(plan);
   const chosen = routes ? chosenRoute(routes, props.selected) : null;
-  const string = chosen && routeStringOf(chosen, plan.stops);
+  const string = chosen && full && routeStringOf(chosen, full.places.slice(1, -1));
   const compact = string && compactRouteString(string);
-  const start = resolvedOf(result?.places.start);
-  const destination = resolvedOf(result?.places.destination);
+  const resolved = (result?.places ?? []).map(resolvedOf);
+  const routedRows = resolved.flatMap((place, at) => (place ? [at] : []));
   const changed = (name: string) =>
-    !open || !routes || name !== open.name || !samePlan(plan, open.plan) || chosenRoute(routes, open.option) !== chosen || compact !== open.routeString;
+    !open || !routes || !full || name !== open.name || !samePlan(full, open.plan) || chosenRoute(routes, open.option) !== chosen || compact !== open.routeString;
 
   return (
     <div className={`route-panel${planned?.stale ? " is-stale" : ""}`} aria-busy={planned?.stale || undefined}>
       <section className="plan" aria-label="Places">
-        {end("start", "Start")}
-        {plan.stops.length > 0 && (
-          <ol className="stop-list" aria-label="Stops">
-            {plan.stops.map((stop, index) => (
-              <StopRow
-                key={`${spotKey(stop)}-${index}`}
-                index={index}
-                count={plan.stops.length}
-                stop={stop}
-                place={placeOf(stop)}
-                failed={current?.places.stops[index]?.ok === false}
-                problem={problemAt(index, current?.places.stops[index])}
-                dispatch={dispatch}
-              />
-            ))}
-          </ol>
-        )}
-        {end("destination", "Destination")}
-        <TrackChoice include={plan.include} onChange={(include) => dispatch({ type: "setInclude", include })} />
-        <HintLine text={hint}>
+        <PlaceList session={session} dispatch={dispatch} named={named} current={current} />
+        <div className="plan-actions">
+          {!plan.places.includes(null) && (
+            <button type="button" className="link-btn" onClick={() => dispatch({ type: "insert", at: plan.places.length - 1, ref: null })}>
+              + Add stop
+            </button>
+          )}
           {!empty && (
-            <span>
-              {(plan.start || plan.destination) && (
-                <button type="button" className="link-btn" onClick={() => dispatch({ type: "reverse" })}>
-                  Reverse route
-                </button>
-              )}
+            <>
+              <button type="button" className="link-btn" onClick={() => dispatch({ type: "reverse" })}>
+                Reverse route
+              </button>
               <button type="button" className="link-btn" onClick={props.onNew}>
                 New
               </button>
-            </span>
+            </>
           )}
-        </HintLine>
+        </div>
+        <TrackChoice include={plan.include} onChange={(include) => dispatch({ type: "setInclude", include })} />
+        <p className="hint-line" role="status">
+          {hint}
+        </p>
       </section>
 
       {routes && chosen && string && (
         <>
           <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} />
           <RouteStringRow string={string} saved={open?.routeString || null} />
-          <Sections route={chosen} string={string} start={start?.label ?? ""} destination={destination?.label ?? ""} />
+          <Sections route={chosen} string={string} places={resolved.filter((place) => place !== null)} rows={routedRows} />
           {result && (
             <SaveBar
               key={open?.id ?? "new"}
               initial={open?.name ?? routeName(result.places)}
-              canSave={plan.start !== null && plan.destination !== null}
+              canSave={full !== null}
               changed={changed}
               onSave={(name) => props.onSave(name, compactRouteString(string))}
             />

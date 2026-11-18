@@ -15,35 +15,36 @@ function refusal(run: () => unknown): string {
 }
 
 const plan = {
-  start: { kind: "text", text: "Kansas City, MO" },
-  stops: [{ kind: "node", fraId: 357961, railroad: "BNSF" }],
-  destination: { kind: "shop", shopId: "s1" },
+  places: [{ kind: "text", text: "Kansas City, MO" }, { kind: "node", fraId: 357961, railroad: "BNSF" }, { kind: "shop", shopId: "s1" }],
   include: { regional: false, shortLine: true, passenger: false },
 };
 
 describe("decodeBody", () => {
-  it("reads a plan; unknown fields are dropped and an end may be empty", () => {
+  it("reads a plan; unknown fields are dropped and any row may be empty", () => {
     expect(decodeBody["POST /api/route"]({ ...plan, extra: "x" })).toEqual(plan);
-    expect(decodeBody["POST /api/route"]({ start: null, stops: [], destination: null, include: DEFAULT_INCLUDE })).toEqual({ start: null, stops: [], destination: null, include: DEFAULT_INCLUDE });
+    const empty = { places: [null, null, null], include: DEFAULT_INCLUDE };
+    expect(decodeBody["POST /api/route"](empty)).toEqual(empty);
   });
 
-  it("a plan without the track it includes gets the default; a bad one names its field", () => {
-    expect(decodeBody["POST /api/route"]({ ...plan, include: undefined }).include).toEqual(DEFAULT_INCLUDE);
+  it("a plan needs the track it includes, and a bad one names its field", () => {
+    expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, include: undefined }))).toMatch(/^invalid include: /);
     expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, include: { ...plan.include, regional: "yes" } }))).toMatch(/^invalid include\.regional: /);
   });
 
   it("names the field at fault in a plan", () => {
     const route = (over: object) => refusal(() => decodeBody["POST /api/route"]({ ...plan, ...over }));
-    expect(route({ start: { kind: "lookup", text: "x" } })).toMatch(/^invalid start\.kind: /);
-    expect(route({ stops: [{ kind: "node", fraId: 1.5, railroad: null }] })).toMatch(/^invalid stops\[0\]\.fraId: /);
-    expect(route({ stops: [{ kind: "node", fraId: 357961, railroad: "ATSF" }] })).toMatch(/^invalid stops\[0\]\.railroad: .*BNSF/);
-    expect(route({ stops: [{ kind: "coord", lon: 200, lat: 0 }] })).toMatch(/^invalid stops\[0\]\.lon: /);
-    expect(route({ stops: "none" })).toMatch(/^invalid stops: /);
-    expect(route({ stops: Array.from({ length: 51 }, () => plan.stops[0]) })).toMatch(/^invalid stops: .*more than 50/);
+    const at1 = (place: object) => route({ places: [plan.places[0], place, plan.places[2]] });
+    expect(route({ places: [{ kind: "lookup", text: "x" }, null] })).toMatch(/^invalid places\[0\]\.kind: /);
+    expect(at1({ kind: "node", fraId: 1.5, railroad: null })).toMatch(/^invalid places\[1\]\.fraId: /);
+    expect(at1({ kind: "node", fraId: 357961, railroad: "ATSF" })).toMatch(/^invalid places\[1\]\.railroad: .*BNSF/);
+    expect(at1({ kind: "coord", lon: 200, lat: 0 })).toMatch(/^invalid places\[1\]\.lon: /);
+    expect(route({ places: "none" })).toMatch(/^invalid places: /);
+    expect(route({ places: [null] })).toMatch(/^invalid places: .*at least 2/);
+    expect(route({ places: Array.from({ length: 53 }, () => plan.places[1]) })).toMatch(/^invalid places: .*more than 52/);
     expect(refusal(() => decodeBody["POST /api/route"]("not an object"))).toMatch(/^invalid null: /);
   });
 
-  it("reads a saved route: a name, both ends, a known option or none, and its route string", () => {
+  it("reads a saved route: a name, its places with none empty, a known option or none, and its route string", () => {
     const draft = { name: "  KC → Chicago  ", plan, option: "shortest", routeString: "BNSF-[Chicago, IL]-CSXT" };
     expect(decodeBody["POST /api/saved-routes"](draft)).toEqual({ ...draft, name: "KC → Chicago" });
     expect(decodeBody["PUT /api/saved-routes/:routeId"]({ ...draft, option: null })).toMatchObject({ option: null });
@@ -54,7 +55,7 @@ describe("decodeBody", () => {
     }
     expect(decodeBody["POST /api/saved-routes"]({ ...draft, name: "Kansas City 🚂 Chicago" }).name).toBe("Kansas City 🚂 Chicago");
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, option: "fastest" }))).toMatch(/^invalid option: .*no-turn-backs/);
-    expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, plan: { ...plan, start: null } }))).toMatch(/^invalid plan\.start: /);
+    expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, plan: { ...plan, places: [null, ...plan.places.slice(1)] } }))).toMatch(/^invalid plan\.places\[0\]: /);
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: undefined }))).toMatch(/^invalid routeString: /);
     // The route string is stored and compared on save the same way, so it is held to the same rule.
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: "a\u0000b" }))).toMatch(/^invalid routeString: .*invisible/);

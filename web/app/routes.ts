@@ -120,6 +120,6 @@ function navigateOnClick(screen: () => Screen) {
 }
 
 /** Props for an <a> that navigates without a page load and still opens in a new tab on a modified click. */
-export function linkTo(screen: Screen): { href: string; onClick: (event: { preventDefault(): void; metaKey: boolean; ctrlKey: boolean }) => void } {
+export function linkTo(screen: Screen): { href: string; onClick: (event: LinkClick) => void } {
   return { href: hrefFor(screen), onClick: navigateOnClick(() => screen) };
 }

@@ -1,40 +1,37 @@
-/**
- * A route a person plans on the map: a start, the stops it must pass in order, a destination. No
- * clock and no car: only places, and the routes the network has between them.
- */
+/** A route a person plans on the map: places in travel order, and the routes the network has between them. */
 import type { PlaceRef, PlaceResolution } from "./places.ts";
 import type { TrackIncluded } from "./railroads.ts";
 import type { RoutePath, RouteStrategy } from "./route.ts";
 
 export interface Plan {
-  start: PlaceRef | null;
-  /** Travel order. A clicked node's `railroad` is the next carrier chosen at that junction; null = the router's pick. */
-  stops: PlaceRef[];
-  destination: PlaceRef | null;
+  /**
+   * Travel order, 2 or more rows: the first is the start, the last the destination, the rest stops.
+   * Null is an empty row; the route runs through the rows that are set. A clicked node's `railroad` is
+   * the next carrier chosen there; null means the router's pick.
+   */
+  places: (PlaceRef | null)[];
   /** Track beyond the Class I railroads the route may use. */
   include: TrackIncluded;
 }
 
-/** A plan that can be routed and saved: both ends are set. */
+/** A plan that can be routed and saved: 2 or more places, none empty. */
 export interface FullPlan extends Plan {
-  start: PlaceRef;
-  destination: PlaceRef;
+  places: PlaceRef[];
 }
 
-export type PlanField = "start" | "destination";
+/** What each place resolved to, in the same order as `Plan.places`; null for an empty row. */
+export type PlanPlaces = (PlaceResolution | null)[];
 
-/** What each place of a plan resolved to, in the plan's own shape. */
-export interface PlanPlaces {
-  start: PlaceResolution | null;
-  stops: PlaceResolution[];
-  destination: PlaceResolution | null;
-}
-
-/** Where the route breaks (a field, or a stop index) and one short line. */
+/** Where the route breaks (an index into `Plan.places`) and one short line. */
 export interface PlanProblem {
-  at: PlanField | number;
+  at: number;
   message: string;
 }
+
+export type PlaceKind = "start" | "stop" | "destination";
+
+/** A row's part in the trip, by its position. */
+export const placeKind = (at: number, count: number): PlaceKind => (at === 0 ? "start" : at === count - 1 ? "destination" : "stop");
 
 export type PlannedRoute =
   | { outcome: "incomplete"; places: PlanPlaces }

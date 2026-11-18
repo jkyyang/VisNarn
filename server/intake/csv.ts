@@ -1,10 +1,10 @@
-/** CSV text as a record source. */
+/** CSV text as records. */
 import { AppError } from "../../shared/app.ts";
-import type { RawRecord, RecordSource } from "./intake.ts";
+import type { RawRecord } from "./intake.ts";
 
 /**
- * RFC 4180: commas, double quotes, "" inside quotes, and line breaks inside quoted cells (the old
- * parser split lines first and broke those). A leading UTF-8 BOM and blank lines are skipped.
+ * RFC 4180: commas, double quotes, "" inside quotes, and line breaks inside quoted cells. A leading
+ * UTF-8 BOM and blank lines are skipped.
  */
 export function parseCsv(text: string): { line: number; cells: string[] }[] {
   const rows: { line: number; cells: string[] }[] = [];
@@ -65,7 +65,7 @@ export function parseCsv(text: string): { line: number; cells: string[] }[] {
 }
 
 /** The first row is the header. Throws AppError("invalid") for an empty file or a header with no data rows. */
-export function csvSource(fileName: string, text: string): RecordSource {
+export function csvRecords(fileName: string, text: string): RawRecord[] {
   const rows = parseCsv(text);
   if (!rows.length) throw new AppError("invalid", `${fileName} is empty.`, "source");
   const [header, ...data] = rows;
@@ -76,13 +76,5 @@ export function csvSource(fileName: string, text: string): RecordSource {
     if (name !== "" && seen.has(name)) throw new AppError("invalid", `${fileName} has the column "${name}" twice.`, "source");
     seen.add(name);
   }
-  return {
-    info: { kind: "csv", label: fileName },
-    async *records(): AsyncIterable<RawRecord> {
-      for (const row of data) {
-        const cells = Object.fromEntries(names.flatMap((name, i) => (name === "" ? [] : [[name, (row.cells[i] ?? "").trim()]])));
-        yield { line: row.line, cells };
-      }
-    },
-  };
+  return data.map((row) => ({ line: row.line, cells: Object.fromEntries(names.flatMap((name, i) => (name === "" ? [] : [[name, (row.cells[i] ?? "").trim()]]))) }));
 }

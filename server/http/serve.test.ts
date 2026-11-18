@@ -49,14 +49,14 @@ let routeAborted: Promise<unknown> = Promise.resolve();
 
 const DRAFT = {
   name: "EXAMPLE route",
-  plan: { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "Waco, TX" }, include: DEFAULT_INCLUDE },
+  plan: { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "Waco, TX" }], include: DEFAULT_INCLUDE },
   option: null,
   routeString: "BNSF",
 };
 
 /** Only what these tests call; the rest of App is never reached. */
 const fakeApp = {
-  meta: () => ({ graphVersion: "test", railroads: [], exampleOnly: true, storage: "/tmp" }),
+  meta: () => ({ exampleOnly: true }),
   shops: {
     remove: (id: string) => {
       if (id === "gone") throw new AppError("not-found", "No such shop.");
@@ -187,7 +187,7 @@ describe("serve: the API envelope", () => {
 
   it("aborts the app's work when the browser gives up on the request", async () => {
     const started = new Promise<void>((done) => (routeStarted = done));
-    const body = JSON.stringify({ start: { kind: "text", text: "A" }, stops: [], destination: { kind: "text", text: "B" } });
+    const body = JSON.stringify({ places: [{ kind: "text", text: "A" }, { kind: "text", text: "B" }], include: DEFAULT_INCLUDE });
     const socket = connect(port, "127.0.0.1");
     socket.write(`POST /api/route HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
     await started;
@@ -277,7 +277,7 @@ describe("serve: development", () => {
     const entry = await raw(devPort, "GET", "/web/main.tsx");
     expect(entry.status).toBe(200);
     expect(entry.headers["content-type"]).toMatch(/javascript/);
-    expect(JSON.parse((await raw(devPort, "GET", "/api/meta")).body)).toMatchObject({ graphVersion: "test" });
+    expect(JSON.parse((await raw(devPort, "GET", "/api/meta")).body)).toEqual({ exampleOnly: true });
     expect(await upgrade(`127.0.0.1:${devPort}`)).toBe("HTTP/1.1 101 Switching Protocols");
   });
 

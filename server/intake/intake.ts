@@ -1,15 +1,11 @@
 /**
- * The one door company data comes in through.
- *
- * A source (a CSV file now, a database query later) yields records: header → text, nothing more.
- * The readers below turn records into domain rows and a list of what they could not read. They do
- * not touch the network or the database, so a new source is one new `RecordSource` and nothing else
- * changes: shops from a company database would arrive as the same rows.
+ * The one door shop lists come in through: an upload's records become shop drafts and a list of what
+ * could not be read. Nothing here touches the network or the database.
  */
-import { createHash } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
-import { SHOP_TEXT_MAX, UNSEEN, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type SourceInfo, type UploadSource } from "../../shared/places.ts";
-import { csvSource } from "./csv.ts";
+import { isLngLat, plainMinus } from "../../shared/geo.ts";
+import { SHOP_TEXT_MAX, UNSEEN, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type UploadSource } from "../../shared/places.ts";
+import { csvRecords } from "./csv.ts";
 
 export interface RawRecord {
   /** Line in the file (or row in the query result), for messages. */
@@ -18,35 +14,19 @@ export interface RawRecord {
   cells: Readonly<Record<string, string>>;
 }
 
-export interface RecordSource {
-  info: SourceInfo;
-  records(): AsyncIterable<RawRecord>;
-}
-
-/** The source for an upload. Exhaustive over UploadSource: a new kind does not compile until it has a source. */
-export function openSource(upload: UploadSource): RecordSource {
-  switch (upload.kind) {
-    case "csv":
-      return csvSource(upload.fileName, upload.text);
-  }
-}
-
 export interface Parsed<T> {
-  source: SourceInfo;
   /** One per data row, in order, including rows with issues (as far as they could be read). */
   items: T[];
   /** The source line of each item, for issues found after reading (a shop that matches no node). */
   lines: number[];
   issues: RowIssue[];
-  /** Hash of the records as read, to recognise the same upload again. */
-  contentHash: string;
 }
 
 /** Shops: a `name`, an optional `code`, and a location given by `fra_id` or by `lon` and `lat`. */
-export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>> {
-  const records = await all(source);
-  requireColumns(source, records, [{ names: ["name"], what: "shop name" }]);
-  requireLocationColumns(source, records);
+export function readShops(upload: UploadSource): Parsed<ShopDraft> {
+  const records = csvRecords(upload.fileName, upload.text);
+  requireColumns(upload.fileName, records, [{ names: ["name"], what: "shop name" }]);
+  requireLocationColumns(upload.fileName, records);
 
   const items: ShopDraft[] = [];
   const issues: RowIssue[] = [];
@@ -63,34 +43,28 @@ export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>
     const location = locationOf(record, issue);
     items.push({ name, code, location });
   });
-  return parsed(source, records, items, issues);
+  return { items, lines: records.map((r) => r.line), issues };
 }
 
 // ---- shared pieces ----
 
-async function all(source: RecordSource): Promise<RawRecord[]> {
-  const out: RawRecord[] = [];
-  for await (const record of source.records()) out.push(record);
-  return out;
-}
-
 /** Columns are judged from the first record: every record of a source has the same keys. */
-function requireColumns(source: RecordSource, records: RawRecord[], wanted: { names: string[]; what: string }[]): void {
+function requireColumns(file: string, records: RawRecord[], wanted: { names: string[]; what: string }[]): void {
   if (!records.length) return;
   const have = new Set(Object.keys(records[0].cells));
   const missing = wanted.filter((w) => !w.names.some((name) => have.has(name)));
   if (!missing.length) return;
   const named = missing.map((w) => `"${w.names[0]}" (${w.what})`).join(", ");
-  throw new AppError("invalid", `${source.info.label} has no ${missing.length > 1 ? "columns" : "column"} ${named}. Rename them in the file.`, "source");
+  throw new AppError("invalid", `${file} has no ${missing.length > 1 ? "columns" : "column"} ${named}. Rename them in the file.`, "source");
 }
 
 /** At least one way to say where a row is. "lon, lat" means both columns. */
-function requireLocationColumns(source: RecordSource, records: RawRecord[]): void {
+function requireLocationColumns(file: string, records: RawRecord[]): void {
   const ways = ["fra_id", "lon, lat"];
   if (!records.length) return;
   const have = new Set(Object.keys(records[0].cells));
   const ok = ways.some((way) => way.split(", ").every((name) => have.has(name)));
-  if (!ok) throw new AppError("invalid", `${source.info.label} has no location columns. Add ${ways.map((w) => `"${w}"`).join(" or ")}.`, "source");
+  if (!ok) throw new AppError("invalid", `${file} has no location columns. Add ${ways.map((w) => `"${w}"`).join(" or ")}.`, "source");
 }
 
 /** A row's location: fra_id first, then lon and lat. Empty text (with an issue) when there is none. */
@@ -104,18 +78,12 @@ function locationOf(record: RawRecord, issue: (message: string) => void): PlaceR
     return { kind: "text", text: "" };
   }
   if (lon || lat) {
-    const x = Number(lon.replace("−", "-"));
-    const y = Number(lat.replace("−", "-"));
-    if (lon && lat && Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90) return { kind: "coord", lon: x, lat: y };
+    const x = Number(plainMinus(lon));
+    const y = Number(plainMinus(lat));
+    if (lon && lat && isLngLat(x, y)) return { kind: "coord", lon: x, lat: y };
     issue(`"${lon}, ${lat}" is not a longitude and latitude (such as -92.27, 34.77).`);
     return { kind: "text", text: "" };
   }
   issue("Give the shop an fra_id, or lon and lat.");
   return { kind: "text", text: "" };
-}
-
-function parsed<T>(source: RecordSource, records: RawRecord[], items: T[], issues: RowIssue[]): Parsed<T> {
-  // Of what was read, not of the file: the same rows read the same way are the same upload, whatever the file is called.
-  const contentHash = createHash("sha256").update(JSON.stringify({ items, issues })).digest("hex");
-  return { source: source.info, items, lines: records.map((r) => r.line), issues, contentHash };
 }

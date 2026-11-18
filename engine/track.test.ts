@@ -1,6 +1,6 @@
 /** Routes drawn on the real track: which way each segment's line runs, and how the lines join. */
 import { beforeAll, describe, expect, it } from "vitest";
-import { haversineKm, round5, type LngLat } from "../shared/geo.ts";
+import { pathKm, round5, type LngLat } from "../shared/geo.ts";
 import { loadNetwork, loadTrackShapes } from "./load.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 import { openTrackShapes } from "./track.ts";
@@ -55,12 +55,11 @@ describe("TrackShapes.follow", () => {
     const track = loadTrackShapes(network);
     const graph = coreOf(network);
     const at = (node: number): LngLat => [round5(graph.lon[node]), round5(graph.lat[node])];
-    const lengthKm = (path: LngLat[]) => path.slice(1).reduce((km, [lon, lat], i) => km + haversineKm(path[i][0], path[i][1], lon, lat), 0);
     for (let edge = 0; edge < graph.edgeCount; edge += 997) {
       const [a, b] = [at(graph.edgeU[edge]), at(graph.edgeV[edge])];
       const line = track.follow([a, b]);
       // A line run the wrong way would jump to the far end and back: about twice the segment's length too long.
-      expect(Math.abs(lengthKm(line) - graph.edgeKm[edge]), `edge ${edge}`).toBeLessThan(Math.max(0.05, 0.03 * graph.edgeKm[edge]));
+      expect(Math.abs(pathKm(line) - graph.edgeKm[edge]), `edge ${edge}`).toBeLessThan(Math.max(0.05, 0.03 * graph.edgeKm[edge]));
       expect(track.follow([b, a]), `edge ${edge}`).toEqual([...line].reverse());
       for (let i = 1; i < line.length; i++) expect(line[i], `edge ${edge}`).not.toEqual(line[i - 1]);
     }
