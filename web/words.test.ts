@@ -38,6 +38,7 @@ describe("words", () => {
     expect(routeName({ start: found("Kansas City, MO"), stops: [found("Galesburg, IL"), found("Peoria, IL")], destination: found("Chicago, IL") })).toBe(
       "Kansas City → Chicago via Galesburg, Peoria",
     );
+    expect(routeName({ start: found("Texarkana, AR · UTLX"), stops: [], destination: found("Regina, SK · Procor (approximate)") })).toBe("Texarkana → Regina");
   });
 
   it("placeProblem is the problem's own line, or nothing", () => {
@@ -49,6 +50,8 @@ describe("words", () => {
   it("short words for places, interchanges and turn-backs", () => {
     expect(shortPlace("Temple, TX")).toBe("Temple");
     expect(shortPlace("72 km from Jacksonville, FL")).toBe("72 km from Jacksonville");
+    expect(shortPlace("Regina, SK · Procor (approximate)")).toBe("Regina");
+    expect(shortPlace("Texarkana, AR · UTLX")).toBe("Texarkana");
     expect(interchangesWord(1)).toBe("1 interchange");
     expect(interchangesWord(2)).toBe("2 interchanges");
     const turnBack: TurnBack = {
