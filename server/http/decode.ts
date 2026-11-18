@@ -54,6 +54,22 @@ const nonEmpty =
     return t;
   };
 
+/**
+ * Control, format (zero-width, bidi overrides), line-separator and unpaired-surrogate characters.
+ * SQLite cuts text at NUL and swaps a lone surrogate for U+FFFD, and the rest hide or reorder what a
+ * person sees, so a name holding one could be listed differently from how it was saved.
+ */
+const UNSEEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+
+/** A name a person reads back in a list: plain visible text, so it is stored exactly as answered. */
+const name =
+  (max: number): Decoder<string> =>
+  (value, path) => {
+    const t = nonEmpty(max)(value, path);
+    if (UNSEEN.test(t)) invalid(path, `${path} cannot hold control or invisible characters.`);
+    return t;
+  };
+
 const nullable =
   <T>(decode: Decoder<T>): Decoder<T | null> =>
   (value, path) =>
@@ -147,7 +163,7 @@ const fullPlan: Decoder<FullPlan> = (value, path) => ({
 });
 
 const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
-  name: field(value, path, "name", nonEmpty(120)),
+  name: field(value, path, "name", name(120)),
   plan: field(value, path, "plan", fullPlan),
   option: field(value, path, "option", nullable(oneOf(ROUTE_STRATEGIES))),
 });

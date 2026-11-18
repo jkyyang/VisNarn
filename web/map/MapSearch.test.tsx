@@ -76,5 +76,8 @@ describe("the map's search box", () => {
     await user.keyboard("{Escape}");
     expect(chosen.at(-1)).toBeNull();
     expect(box).toHaveValue("");
+
+    await user.type(box, "atlantis");
+    expect(await screen.findByText("No shop, code or city called “atlantis”.")).toBeInTheDocument();
   });
 });

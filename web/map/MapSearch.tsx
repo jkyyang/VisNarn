@@ -44,6 +44,9 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
   // A stale list belongs to the text before the last keystroke.
   const list = draft !== null && suggestions.status === "ready" && !suggestions.stale ? suggestions.data : [];
   const open = list.length > 0;
+  const typed = draft?.trim() ?? "";
+  const nothing = typed && suggestions.status === "ready" && !suggestions.stale && !suggestions.data.length;
+  const message = nothing ? `No shop, code or city called “${typed}”.` : props.problem;
 
   const choose = (suggestion: PlaceSuggestion | null) => {
     setDraft(null);
@@ -122,7 +125,7 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
           ))}
         </ul>
       )}
-      {props.problem && !open && <p className="map-search-problem">{props.problem}</p>}
+      {message && !open && <p className="map-search-problem">{message}</p>}
     </div>
   );
 }
