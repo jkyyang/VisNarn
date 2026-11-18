@@ -14,15 +14,35 @@ function fitOptions(mapWidth: number) {
   return { padding: { top: 72, bottom: 84, left: side, right }, maxZoom: 11 };
 }
 
+type View = { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
+
 /** True when `bounds` lie wholly inside the visible map. */
-export function isInView(view: { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number }, bounds: Bounds): boolean {
+export function isInView(view: View, bounds: Bounds): boolean {
   const [west, south, east, north] = bounds;
   return west >= view.getWest() && east <= view.getEast() && south >= view.getSouth() && north <= view.getNorth();
 }
 
+/** True when any part of `bounds` is on screen. */
+function touchesView(view: View, bounds: Bounds): boolean {
+  const [west, south, east, north] = bounds;
+  return west <= view.getEast() && east >= view.getWest() && south <= view.getNorth() && north >= view.getSouth();
+}
+
+/**
+ * Whether a changed route should move the camera. A route already on screen never does. When the
+ * whole old route was on screen, a route that grows past the edge is framed again. When the user had
+ * zoomed in on part of it (the old route did not fit), adding or removing a stop keeps their view,
+ * unless the new route has left the screen entirely.
+ */
+export function shouldRefit(view: View, previous: Bounds | null, next: Bounds): boolean {
+  if (isInView(view, next)) return false;
+  if (previous && !isInView(view, previous)) return !touchesView(view, next);
+  return true;
+}
+
 /**
  * Moves the camera to `bounds` when they first appear (a plan that has just got its route), when they
- * change and are not already in view, and whenever `nonce` changes ("Fit whole route"). Renders
+ * change and `shouldRefit` says so, and whenever `nonce` changes ("Fit whole route"). Renders
  * nothing; must be a child of the map.
  */
 export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
@@ -30,7 +50,7 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
   const map = useMap().current;
   const mounted = useRef(false);
   const lastNonce = useRef(nonce);
-  const hadBounds = useRef(false);
+  const previous = useRef<Bounds | null>(null);
   const key = bounds?.join();
 
   useEffect(() => {
@@ -41,13 +61,14 @@ export function FitBounds(props: { bounds: Bounds | null; nonce?: number }) {
     const asked = nonce !== lastNonce.current;
     lastNonce.current = nonce;
     // Before a plan has its route there is nothing to frame; the moment it has one, it is framed.
-    const appeared = !!bounds && !hadBounds.current;
-    hadBounds.current = !!bounds;
+    const before = previous.current;
+    const appeared = !!bounds && !before;
+    previous.current = bounds;
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
-    // Switching tabs or routes must not zoom the map back and forth: if everything is already
-    // on screen the camera stays where the user put it. "Fit whole route" always moves it.
-    if (!first && !asked && !appeared && isInView(map.getBounds(), bounds)) return;
+    // Switching tabs or editing stops must not zoom the map back and forth: the camera stays where
+    // the user put it unless the route ran off it. "Fit whole route" always moves it.
+    if (!first && !asked && !appeared && !shouldRefit(map.getBounds(), before, bounds)) return;
     const options = fitOptions(map.getContainer().clientWidth);
     map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : 800 });
     // Keyed on the numbers, not the array: a re-check that lands on the same route must not
