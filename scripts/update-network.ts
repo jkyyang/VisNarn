@@ -132,7 +132,7 @@ function checkRoutes(dir: string, shops: Shop[]): RouteCheck[] {
 function basemapProblem(dir: string): string | null {
   const { features } = JSON.parse(readFileSync(join(dir, "basemap_mainline.geojson"), "utf8")) as { features: { properties: { class: string } }[] };
   const classes = [...new Set(features.map((f) => f.properties.class))].sort();
-  return classes.join() === [...NETWORK_CLASSES].sort().join() ? null : `basemap_mainline.geojson has line classes ${classes.join(", ") || "none"}, not ${NETWORK_CLASSES.join(", ")}`;
+  return classes.join() === [...NETWORK_CLASSES].sort().join() ? null : `basemap_mainline.geojson line classes: ${classes.join(", ") || "none"}; expected: ${NETWORK_CLASSES.join(", ")}`;
 }
 
 /** Problems with the network in `dir` (none means it may replace the live one), and routes whose length changed. */

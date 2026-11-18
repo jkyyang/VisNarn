@@ -57,6 +57,6 @@ describe("validation", () => {
     cpSync(DEFAULT_NETWORK_DIR, dir, { recursive: true });
     writeFileSync(join(dir, "basemap_mainline.geojson"), '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"owner":"UP"},"geometry":null}]}');
     const { problems } = await validate(dir);
-    expect(problems).toEqual(["basemap_mainline.geojson has line classes none, not class_i, regional, short_line, passenger"]);
+    expect(problems).toEqual(["basemap_mainline.geojson line classes: none; expected: class_i, regional, short_line, passenger"]);
   });
 });

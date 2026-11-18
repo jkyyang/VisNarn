@@ -111,6 +111,8 @@ describe("Route planner", () => {
     const string = screen.getByRole("region", { name: "Route string" });
     expect(string).toHaveTextContent("BNSF");
     expect(string).not.toHaveTextContent("–");
+    // Stage 1 has no clearance or schedule talk; the old disclaimer chip must not come back.
+    expect(screen.queryByText(/clearance|schedule/i)).toBeNull();
 
     await user.click(routeRows()[1]);
     await waitFor(() => expect(screen.getByRole("region", { name: "Route string" })).toHaveTextContent("BNSF – [Fort Worth, TX] – UP"));
