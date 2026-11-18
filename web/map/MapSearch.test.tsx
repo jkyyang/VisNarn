@@ -50,6 +50,8 @@ describe("the map's search box", () => {
     const user = userEvent.setup();
     render(<Search />);
     const box = screen.getByRole("combobox", { name: "Search the map" });
+    // Plain words only: no FRA node id jargon, and short enough for a 360 px phone.
+    expect(box).toHaveAttribute("placeholder", "Search shops and cities");
 
     await user.type(box, "temple");
     const options = await screen.findAllByRole("option");

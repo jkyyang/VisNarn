@@ -1,5 +1,6 @@
 /**
- * The search box over the map, as in a maps app: Your shops, cities, company codes and "FRA 358070".
+ * The search box over the map, as in a maps app: Your shops, cities and company codes. An FRA node id
+ * ("FRA 358070") still finds its node, but the placeholder does not advertise it: jargon, and it clips on a phone.
  * Choosing a suggestion flies the map there and drops a pin with a card (./FoundPin.tsx). Plain DOM,
  * no map library, so page tests draw it.
  *
@@ -82,7 +83,7 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
           aria-autocomplete="list"
           aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
           autoComplete="off"
-          placeholder="Search shops, cities, FRA 358070"
+          placeholder="Search shops and cities"
           value={draft ?? props.chosen?.label ?? ""}
           onChange={(e) => {
             setDraft(e.target.value);
