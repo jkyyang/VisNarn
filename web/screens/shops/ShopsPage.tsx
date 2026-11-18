@@ -154,8 +154,10 @@ export function ShopForm(props: {
   const nameRef = useRef<HTMLInputElement>(null);
 
   // The form opens above the list, which may be scrolled far down: bring it into view and start at its first box.
+  // On a phone the card can be taller than the screen, where "nearest" stops short and cuts the heading off.
   useEffect(() => {
-    sectionRef.current?.scrollIntoView?.({ block: "nearest" });
+    const phone = window.matchMedia?.("(max-width: 640px)").matches ?? false;
+    sectionRef.current?.scrollIntoView?.({ block: phone ? "start" : "nearest" });
     nameRef.current?.focus({ preventScroll: true });
   }, []);
 

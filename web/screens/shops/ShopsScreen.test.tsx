@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearQueryCache } from "../../data/query.ts";
 import { installFakeServer, type FakeServer } from "../../testing/fakeServer.ts";
 import { setNextMapClick } from "../../testing/FakeMapCanvas.tsx";
-import { currentPath, openPage } from "../../testing/page.tsx";
+import { currentPath, openPage, pretendPhone } from "../../testing/page.tsx";
 
 vi.mock("../../map/MapCanvas.tsx", () => import("../../testing/FakeMapCanvas.tsx"));
 
@@ -162,6 +162,25 @@ describe("Shops screen", () => {
       expect(screen.getByText(/Click the map to set the shop/)).toBeInTheDocument();
       expect(scrolled).toContain(screen.getByRole("region", { name: "Map" }));
     } finally {
+      delete (Element.prototype as Partial<Element>).scrollIntoView;
+    }
+  });
+
+  it("Edit on a phone scrolls the form's top into view, as 'nearest' left its heading cut off", async () => {
+    const user = userEvent.setup();
+    const original = window.matchMedia;
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    pretendPhone(true);
+    try {
+      openPage("/shops");
+      await user.click(await screen.findByRole("button", { name: "Edit Kansas City, MO" }));
+      const form = screen.getByRole("region", { name: "Edit shop" });
+      const call = scrollIntoView.mock.contexts.indexOf(form);
+      expect(call).toBeGreaterThan(-1);
+      expect(scrollIntoView.mock.calls[call][0]).toEqual({ block: "start" });
+    } finally {
+      window.matchMedia = original;
       delete (Element.prototype as Partial<Element>).scrollIntoView;
     }
   });
