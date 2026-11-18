@@ -17,17 +17,19 @@ function refusal(run: () => unknown): string {
 const plan = {
   places: [{ kind: "text", text: "Kansas City, MO" }, { kind: "node", fraId: 357961, railroad: "BNSF" }, { kind: "shop", shopId: "s1" }],
   include: { regional: false, shortLine: true, passenger: false },
+  turnAtStops: true,
 };
 
 describe("decodeBody", () => {
   it("reads a plan; unknown fields are dropped and any row may be empty", () => {
     expect(decodeBody["POST /api/route"]({ ...plan, extra: "x" })).toEqual(plan);
-    const empty = { places: [null, null, null], include: DEFAULT_INCLUDE };
+    const empty = { places: [null, null, null], include: DEFAULT_INCLUDE, turnAtStops: false };
     expect(decodeBody["POST /api/route"](empty)).toEqual(empty);
   });
 
-  it("a plan needs the track it includes, and a bad one names its field", () => {
+  it("a plan needs the track it includes and whether it turns at stops, and a bad one names its field", () => {
     expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, include: undefined }))).toMatch(/^invalid include: /);
+    expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, turnAtStops: "yes" }))).toMatch(/^invalid turnAtStops: /);
     expect(refusal(() => decodeBody["POST /api/route"]({ ...plan, include: { ...plan.include, regional: "yes" } }))).toMatch(/^invalid include\.regional: /);
   });
 

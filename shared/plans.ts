@@ -12,6 +12,8 @@ export interface Plan {
   places: (PlaceRef | null)[];
   /** Track beyond the Class I railroads the route may use. */
   include: TrackIncluded;
+  /** The route may leave a stop in either direction, turning back there. */
+  turnAtStops: boolean;
 }
 
 /** A plan that can be routed and saved: 2 or more places, none empty. */
@@ -43,7 +45,7 @@ export type SavedRouteId = string & { readonly __brand: "SavedRouteId" };
 
 /**
  * What is saved: the places with the next carrier chosen at each junction stop, the track included,
- * the chosen alternative and its route string. The route itself is worked out again on open.
+ * turning at stops, the chosen alternative and its route string. The route itself is worked out again on open.
  */
 export interface SavedRouteDraft {
   name: string;

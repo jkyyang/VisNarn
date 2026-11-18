@@ -1,12 +1,12 @@
 /**
  * The Shops screen in a real browser against the real server: shops are user data, added, changed
  * and deleted here, and imported from a CSV whose bad rows are listed instead of saved.
- * The EXAMPLE shops are left as the server made them, for the other screens' tests.
+ * The EXAMPLE shops are left as they were added (./app.ts), for the other screens' tests.
  */
 import { expectMapCanvases, keepScreenshot, test, expect } from "./app.ts";
-import { exampleShops } from "../../server/intake/example.ts";
+import { EXAMPLE_SHOPS } from "../fixtures.ts";
 
-const EXAMPLES = exampleShops().length;
+const EXAMPLES = EXAMPLE_SHOPS.length;
 
 test.describe("Shops", () => {
   test("add a shop, refuse a spot off the network, edit it, refuse a taken code, delete it", async ({ page }) => {
@@ -15,10 +15,9 @@ test.describe("Shops", () => {
     const table = page.getByRole("table");
     const names = table.locator(".shop-name");
     await expect(names).toHaveCount(EXAMPLES);
-    await expect(page.getByText(`${EXAMPLES} shops · ${EXAMPLES} EXAMPLE`)).toBeVisible();
+    await expect(page.getByText(`${EXAMPLES} shops`, { exact: true })).toBeVisible();
     const nlr = table.getByRole("row").filter({ hasText: "EX-NLR-01" });
     await expect(nlr).toContainText("North Little Rock, AR");
-    await expect(nlr).toContainText("EXAMPLE");
     await expect(nlr).toContainText("BNSF, UP");
     await expectMapCanvases(page);
     await keepScreenshot(page, "shops");
@@ -40,7 +39,6 @@ test.describe("Shops", () => {
     await expect(page).toHaveURL(/\/shops$/);
     const added = table.getByRole("row").filter({ hasText: "Temple test shop" });
     await expect(added).toContainText("BNSF");
-    await expect(added).not.toContainText("EXAMPLE");
     await expect(names).toHaveCount(EXAMPLES + 1);
 
     // The server owns the shops: a reload shows the same list.

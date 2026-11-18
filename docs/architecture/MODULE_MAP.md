@@ -55,7 +55,7 @@ How the rules are enforced:
 | `places.ts` | `PlaceRef`, `PlaceRole`, `Waypoint`, `ResolvedPlace`, `PlaceResolution`, `PlaceSuggestion`, `NetworkNode`, `NodeLocation`, `Shop`, `ShopDraft`, `ShopView`; the `FraId` and `ShopId` brands; the import types `UploadSource`, `RowIssue`, `ImportRequest`, `ImportReport`; `resolvedOf`, `NEAREST_MAX_KM` |
 | `plans.ts` | a planned route: `Plan` (one ordered list of places: start, stops, destination; null is an empty row), `FullPlan`, `PlanPlaces`, `PlanProblem`, `placeKind`, `PlannedRoute` (incomplete, no-route or routed), `SavedRouteDraft`, `SavedRoute`; the `SavedRouteId` brand |
 | `route.ts` | `RouteStrategy`, `Leg`, `TurnBack`, `Milestone`, `RoutePath` |
-| `app.ts` | `Meta`; `AppError` and `APP_ERROR_KINDS` (invalid, not-found, conflict, internal) |
+| `app.ts` | `AppError` and `APP_ERROR_KINDS` (invalid, not-found, conflict, internal) |
 | `api.ts` | the HTTP contract: the `Api` table, `Request`, `Res`, `Params`, `urlFor`, `routeMatcher`, the error body, the "answers are plain JSON" compile check. **Internal**: only `server/http/` and `web/data/` import it |
 | `*.test.ts` | tests |
 
@@ -66,13 +66,13 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | File | Owns | May import |
 |---|---|---|
 | `index.ts` | the engine's public surface (a list of re-exports) | `./load`, `./network`, `./trip`, `./track` |
-| `rules.ts` | the routing policy numbers: interchange penalty, reverse cost, sharpest turn, most interchanges, passenger track cost, snap distances | nothing |
+| `rules.ts` | the routing policy numbers: interchange penalty, reverse cost, sharpest turn, near-duplicate share, most interchanges, passenger track cost, snap distances | nothing |
 | `load.ts` | reading `graph.bin` and `graph_meta.json` from disk; the network version (a hash of the bytes); `track.bin` for the server's main thread | `./network`, `./track`, `node:fs`, `node:crypto` |
 | `track.ts` | `TrackShapes.follow`: a node-to-node path redrawn along each segment's surveyed line (`track.bin`), for the map's Real tracks | `./network`, `shared/geo` |
 | `network.ts` | `RailNetwork`: the network by stable id (nodes by FRA id, snapping, city names). `coreOf` is engine-internal | `./core/graph`, `shared/` |
-| `trip.ts` | `Trip` (points in travel order, track included), `createCarRouter().route` (one trip, one strategy), `combine` (distinct paths), `tripKey` (cache identity). The only place indexes become stable ids | `./network`, `./core/*`, `shared/` |
+| `trip.ts` | `Trip` (points in travel order, track included, turning at stops), `createCarRouter().route` (one trip, one strategy), `combine` (distinct paths; a near-duplicate is not kept), `tripKey` (cache identity). The only place indexes become stable ids | `./network`, `./core/*`, `shared/` |
 | `core/graph.ts` | `RailGraph`: graph.bin read into typed arrays, adjacency, nearest node, per-railroad serving. **Internal**: speaks node indexes | `shared/railroads`, `shared/geo`, `shared/places` (type) |
-| `core/router.ts` | `Router`: Dijkstra over (segment, railroad, interchanges), turn and yard rules, via points. **Internal** | `./graph`, `shared/railroads` |
+| `core/router.ts` | `Router`: Dijkstra over (segment, railroad, interchanges), turn and yard rules, via points (left in either direction with `turnAtStops`). **Internal** | `./graph`, `shared/railroads` |
 | `core/testing.ts` | test-only loader for the core objects, `cityPoint`, `nodePoint` | `./graph`, `./router`, `node:fs` |
 | `core/core.test.ts` | the search rules on the real network | |
 | `trip.test.ts` | the engine's contract | |
@@ -86,12 +86,12 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `main.ts` | the entry point: config → app → serve, or `--selftest` | `./config`, `./app`, `./http/serve`, `./selftest` |
 | `selftest.ts` | `node server/main.ts --selftest`: load the network, start one routing worker, route the EXAMPLE trip (no database, no port) | `./routing/planner`, `engine/index.ts`, `shared/` |
 | `config.ts` | where things are on this laptop; the `LOOPBACK` constant | `engine/index.ts` (default network folder) |
-| `app.ts` | `App` (what the HTTP layer may ask for: meta, places, shops, plans, track) and `createApp` (the composition root); first-run EXAMPLE shops | every server module |
+| `app.ts` | `App` (what the HTTP layer may ask for: places, shops, plans, track) and `createApp` (the composition root) | every server module |
 | `http/serve.ts` | the `node:http` shell: Host and Origin check, JSON-only bodies, `no-store`, match, decode, call, encode, errors, static files; Vite middleware in development. **Internal**: the only importer of `node:http` | `./handlers`, `./decode`, `shared/api`, `../app` (type), `../config` (`LOOPBACK`), `vite` (dev only) |
 | `http/handlers.ts` | one line per route of `Api` | `./decode`, `shared/api`, `../app` (type) |
 | `http/decode.ts` | untrusted JSON and query strings → domain values; path params → ids | `shared/` |
-| `store/store.ts` | the `Store` interface: shops, saved routes, `revision`, `fresh` | `shared/` |
-| `store/sqlite.ts` | the Store on `node:sqlite`: schema, migrations (schema 2 adds `saved_routes`; older tables stay, unread), SQL, JSON columns. **Internal**: the only importer of `node:sqlite`; exports `openStore` only | `./store`, `shared/` |
+| `store/store.ts` | the `Store` interface: shops, saved routes, `revision` | `shared/` |
+| `store/sqlite.ts` | the Store on `node:sqlite`: schema, migrations (schema 2 adds `saved_routes`, 4 drops the old car tables, 5 the shops' EXAMPLE flag), SQL, JSON columns. **Internal**: the only importer of `node:sqlite`; exports `openStore` only | `./store`, `shared/` |
 | `places/directory.ts` | `Directory`: the one resolver (`resolve`, `suggest`, `nearest`) and the namespace rules | `../store/store` (type), `engine/index.ts`, `shared/` |
 | `places/shops.ts` | `Shops`: rules for saving a shop, the list with network facts, the shop import | `./directory`, `../store/store`, `../intake/intake`, `shared/` |
 | `routing/planner.ts` | `RoutePlanner`: `plan`; the queue, the workers, the route cache | `./protocol`, `engine/index.ts`, `shared/`, `node:worker_threads` |
@@ -100,7 +100,6 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `plans/plans.ts` | `Plans`: `route` (resolve every place, then route through the set ones in order; stores nothing), `saved`, `save`, `remove` | `../places/directory`, `../routing/planner`, `../store/store`, `engine/index.ts` (types), `shared/` |
 | `intake/intake.ts` | the one door for shop lists: `readShops` | `./csv`, `shared/` |
 | `intake/csv.ts` | CSV text as records (RFC 4180) | `./intake` (type) |
-| `intake/example.ts` | the EXAMPLE shops | `shared/` |
 | `**/*.test.ts` | test plans next to each module | |
 
 ## `web/`: imports `shared/`
@@ -109,9 +108,9 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 |---|---|---|
 | `main.tsx` | mounting the app | `./app/App`, styles |
 | `styles.css` | the look: tokens (colours, type sizes, radii, motion) at the top, with the night set the whole page takes from the map's look and the phone sizes; the shared kit classes (`.glass`, `.group`, `.segmented`, `.chip`, buttons, fields); then each part | |
-| `app/App.tsx` | the page frame: one map, the panel floating over it (a sheet under it on a phone), which screen; how far the panel covers the map, for the camera | `./routes`, `./chrome`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
+| `app/App.tsx` | the page frame: one map, the panel floating over it (a sheet under it on a phone), which screen; how far the panel covers the map, for the camera; the note when the server cannot be reached | `./routes`, `./chrome`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
 | `app/routes.ts` | `Screen` ↔ URL: `parseLocation`, `hrefFor`, `useScreen`, `go`, `linkTo` | `shared/` |
-| `app/chrome.tsx` | `AppHeader`: Route \| Shops and the EXAMPLE DATA caption | `./routes` |
+| `app/chrome.tsx` | `AppHeader`: Route \| Shops | `./routes` |
 | `data/query.ts` | the transport and the query cache: `useQuery`, `read`, `write`, `callApi`. **Internal**: only `web/data/` imports it; the only `fetch` to the API | `shared/api`, `shared/app` |
 | `data/hooks.ts` | the named reads and changes the screens use | `./query`, `shared/` |
 | `data/basemap.ts` | loading the static mainline GeoJSON; `canDrawMaps` | |
@@ -127,7 +126,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `map/pills.ts` | `placePills`, `pillWidthPx`: where the route pills go on screen, beside the route lines and kept apart from each other, the pins and the legend (pure geometry) | |
 | `map/RouteMarks.tsx` | `RouteMarks`: the route pills and turn-back discs as MapLibre markers, laid out with `placePills` on every move | `./pills`, `./RouteMarkFaces`, `./scene` (types), `../words`, `react-map-gl` |
 | `map/RouteMarkFaces.tsx` | `PillFace`, `TurnBackMark`, `useNativeClick` (a click on a mark never reaches the map): plain DOM, so page tests draw them without a map | `./pills` (type), `./scene` (type), `../words` |
-| `map/layers.ts` | a scene as deck.gl layers (the selected route by railroad, thin alternatives, pins, shop squares; no place names: the panel and the basemap have them); hover names; click targets (`sceneTarget`). The only file that names deck.gl layer classes | `./scene`, `../theme`, `../data/basemap` (type) |
+| `map/layers.ts` | a scene as deck.gl layers (the selected route by railroad, thin alternatives, pins, shop squares; no place names: the panel and the basemap have them); hover names; click targets (`sceneTarget`) and the grey route a click landed on (`lineAt`), where the stop snaps. The only file that names deck.gl layer classes | `./scene`, `../theme`, `../data/basemap` (type) |
 | `map/MapControls.tsx` | the layers button and its popover card (Map layer, Time of day and Distances, drawn by one row component; Rail network, Real tracks; Escape closes it), zoom, undo / redo, fit | `./MapCanvas` (type), `./daylight`, `../units`, `../ui/useEscape` |
 | `map/daylight.ts` | day and night: sun position and the subsolar point from the clock (no package), `mapLook` (Auto / Day / Night → day or night colours and the Day / Sunrise / Sunset / Night word, at the map centre) | `shared/geo` (type) |
 | `map/nightTiles.ts` | the night side of the Earth per tile: `nightFactor`, `nightShade` (Black Marble where the sun is down, a soft twilight band, clear by day; pure), the `earthnight://` tile URL and its MapLibre loader | `./daylight`, `../data/blackMarble`, `maplibre-gl` (type) |
@@ -135,8 +134,8 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `map/DeckOverlay.tsx`, `FitBounds.tsx`, `RealTracks.tsx`, `basemaps.ts` | overlay control, camera fit (also when a plan first gets its route), Real tracks (OpenStreetMap rail lines from OpenFreeMap vector tiles), basemap styles | |
 | `map/Legend.tsx` | `Legend`, `legendFor`: the selected route's railroads only (with no route, the lines of the classes drawn), and "↩ Turn-back" when it has one | `./scene` (type), `../theme`, `shared/railroads` |
 | `screens/route/RouteWorkspace.tsx` | container for the route planner (desktop and phone): saved route from the URL, session, `usePlannedRoute`, scene, save | `./session`, `./RoutePanel`, `../../data/hooks`, `../../map/*`, `../../app/routes` |
-| `screens/route/session.ts` | the plan being worked on: the place list with undo history, which row's ⌖ is on, the missed click; `planReducer` (set, insert, remove, move, reverse as list operations), `nextTarget`, `placeAtEnd`, `stopInsertIndex`, `fullPlan`, `usePlanSession` (click → snap → the first empty row, else a stop where it adds the least km) | `../../data/hooks`, `../../map/config`, `../../ui/useEscape`, `shared/` |
-| `screens/route/RoutePanel.tsx` | the planner's panel: `PlaceList` (one row per place: `PlacePin`, `PlaceField`, drag handle, `LineChips`, then Add stop), route rows, sections, save bar, saved routes, the hint line | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
+| `screens/route/session.ts` | the plan being worked on: the place list with undo history, which row's ⌖ is on, the missed click; `planReducer` (set, insert, remove, move, reverse as list operations; track and turning at stops), `nextTarget`, `placeAtEnd`, `stopInsertIndex`, `fullPlan`, `usePlanSession` (click → snap to the line clicked or the nearest node → the first empty row, else a stop where it adds the least km) | `../../data/hooks`, `../../map/config`, `../../ui/useEscape`, `shared/` |
+| `screens/route/RoutePanel.tsx` | the planner's panel: `PlaceList` (one row per place: `PlacePin`, `PlaceField`, drag handle, `LineChips`, then Add stop), the route options (track, Turn at stops), route rows, sections, save bar, saved routes, the hint line | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
 | `screens/shops/ShopsScreen.tsx` | container: shops, the form, the shop import, picking a location | `./ShopsPage`, `../../data/hooks`, `../../map/*`, `../../app/*` |
 | `screens/shops/ShopsPage.tsx` | `ShopTable`, `ShopForm`, `ShopImportCard`, `PickPrompt` | `../../ui/*`, `../../data/hooks`, `shared/` |
 | `ui/badges.tsx` | `RailroadChip`, `RailroadChips`, `TurnBadge` | `shared/` |
@@ -165,7 +164,8 @@ Two screens: Route (the planner) and Shops.
 
 | File | Owns |
 |---|---|
-| `harness.ts` | `startTestApp`: the real back end on a temp folder and a free loopback port |
+| `fixtures.ts` | the EXAMPLE shops the API, screen and browser tests add to their empty databases |
+| `harness.ts` | `startTestApp`: the real back end on a temp folder (with the EXAMPLE shops) and a free loopback port |
 | `api.test.ts` | the API end to end over HTTP, one block per screen's needs, plus restart |
 | `screens.test.tsx` | the planner and Shops rendered from the real back end's answers |
 | `map-look.test.ts` | the night map's colours against the dark grounds, and the night tokens against the dark theme |
@@ -177,4 +177,3 @@ Two screens: Route (the planner) and Shops.
 |---|---|
 | `pipeline/run_all.sh`, `download_narn.py`, `build_graph.py`, `export_web_graph.py`, `export_basemap.py`, `places.py`, `railroad_classes.py` | the producer of `public/data/`; `railroad_classes.py` holds `CLASS1`, `LINES` and `CARRIER_COLS` once. `graph_meta.json` records `lines`, which the engine checks against `shared/railroads.ts` when it loads the network |
 | `public/data/graph.bin`, `graph_meta.json`, `track.bin`, `basemap_mainline.geojson` | read by `engine/load.ts` (first three) and by the page (the last) |
-| `docs/design/*.dc.html` | the design canvases |

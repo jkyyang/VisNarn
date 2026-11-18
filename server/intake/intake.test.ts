@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../../shared/app.ts";
 import { SHOP_TEXT_MAX } from "../../shared/places.ts";
-import { exampleShops } from "./example.ts";
 import { readShops } from "./intake.ts";
 
 const csv = (text: string, fileName = "shops.csv") => ({ kind: "csv" as const, fileName, text });
@@ -75,11 +74,5 @@ describe("readShops", () => {
       [4, expect.stringMatching(/fra_id, or lon and lat/)],
       [5, expect.stringMatching(/"12a" must be a whole number/)],
     ]);
-  });
-});
-
-describe("EXAMPLE data", () => {
-  it("six EXAMPLE shops with EX- codes", () => {
-    expect(exampleShops().map((s) => s.code)).toEqual(["EX-NLR-01", "EX-KCY-01", "EX-BHM-01", "EX-CHI-01", "EX-CAL-01", "EX-NPL-01"]);
   });
 });

@@ -26,7 +26,7 @@ const city = (name: string): Waypoint => {
   const c = network.city(name)!;
   return { label: c.name, lon: c.lon, lat: c.lat, fraId: null, railroad: null };
 };
-const trip = (...names: string[]): Trip => ({ points: names.map(city), include: DEFAULT_INCLUDE });
+const trip = (...names: string[]): Trip => ({ points: names.map(city), include: DEFAULT_INCLUDE, turnAtStops: false });
 const EXAMPLE = () => trip("Taylor, TX", "Temple, TX", "North Little Rock, AR");
 /** A long trip (a few hundred ms), to keep a worker busy. */
 const LONG = trip("Fresno, CA", "Stockton, CA", "Miami, FL");

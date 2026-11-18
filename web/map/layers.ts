@@ -213,18 +213,22 @@ export function sceneTooltip(info: PickingInfo): { text: string; style: Partial<
 }
 
 /**
- * What a click on a picked object means. A grey route: select it. A shop square: that shop as a place.
- * The plan's own pins and the interchange rings: nothing ("inert"), so a click on them adds no stop.
- * Anything else (the selected route, the network, an empty spot): null, a click on the map.
+ * What a click on a picked object means. A shop square: that shop as a place. The plan's own pins and
+ * the interchange rings: nothing ("inert"), so a click on them adds no stop. Anything else (a route,
+ * the network, an empty spot): null, a click on the map.
  */
 export function sceneTarget(info: PickingInfo): SceneTarget | "inert" | null {
   const { layer, object } = info;
   if (!layer || !object) return null;
-  if (layer.id === LAYER.alternatives) return { kind: "option", id: (object as AltLeg).option };
   if (layer.id === LAYER.interchanges) return "inert";
   if (layer.id === LAYER.pins) {
     const pin = object as ScenePin;
     return pin.shopId ? { kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position } : "inert";
   }
   return null;
+}
+
+/** The grey route a click on the map landed on, so a stop there snaps to that line; null: none. */
+export function lineAt(info: PickingInfo): SceneRoute["id"] | null {
+  return info.layer?.id === LAYER.alternatives && info.object ? (info.object as AltLeg).option : null;
 }

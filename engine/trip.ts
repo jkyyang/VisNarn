@@ -2,20 +2,22 @@
  * Routing one trip through its points in order: the start, any stops, the destination. In: waypoints
  * with stable ids. Out: paths with stable ids. The node and edge indexes of engine/core stay in this file.
  */
-import { haversineKm, round5, roundLngLat, type LngLat } from "../shared/geo.ts";
+import { round5, roundLngLat, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
 import { LINES, RAILROADS, type TrackIncluded } from "../shared/railroads.ts";
 import type { Leg, Milestone, RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
 import { ALL_RAILROADS_MASK, REGIONAL, SHORT_LINE, type Point, type RailGraph, type Track } from "./core/graph.ts";
 import { RouteError, Router, turnDeg, type Route, type RouteOptions } from "./core/router.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
-import { INTERCHANGE_PENALTY_KM, REVERSE_KM, SNAP_KM } from "./rules.ts";
+import { INTERCHANGE_PENALTY_KM, NEAR_DUPLICATE_SHARE, REVERSE_KM, SNAP_KM } from "./rules.ts";
 
 export interface Trip {
   /** Travel order, 2 or more. */
   points: Waypoint[];
   /** Track beyond the Class I railroads the route may use. */
   include: TrackIncluded;
+  /** The route may leave a stop in either direction. */
+  turnAtStops: boolean;
 }
 
 export interface NoRoute {
@@ -56,7 +58,7 @@ function trackOf(include: TrackIncluded): Track {
 const NO_INTERCHANGE_KM = 100_000;
 
 /** Routing penalties per strategy. They steer which path is found; `km` stays real track distance. */
-function costsOf(strategy: RouteStrategy): Omit<RouteOptions, keyof Track> {
+function costsOf(strategy: RouteStrategy): Pick<RouteOptions, "interchangeKm" | "reverseKm"> {
   switch (strategy) {
     case "pick":
       return { interchangeKm: INTERCHANGE_PENALTY_KM, reverseKm: REVERSE_KM };
@@ -105,7 +107,7 @@ export function createCarRouter(network: RailNetwork): CarRouter {
   return {
     route(trip, strategy) {
       const track = trackOf(trip.include);
-      const options: RouteOptions = { ...track, ...costsOf(strategy) };
+      const options: RouteOptions = { ...track, ...costsOf(strategy), turnAtStops: trip.turnAtStops };
 
       const points: Point[] = [];
       for (const [at, w] of trip.points.entries()) {
@@ -162,7 +164,8 @@ function describe(
     arrives: { subdivision: subdivision(r.arrivedOn), headingDeg: r.arrivingDeg },
     leaves: { subdivision: subdivision(r.leftOn), headingDeg: r.leavingDeg },
     turnDeg: turnDeg(r.arrivingDeg, r.leavingDeg),
-    track: r.arrivedOn === r.leftOn ? "stub-end" : "yard",
+    // Off yard track the rules allow a reversal only at a stop the plan lets the route turn at.
+    track: !(graph.edgeYard[r.arrivedOn] && graph.edgeYard[r.leftOn]) ? "stop" : r.arrivedOn === r.leftOn ? "stub-end" : "yard",
   }));
   const stopNodes = stops.map((p) => graph.serving(p, track));
   // A stop pinned to a railroad is reached on that railroad. Any other stop is reached at any line's entry node:
@@ -243,8 +246,8 @@ export type Routed = { ok: true; paths: [RoutePath, ...RoutePath[]] } | { ok: fa
 
 /**
  * Folds the answers of several strategies into the distinct paths. `results[0]` must be the pick:
- * if it found no route, there is none. Two strategies that found the same line become one path
- * that lists both.
+ * if it found no route, there is none. A path that is the same line as one already kept (sameLine)
+ * is not kept: that path lists its strategy too.
  */
 export function combine(results: RouteResult[]): Routed {
   const [pick] = results;
@@ -264,42 +267,16 @@ export function combine(results: RouteResult[]): Routed {
   return { ok: true, paths };
 }
 
-/** Share of the route's length two paths must share to be one line to a person (parallel tracks a few metres apart). */
-const SAME_LINE_OVERLAP = 0.95;
-
 /**
- * One line on the ground, as a person reading the cards would see it. Railroad names are left out
- * on purpose: on shared track two railroads run over the same rails, and a card per name would show
- * one line several times. Nearly the same track counts too, but only with the same interchanges,
- * turn-backs and length, because those change the route. "Nearly the same" is measured in km: a short
- * stretch of parallel yard track has many points and is still one line (Temple, TX to Oakville, ON,
- * 2026-11-17: 92 % of points but 99 % of km shared).
+ * One route to a person reading the cards: the same points, or the same turn-backs and interchanges at
+ * nearly the same length (NEAR_DUPLICATE_SHARE). Railroad names are left out on purpose: on shared track
+ * two railroads run over the same rails, and a card per name would show one line several times.
  */
 function sameLine(x: RoutePath, y: RoutePath): boolean {
   if (x.turnBacks.length !== y.turnBacks.length) return false;
   const px = pointsOf(x), py = pointsOf(y);
   if (px.length === py.length && px.every((p, i) => p[0] === py[i][0] && p[1] === py[i][1])) return true;
-  if (x.interchanges !== y.interchanges) return false;
-  if (Math.abs(x.km - y.km) > Math.max(1, 0.01 * Math.max(x.km, y.km))) return false;
-  // The same railroads changing at the same places: the two cards would read the same, word for word
-  // (Fargo, ND to Edmonton, AB: BNSF to Winnipeg then CN, 10 m apart, drawn on parallel lines near Winnipeg).
-  if (storyOf(x) === storyOf(y)) return true;
-  return sharedShare(px, py) >= SAME_LINE_OVERLAP && sharedShare(py, px) >= SAME_LINE_OVERLAP;
-}
-
-/** What a card says about the way: each railroad and where it hands the car on. */
-const storyOf = (path: RoutePath): string => path.legs.map((leg) => `${leg.railroad}>${leg.to}`).join("|");
-
-/** Share of `a`'s length on segments whose two ends are also points of `b`. */
-function sharedShare(a: LngLat[], b: LngLat[]): number {
-  const inB = new Set(b.map(([lon, lat]) => `${lon},${lat}`));
-  let total = 0, shared = 0;
-  for (let i = 1; i < a.length; i++) {
-    const km = haversineKm(a[i - 1][0], a[i - 1][1], a[i][0], a[i][1]);
-    total += km;
-    if (inB.has(`${a[i - 1][0]},${a[i - 1][1]}`) && inB.has(`${a[i][0]},${a[i][1]}`)) shared += km;
-  }
-  return total > 0 ? shared / total : 1;
+  return x.interchanges === y.interchanges && Math.abs(x.km - y.km) <= NEAR_DUPLICATE_SHARE * Math.max(x.km, y.km);
 }
 
 function pointsOf(path: RoutePath): LngLat[] {
@@ -315,11 +292,11 @@ function pointsOf(path: RoutePath): LngLat[] {
 
 /**
  * Identity of a trip for caching: equal keys route alike. Built from the network version, each
- * waypoint's FRA id (or rounded coordinates) and railroad, and the track included. Labels are not in it.
+ * waypoint's FRA id (or rounded coordinates) and railroad, the track included and turning at stops. Labels are not in it.
  */
 export function tripKey(networkVersion: string, trip: Trip): string {
   const place = (w: Waypoint): (number | string | null)[] =>
     w.fraId !== null ? [w.fraId as FraId, w.railroad] : [round5(w.lon), round5(w.lat), w.railroad];
   const { allowedMask, passenger } = trackOf(trip.include);
-  return JSON.stringify([networkVersion, trip.points.map(place), allowedMask, passenger]);
+  return JSON.stringify([networkVersion, trip.points.map(place), allowedMask, passenger, trip.turnAtStops]);
 }

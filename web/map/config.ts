@@ -6,10 +6,12 @@
 /**
  * How far the map pans: North America with a wide margin, so a glimpse of Greenland, the Caribbean
  * and northern South America stays but the map cannot drift to another continent. MapLibre keeps the
- * whole screen inside these, which also stops zooming out once they fill the screen.
+ * whole screen inside these, which also stops zooming out once they fill the screen. Zoomed all the
+ * way out, the panel covers up to about 72° on a laptop screen: the west edge is that far past the
+ * Aleutians (180°), so all of Alaska fits right of the panel. MapLibre draws the world again west of 180°.
  */
 export const PAN_BOUNDS: [[number, number], [number, number]] = [
-  [-170, 5],
+  [-255, 5],
   [-20, 83],
 ];
 

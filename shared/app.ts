@@ -1,11 +1,5 @@
 /** What every part of the app shares about the app itself. */
 
-/** What the page needs to know about the server it is talking to. */
-export interface Meta {
-  /** True while every shop is a seeded EXAMPLE row and no route is saved: the header shows "EXAMPLE DATA". */
-  exampleOnly: boolean;
-}
-
 /**
  * "invalid": the request cannot be carried out as given (`field` says which input).
  * "not-found" / "conflict": about a stored thing. "internal": a bug or the server is unreachable.

@@ -9,9 +9,6 @@ import type { Shop, ShopId } from "../../shared/places.ts";
 import type { SavedRoute, SavedRouteId } from "../../shared/plans.ts";
 
 export interface Store {
-  /** True when opening created the database: the one moment the EXAMPLE rows are added. */
-  readonly fresh: boolean;
-
   /**
    * Goes up on every write. Whatever is computed from stored data (resolved places) is valid for
    * the revision it was computed at, and for no other.

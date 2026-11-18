@@ -18,7 +18,6 @@ const found = (label: string): PlaceResolution => ({
     railroad: null,
     railroads: ["BNSF"],
     match: { method: "city", confidence: "snapped", snapKm: 0.4 },
-    example: false,
   },
 });
 const missing: PlaceResolution = { ok: false, problem: { kind: "unknown", message: 'No place called "Xyz".', candidates: [] } };
@@ -78,5 +77,6 @@ describe("words", () => {
     expect(turnBackMove({ ...turnBack, leaves: { subdivision: "GALVESTON", headingDeg: 135 } })).toBe("Lampasas Sub S → Galveston Sub SE");
     expect(trackWords("stub-end")).toBe("yard track (stub end)");
     expect(trackWords("yard")).toBe("yard track");
+    expect(trackWords("stop")).toBe("turned at the stop");
   });
 });

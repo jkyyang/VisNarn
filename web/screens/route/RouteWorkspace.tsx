@@ -86,9 +86,11 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         scene={scene}
         focus={{ kind: "fit" }}
         include={plan.include}
-        onPick={(lon, lat, km) => {
+        onPick={(lon, lat, km, line) => {
           setClickError(null);
-          clickMap(lon, lat, km, places, chosen?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(errorText(error, "The click could not be placed.")));
+          // The stop snaps to the line clicked: a grey route, else the selected one.
+          const onLine = result?.outcome === "routed" ? chosenRoute(result.routes, line ?? option) : null;
+          clickMap(lon, lat, km, places, onLine?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(errorText(error, "The click could not be placed.")));
         }}
         onSelect={onSelect}
         placeActions={[

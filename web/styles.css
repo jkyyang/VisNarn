@@ -901,7 +901,7 @@ input[aria-invalid="true"] {
 .shop-table tr.is-editing .link-btn {
   color: var(--fg);
 }
-/* The pin hangs left of the name; the code and EXAMPLE sit under the name, in its column. */
+/* The pin hangs left of the name; the code sits under the name, in its column. */
 .shop-name,
 .shop-sub {
   padding-left: 22px;

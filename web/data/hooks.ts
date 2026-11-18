@@ -8,11 +8,10 @@ import type { ImportRequest, NetworkNode, PlaceRef, PlaceRole, ShopDraft, ShopId
 import type { Plan, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { read, useQuery, write } from "./query.ts";
 
-export type { AppError, Meta } from "../../shared/app.ts";
+export type { AppError } from "../../shared/app.ts";
 export { fresh, type QueryState } from "./query.ts";
 
 // ---- reads ----
-export const useMeta = () => useQuery("GET /api/meta", {});
 export const useShops = () => useQuery("GET /api/shops", {});
 export const useSavedRoutes = () => useQuery("GET /api/saved-routes", {});
 

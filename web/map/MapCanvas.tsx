@@ -18,7 +18,7 @@ import { NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
 import { FoundPin } from "./FoundPin.tsx";
-import { networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
@@ -201,8 +201,10 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
             if (target === "inert" || !current) return;
             if (target && current.onSelect) return current.onSelect(target);
             if (current.onPick && info.coordinate) {
-              const [lon, lat] = info.coordinate;
-              current.onPick(lon, lat, Math.min(NEAREST_MAX_KM, PICK_RADIUS_PX * kmPerPixel(lat, info.viewport?.zoom ?? zoom)));
+              // West of 180° the map draws the world again (PAN_BOUNDS); a longitude goes to the server between -180 and 180.
+              const lon = ((info.coordinate[0] + 540) % 360) - 180;
+              const lat = info.coordinate[1];
+              current.onPick(lon, lat, Math.min(NEAREST_MAX_KM, PICK_RADIUS_PX * kmPerPixel(lat, info.viewport?.zoom ?? zoom)), lineAt(info));
             }
           }}
         />

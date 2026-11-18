@@ -3,10 +3,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { haversineKm, pathKm, type LngLat } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
 import { DEFAULT_INCLUDE, type Line, type Railroad } from "../shared/railroads.ts";
-import { ROUTE_STRATEGIES, type RoutePath } from "../shared/route.ts";
+import { ROUTE_STRATEGIES, type RoutePath, type RouteStrategy } from "../shared/route.ts";
 import { loadNetwork } from "./load.ts";
 import { ALL_RAILROADS_MASK } from "./core/graph.ts";
 import { nodePoint } from "./core/testing.ts";
+import { NEAR_DUPLICATE_SHARE } from "./rules.ts";
 import { coreOf, type RailNetwork } from "./network.ts";
 import { combine, createCarRouter, tripKey, type CarRouter, type RouteResult, type Trip } from "./trip.ts";
 
@@ -23,7 +24,7 @@ const city = (name: string, railroad: Railroad | null = null): Waypoint => {
   if (!c) throw new Error(`no city ${name}`);
   return { label: c.name, lon: c.lon, lat: c.lat, fraId: null, railroad };
 };
-const trip = (start: Waypoint, destination: Waypoint, stops: Waypoint[] = []): Trip => ({ points: [start, ...stops, destination], include: DEFAULT_INCLUDE });
+const trip = (start: Waypoint, destination: Waypoint, stops: Waypoint[] = []): Trip => ({ points: [start, ...stops, destination], include: DEFAULT_INCLUDE, turnAtStops: false });
 const exampleTrip = (): Trip => trip(city("Temple, TX"), city("North Little Rock, AR"));
 /** Arriving at Temple from Taylor, the route can only head for Little Rock by turning back on yard track. */
 const viaTemple = (): Trip => trip(city("Taylor, TX"), city("North Little Rock, AR"), [city("Temple, TX")]);
@@ -205,6 +206,19 @@ describe("createCarRouter().route", () => {
     });
   });
 
+  it("with turning at stops, leaves that stop the way it came: a turn-back at the stop", () => {
+    const node = network.node(362313 as FraId)!;
+    const dallas: Waypoint = { label: node.near, lon: node.lon, lat: node.lat, fraId: node.fraId, railroad: null };
+    const texarkana: Waypoint = { label: "EXAMPLE Texarkana shop", lon: -94.0116, lat: 33.4423, fraId: null, railroad: null };
+    const { path } = routed({ ...trip(city("Taylor, TX"), texarkana, [dallas]), turnAtStops: true });
+    const atStop = path.turnBacks.filter((t) => t.at.fraId === node.fraId);
+    expect(atStop).toHaveLength(1);
+    expect(atStop[0].track).toBe("stop");
+    // Every other turn-back is still on yard track.
+    expect(path.turnBacks.filter((t) => t.track === "stop")).toEqual(atStop);
+    expect(path.steps.filter((s) => s.kind === "turn-back")).toHaveLength(path.turnBacks.length);
+  });
+
   it("answers not-served, naming the waypoint, when coordinates are over 15 km from allowed mainline", () => {
     const desert: Waypoint = { label: "EXAMPLE desert shop", lon: -116.5, lat: 40.0, fraId: null, railroad: null };
     expect(router.route(trip(city("Temple, TX"), desert), "pick")).toEqual({
@@ -287,6 +301,21 @@ describe("combine / tripKey", () => {
     expect(new Set(toEdmonton.map(look)).size).toBe(toEdmonton.length);
   });
 
+  it("hides an alternative within NEAR_DUPLICATE_SHARE of a shown route's length with the same interchanges and turn-backs", () => {
+    const path = (strategy: RouteStrategy, km: number, interchanges: number, lat: number): RouteResult => ({
+      ok: true,
+      path: { strategies: [strategy], km, interchanges, railroads: ["BNSF"], legs: [{ railroad: "BNSF", km, from: "a", to: "b", headingDeg: 0, subdivisions: [], path: [[-97, 31], [-96, lat], [-95, 32]] }], turnBacks: [], steps: [] },
+    });
+    const near = 1000 * (1 - NEAR_DUPLICATE_SHARE);
+    const combined = combine([path("pick", 1000, 1, 31.1), path("shortest", near, 1, 31.2), path("fewest-interchanges", near, 0, 31.3), path("no-turn-backs", near - 1, 1, 31.4)]);
+    if (!combined.ok) throw new Error("no route");
+    expect(combined.paths.map((p) => [p.strategies, p.km])).toEqual([
+      [["pick", "shortest"], 1000],
+      [["fewest-interchanges"], near],
+      [["no-turn-backs"], near - 1],
+    ]);
+  });
+
   it("is no-route when the pick found none, whatever the others found", () => {
     const fine = router.route(exampleTrip(), "shortest");
     const none: RouteResult = { ok: false, noRoute: { kind: "no-path", at: 1, message: "no route" } };
@@ -294,7 +323,7 @@ describe("combine / tripKey", () => {
     expect(combine([fine, none])).toMatchObject({ ok: true });
   });
 
-  it("tripKey ignores labels and changes with the network version, any waypoint, or the track included", () => {
+  it("tripKey ignores labels and changes with the network version, any waypoint, the track included, or turning at stops", () => {
     const base = viaTemple();
     const key = tripKey("v1", base);
     const [start, stop, destination] = base.points;
@@ -305,6 +334,7 @@ describe("combine / tripKey", () => {
       { ...base, points: [start, stop, { ...destination, fraId: 358070 as FraId }] },
       { ...base, points: [start, city("Fort Worth, TX"), destination] },
       { ...base, include: { ...DEFAULT_INCLUDE, shortLine: true } },
+      { ...base, turnAtStops: true },
     ];
     for (const other of changed) expect(tripKey("v1", other)).not.toBe(key);
     expect(tripKey("v2", base)).not.toBe(key);

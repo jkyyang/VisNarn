@@ -11,10 +11,11 @@ import { Legend, legendFor } from "../map/Legend.tsx";
 import { PillFace, TurnBackMark } from "../map/RouteMarkFaces.tsx";
 import type { MapScene } from "../map/scene.ts";
 
-let nextClick = { lon: -97.362, lat: 31.121 };
+const TEMPLE_WYE = { lon: -97.362, lat: 31.121 };
+let nextClick = TEMPLE_WYE;
 
-/** Where the next "click on the map" lands. Defaults to the wye at Temple, TX. */
-export function setNextMapClick(lon: number, lat: number): void {
+/** Where the next "click on the map" lands, until the next call. With no point: the wye at Temple, TX. */
+export function setNextMapClick(lon = TEMPLE_WYE.lon, lat = TEMPLE_WYE.lat): void {
   nextClick = { lon, lat };
 }
 
@@ -34,13 +35,13 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
     <div data-testid="map" data-focus={content?.focus.kind ?? "none"} data-tracks={layers.tracks ? "on" : "off"} data-basemap={layers.basemap}>
       <p>{describe(scene)}</p>
       {content?.onPick && (
-        <button type="button" onClick={() => content.onPick?.(nextClick.lon, nextClick.lat, 5)}>
+        <button type="button" onClick={() => content.onPick?.(nextClick.lon, nextClick.lat, 5, null)}>
           Click the map
         </button>
       )}
       {scene?.kind === "route" &&
         scene.alternatives.map((route) => (
-          <button key={route.id} type="button" onClick={() => select?.({ kind: "option", id: route.id })}>
+          <button key={route.id} type="button" onClick={() => content?.onPick?.(nextClick.lon, nextClick.lat, 5, route.id)}>
             Grey route {route.id}
           </button>
         ))}

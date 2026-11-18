@@ -4,7 +4,7 @@
  */
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import { resolvedOf, type PlaceRef, type PlaceSuggestion, type ResolvedPlace } from "../../../shared/places.ts";
-import { placeKind, type PlaceKind, type PlannedRoute, type SavedRoute, type SavedRouteId } from "../../../shared/plans.ts";
+import { placeKind, type PlaceKind, type Plan, type PlannedRoute, type SavedRoute, type SavedRouteId } from "../../../shared/plans.ts";
 import { RAILROADS, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
@@ -311,20 +311,25 @@ const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; tip: string }[] 
   { key: "passenger", label: "Passenger", tip: "Passenger: lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
 ];
 
-/** Which track the route may use: Class I always, the rest when ticked. */
-function TrackChoice(props: { include: TrackIncluded; onChange: (include: TrackIncluded) => void }): ReactElement {
+/** Which track the route may use (Class I always, the rest when ticked), and whether it may turn at a stop. */
+function RouteOptions(props: { plan: Plan; dispatch: (action: PlanAction) => void }): ReactElement {
+  const { include, turnAtStops } = props.plan;
   return (
-    <div className="chips" role="group" aria-label="Track">
+    <div className="chips" role="group" aria-label="Route options">
       <label className="chip" title={`Class I: the ${RAILROADS.length} big railroads`}>
         <input type="checkbox" checked disabled />
         Class I
       </label>
       {SMALLER_TRACK.map(({ key, label, tip }) => (
         <label key={key} className="chip" title={tip}>
-          <input type="checkbox" checked={props.include[key]} onChange={(event) => props.onChange({ ...props.include, [key]: event.target.checked })} />
+          <input type="checkbox" checked={include[key]} onChange={(event) => props.dispatch({ type: "setInclude", include: { ...include, [key]: event.target.checked } })} />
           {label}
         </label>
       ))}
+      <label className="chip" title="Turn at stops: the route may leave a stop in either direction">
+        <input type="checkbox" checked={turnAtStops} onChange={(event) => props.dispatch({ type: "setTurnAtStops", turnAtStops: event.target.checked })} />
+        Turn at stops
+      </label>
     </div>
   );
 }
@@ -607,7 +612,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
             </button>
           </div>
         )}
-        <TrackChoice include={plan.include} onChange={(include) => dispatch({ type: "setInclude", include })} />
+        <RouteOptions plan={plan} dispatch={dispatch} />
         <p className="hint-line" role="status">
           {hint}
         </p>

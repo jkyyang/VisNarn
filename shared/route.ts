@@ -25,7 +25,7 @@ export interface Leg {
   path: LngLat[];
 }
 
-/** A place where the route reverses direction. Allowed only on yard track; always worth a person's look. */
+/** A place where the route reverses direction. Allowed only on yard track, or at a stop when the plan allows it; always worth a person's look. */
 export interface TurnBack {
   at: { fraId: FraId; lon: number; lat: number; near: string };
   railroad: Line;
@@ -33,8 +33,8 @@ export interface TurnBack {
   leaves: { subdivision: string | null; headingDeg: number };
   /** 0–180. */
   turnDeg: number;
-  /** "stub-end": the route leaves over the same segment it arrived on. */
-  track: "yard" | "stub-end";
+  /** "stub-end": the route leaves over the same segment it arrived on. "stop": off yard track, at a stop the route may turn at. */
+  track: "yard" | "stub-end" | "stop";
 }
 
 /** One row of the route read top to bottom, from the start to the destination. `kmFromStart` is where the row starts. */

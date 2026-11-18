@@ -75,7 +75,6 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
         railroad,
         railroads: node.railroads,
         match: { ...how, confidence: "exact", snapKm: 0 },
-        example: false,
       },
     };
   };
@@ -97,7 +96,6 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
         railroad: null,
         railroads: snap.railroads,
         match: { ...how, confidence: "snapped", snapKm: Math.round(snap.km * 10) / 10 },
-        example: false,
       },
     };
   };
@@ -110,7 +108,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   const atShop = (ref: PlaceRef, shop: Shop): PlaceResolution => {
     const found = atLocation(ref, shop.location, { method: "shop" }, shop.name);
     if (!found.ok) return problem(found.problem.kind, `The shop ${shop.name}: ${found.problem.message}`);
-    return { ok: true, place: { ...found.place, example: shop.example } };
+    return found;
   };
 
   const atCity = (ref: PlaceRef, city: City): PlaceResolution => atCoordinates(ref, city.lon, city.lat, { method: "city" }, city.name);
@@ -124,7 +122,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   };
   const shopSuggestion = (shop: Shop): PlaceSuggestion => {
     const ref: PlaceRef = { kind: "shop", shopId: shop.id };
-    const detail = ["Your shop", ...(shop.example ? ["EXAMPLE"] : []), ...(shop.code ? [shop.code] : [])].join(" · ");
+    const detail = ["Your shop", ...(shop.code ? [shop.code] : [])].join(" · ");
     return { ref, label: shop.name, detail, source: "shop", railroads: railroadsAt(ref) };
   };
   const citySuggestion = (city: City): PlaceSuggestion => {

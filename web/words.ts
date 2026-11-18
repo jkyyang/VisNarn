@@ -46,7 +46,8 @@ export function turnBackMove(turnBack: TurnBack): string {
   return `${onSub(arrives.subdivision, arrives.headingDeg)} → ${sameSub ? fmtCompass(leaves.headingDeg) : onSub(leaves.subdivision, leaves.headingDeg)}`;
 }
 
-export const trackWords = (track: TurnBack["track"]) => (track === "stub-end" ? "yard track (stub end)" : "yard track");
+const TRACK_WORDS: Record<TurnBack["track"], string> = { yard: "yard track", "stub-end": "yard track (stub end)", stop: "turned at the stop" };
+export const trackWords = (track: TurnBack["track"]) => TRACK_WORDS[track];
 
 /**
  * A route's pill on the map. The selected route: its length ("828 km"). Another: how it differs from

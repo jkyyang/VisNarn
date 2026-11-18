@@ -65,6 +65,7 @@ const route = (to: number, include: Partial<{ regional: boolean; shortLine: bool
     passenger: include.passenger ?? false,
     interchangeKm: 1,
     reverseKm: REVERSE_KM,
+    turnAtStops: false,
   };
   return router.route([nodePoint(graph, A), nodePoint(graph, to)], opt);
 };

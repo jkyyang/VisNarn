@@ -43,7 +43,7 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
       const resolved = setAt.flatMap((at) => (places[at]?.ok ? [places[at].place] : []));
       if (setAt.length < 2 || resolved.length < setAt.length) return { outcome: "incomplete", places };
 
-      const trip: Trip = { points: resolved.map(waypoint), include: plan.include };
+      const trip: Trip = { points: resolved.map(waypoint), include: plan.include, turnAtStops: plan.turnAtStops };
       const routed = await planner.plan(trip, { signal });
       if (!routed.ok) return { outcome: "no-route", places, problem: problemOf(routed.noRoute, trip, setAt) };
       // Every place on one spot: nothing moves, so there is no route to show or save.

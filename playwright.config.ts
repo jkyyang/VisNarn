@@ -8,7 +8,7 @@ import { defineConfig } from "@playwright/test";
  */
 const PORT = Number(process.env.VISNARN_E2E_PORT ?? 8797);
 
-/** A throwaway database, wiped before each start, so every run begins from the EXAMPLE rows only. */
+/** A throwaway database, wiped before each start; the tests add the EXAMPLE shops they start from (./tests/e2e/app.ts). */
 const E2E_DATA_DIR = join(tmpdir(), "visnarn-e2e-data");
 
 export default defineConfig({
@@ -40,7 +40,7 @@ export default defineConfig({
   webServer: {
     // The same command a person runs: build the page, then serve it and the API from one process.
     command: `node -e "require('node:fs').rmSync(process.argv[1], { recursive: true, force: true })" "${E2E_DATA_DIR}" && npm start`,
-    url: `http://127.0.0.1:${PORT}/api/meta`,
+    url: `http://127.0.0.1:${PORT}/api/shops`,
     reuseExistingServer: false,
     timeout: 180_000,
     // SIGTERM lets the server close the database and its routing workers before it exits.

@@ -27,7 +27,6 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
   const searchId = useId();
   const q = query.trim().toLowerCase();
   const shown = q ? props.shops.filter((shop) => shop.name.toLowerCase().includes(q) || (shop.code ?? "").toLowerCase().includes(q)) : props.shops;
-  const examples = props.shops.filter((shop) => shop.example).length;
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
 
   return (
@@ -68,12 +67,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
                       <ShopPin />
                       {shop.name}
                     </span>
-                    {(shop.code || shop.example) && (
-                      <span className="shop-sub">
-                        {shop.code}
-                        {shop.example && <span className="caption">EXAMPLE</span>}
-                      </span>
-                    )}
+                    {shop.code && <span className="shop-sub">{shop.code}</span>}
                   </td>
                   <td>
                     {shop.place.ok ? (
@@ -106,10 +100,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
           </tbody>
         </table>
       </div>
-      <p className="table-foot">
-        {plural(props.shops.length, "shop")}
-        {examples ? ` · ${examples} EXAMPLE` : ""}
-      </p>
+      <p className="table-foot">{plural(props.shops.length, "shop")}</p>
     </section>
   );
 }
@@ -234,7 +225,7 @@ export function ShopForm(props: {
         </div>
         <div className="field">
           <label htmlFor={`${ids}-code`}>Shop code (optional)</label>
-          <input id={`${ids}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. EX-NLR-01" />
+          <input id={`${ids}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. NLR-01" />
         </div>
         <div className="field">
           <label htmlFor={`${ids}-loc`}>Location</label>

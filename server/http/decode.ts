@@ -147,7 +147,11 @@ const trackIncluded: Decoder<TrackIncluded> = (value, path) => ({
 const planDecoder =
   <P extends Plan>(row: Decoder<P["places"][number]>): Decoder<P> =>
   (value, path) =>
-    ({ places: field(value, path, "places", list(row, MAX_STOPS + 2, 2)), include: field(value, path, "include", trackIncluded) }) as P;
+    ({
+      places: field(value, path, "places", list(row, MAX_STOPS + 2, 2)),
+      include: field(value, path, "include", trackIncluded),
+      turnAtStops: field(value, path, "turnAtStops", boolean),
+    }) as P;
 
 const plan = planDecoder<Plan>(nullable(placeRef));
 const fullPlan = planDecoder<FullPlan>(placeRef);

@@ -32,17 +32,17 @@ export function createShops(store: Store, directory: Directory): Shops {
   const withName = (name: string) => store.shops.named(name).find((s) => s.name.toLowerCase() === name.trim().toLowerCase()) ?? null;
 
   /** The shop a draft would become, or why it cannot. Saves nothing. */
-  const prepare = (draft: ShopDraft, id: ShopId, example: boolean): { shop: Shop } | { field: string; message: string } => {
+  const prepare = (draft: ShopDraft, id: ShopId): { shop: Shop } | { field: string; message: string } => {
     const name = draft.name.trim();
     if (!name) return { field: "name", message: "Give the shop a name." };
     const code = draft.code?.trim() || null;
     // A shop's own location is a position: its text is looked up in cities before Your shops.
     const place = directory.resolve(draft.location, "position");
     if (!place.ok) return { field: "location", message: place.problem.message };
-    return { shop: { id, name, code, location: locationOf(place.place), example } };
+    return { shop: { id, name, code, location: locationOf(place.place) } };
   };
 
-  const same = (x: Shop, y: Shop) => JSON.stringify([x.name, x.code, x.location, x.example]) === JSON.stringify([y.name, y.code, y.location, y.example]);
+  const same = (x: Shop, y: Shop) => JSON.stringify([x.name, x.code, x.location]) === JSON.stringify([y.name, y.code, y.location]);
 
   /** Writes only when something changed, so saving the same shop again leaves every check where it was. */
   const put = (shop: Shop, before: Shop | null) => {
@@ -55,8 +55,7 @@ export function createShops(store: Store, directory: Directory): Shops {
     save(draft, id) {
       const before = id ? store.shops.get(id) : null;
       if (id && !before) throw new AppError("not-found", "This shop no longer exists.");
-      // An edited EXAMPLE shop stays labelled EXAMPLE until it is deleted.
-      const ready = prepare(draft, id ?? (randomUUID() as ShopId), before?.example ?? false);
+      const ready = prepare(draft, id ?? (randomUUID() as ShopId));
       if (!("shop" in ready)) throw new AppError("invalid", ready.message, ready.field);
       put(ready.shop, before);
       return view(ready.shop);
@@ -84,7 +83,7 @@ export function createShops(store: Store, directory: Directory): Shops {
 
         const code = draft.code?.trim() || null;
         const before = (code ? withCode(code) : null) ?? withName(draft.name);
-        const ready = prepare(draft, before?.id ?? (randomUUID() as ShopId), before?.example ?? false);
+        const ready = prepare(draft, before?.id ?? (randomUUID() as ShopId));
         if (!("shop" in ready)) return issue(ready.message);
         const holder = code ? withCode(code, ready.shop.id) : null;
         if (holder) return issue(`The shop ${holder.name} already has the code ${code}.`);

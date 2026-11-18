@@ -8,7 +8,7 @@
  * plain JSON by construction, so there is no second set of "wire"
  * types to keep in step with them.
  */
-import type { AppErrorKind, Meta } from "./app.ts";
+import type { AppErrorKind } from "./app.ts";
 import type { LngLat } from "./geo.ts";
 import type {
   ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
@@ -18,8 +18,6 @@ import type { Plan, PlannedRoute, SavedRoute, SavedRouteDraft } from "./plans.ts
 type Endpoint<Res, Body = undefined, Query = undefined> = { res: Res; body: Body; query: Query };
 
 export interface Api {
-  "GET /api/meta": Endpoint<Meta>;
-
   /** Autocomplete for a place input: Your shops and city names that match. */
   "GET /api/places/suggest": Endpoint<PlaceSuggestion[], undefined, { q: string; role: PlaceRole }>;
   /** What one place means on the network: "Found on the network · served by BNSF and UP". */

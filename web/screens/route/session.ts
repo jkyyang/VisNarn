@@ -43,6 +43,7 @@ export type PlanAction =
   | { type: "setLine"; at: number; railroad: Railroad | null }
   /** Which track beyond Class I the route may use. */
   | { type: "setInclude"; include: TrackIncluded }
+  | { type: "setTurnAtStops"; turnAtStops: boolean }
   | { type: "clear" }
   | { type: "reverse" }
   | { type: "pick"; at: number | null }
@@ -52,7 +53,7 @@ export type PlanAction =
   | { type: "undo" }
   | { type: "redo" };
 
-export const EMPTY_PLAN: Plan = { places: [null, null], include: DEFAULT_INCLUDE };
+export const EMPTY_PLAN: Plan = { places: [null, null], include: DEFAULT_INCLUDE, turnAtStops: false };
 
 export function startSession(savedId: SavedRouteId | null, plan: Plan): PlanSession {
   return { savedId, plan: { past: [], present: plan, future: [] }, pick: null, missed: false };
@@ -75,7 +76,7 @@ function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
 const sameInclude = (x: TrackIncluded, y: TrackIncluded) => x.regional === y.regional && x.shortLine === y.shortLine && x.passenger === y.passenger;
 
 export function samePlan(x: Plan, y: Plan): boolean {
-  return x.places.length === y.places.length && x.places.every((place, i) => samePlace(place, y.places[i])) && sameInclude(x.include, y.include);
+  return x.places.length === y.places.length && x.places.every((place, i) => samePlace(place, y.places[i])) && sameInclude(x.include, y.include) && x.turnAtStops === y.turnAtStops;
 }
 
 const isSet = (place: PlaceRef | null): place is PlaceRef => place !== null;
@@ -127,6 +128,8 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
     }
     case "setInclude":
       return push(session, { ...plan, include: action.include });
+    case "setTurnAtStops":
+      return push(session, { ...plan, turnAtStops: action.turnAtStops });
     case "clear":
       return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
     case "reverse":
@@ -228,8 +231,8 @@ export interface PlanSessionHandle {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
   /**
-   * Snap, then place it at nextTarget: to a node of the selected route (its legs' paths) when the click is
-   * on it, else to the nearest node. Ignored while a previous snap is in flight. Rejects when the
+   * Snap, then place it at nextTarget: to a node of `route` (the legs' paths of the line clicked) when
+   * the click is on it, else to the nearest node. Ignored while a previous snap is in flight. Rejects when the
    * server cannot be reached.
    */
   clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<void>;

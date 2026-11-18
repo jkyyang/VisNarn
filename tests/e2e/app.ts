@@ -5,16 +5,29 @@
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test as base, type Locator, type Page } from "@playwright/test";
+import type { ShopView } from "../../shared/places.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
+import { EXAMPLE_SHOPS } from "../fixtures.ts";
 
 export { expect };
 
 /**
  * A screen that threw, or an API answer of 500 or more, fails the test even when the assertions it
  * makes still pass: a person would see a broken screen. A 4xx is the server refusing bad input,
- * which some tests do on purpose.
+ * which some tests do on purpose. Before a worker's first test, the EXAMPLE shops are added to the
+ * app's empty database (any already there are left as they are).
  */
-export const test = base.extend<{ problems: string[] }>({
+export const test = base.extend<{ problems: string[] }, { exampleShops: void }>({
+  exampleShops: [
+    async ({ playwright }, use, worker) => {
+      const api = await playwright.request.newContext({ baseURL: worker.project.use.baseURL });
+      const have = new Set(((await (await api.get("/api/shops")).json()) as ShopView[]).map((shop) => shop.code));
+      for (const shop of EXAMPLE_SHOPS) if (!have.has(shop.code)) expect((await api.post("/api/shops", { data: shop })).ok()).toBe(true);
+      await api.dispose();
+      await use();
+    },
+    { scope: "worker", auto: true },
+  ],
   problems: [
     async ({ page }, use) => {
       const problems: string[] = [];

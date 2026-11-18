@@ -106,7 +106,7 @@ function checkRoutes(dir: string, shops: Shop[]): RouteCheck[] {
       if (shop.fraId !== null && !node) return { route, km: null, problem: `FRA node ${shop.fraId} is gone` };
       const lon = node?.lon ?? shop.lon!, lat = node?.lat ?? shop.lat!;
       const target: Waypoint = { label: shop.name, lon, lat, fraId: node?.fraId ?? null, railroad: null };
-      const result = router.route({ points: [city(origin), target], include: DEFAULT_INCLUDE }, "pick");
+      const result = router.route({ points: [city(origin), target], include: DEFAULT_INCLUDE, turnAtStops: false }, "pick");
       if (!result.ok) return { route, km: null, problem: result.noRoute.message };
       const [endLon, endLat] = result.path.legs.at(-1)!.path.at(-1)!;
       const endKm = haversineKm(endLon, endLat, lon, lat);

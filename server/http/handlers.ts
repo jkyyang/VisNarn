@@ -19,8 +19,6 @@ export interface HandlerContext {
 export type Handlers = { [R in Route]: (request: Request<R>, context: HandlerContext) => Res<R> | Promise<Res<R>> };
 
 export const handlers: Handlers = {
-  "GET /api/meta": (_request, { app }) => app.meta(),
-
   "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, SUGGESTIONS_SHOWN),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
   "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm),

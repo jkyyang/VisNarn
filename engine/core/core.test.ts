@@ -7,7 +7,7 @@ import { cityPoint, loadTestCore, nodePoint } from "./testing.ts";
 
 let graph: RailGraph;
 let router: Router;
-const opt = { allowedMask: ALL_RAILROADS_MASK, passenger: false, interchangeKm: INTERCHANGE_PENALTY_KM, reverseKm: REVERSE_KM };
+const opt = { allowedMask: ALL_RAILROADS_MASK, passenger: false, interchangeKm: INTERCHANGE_PENALTY_KM, reverseKm: REVERSE_KM, turnAtStops: false };
 const only = (...rr: string[]) => ({ ...opt, allowedMask: rr.reduce((m, r) => m | (1 << RAILROADS.indexOf(r as never)), 0) });
 const at = (name: string) => cityPoint(graph, name);
 

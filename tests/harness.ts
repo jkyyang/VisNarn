@@ -7,11 +7,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_NETWORK_DIR } from "../engine/index.ts";
+import type { ShopDraft } from "../shared/places.ts";
 import type { Request, RequestArgs, Res, Route } from "../shared/api.ts";
 import { createApp, type App } from "../server/app.ts";
 import type { Config } from "../server/config.ts";
 import { serve } from "../server/http/serve.ts";
 import { callApi } from "../web/data/query.ts";
+import { EXAMPLE_SHOPS } from "./fixtures.ts";
 
 export interface TestApp {
   /** For arranging state directly and for rendering screens from real answers. */
@@ -27,13 +29,14 @@ export interface TestApp {
 }
 
 /**
- * Starts on an empty data folder, so the EXAMPLE shops are there, or on the
- * `dataDir` of a TestApp closed with `keepData`, to see what survives a restart.
+ * Starts on a new data folder holding `shops` (the EXAMPLE shops unless given), or on the `dataDir`
+ * of a TestApp closed with `keepData`, to see what survives a restart.
  */
-export async function startTestApp(options: { dataDir?: string } = {}): Promise<TestApp> {
+export async function startTestApp(options: { dataDir?: string; shops?: ShopDraft[] } = {}): Promise<TestApp> {
   const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "visnarn-"));
   const config: Config = { port: 0, dataDir, networkDir: DEFAULT_NETWORK_DIR, webDir: null, routeWorkers: 1 };
   const app = await createApp(config);
+  if (!options.dataDir) for (const shop of options.shops ?? EXAMPLE_SHOPS) app.shops.save(shop, null);
   const server = await serve(app, config).catch(async (error: unknown) => {
     await app.close();
     throw error;

@@ -3,7 +3,6 @@ import { routeMatcher, urlFor, type Route } from "./api.ts";
 
 /** Every route of the contract; a route added to `Api` and missing here does not compile. */
 const EVERY_ROUTE: Record<Route, true> = {
-  "GET /api/meta": true,
   "GET /api/places/suggest": true,
   "POST /api/places/resolve": true,
   "GET /api/places/nearest": true,
@@ -57,7 +56,7 @@ describe("urlFor / routeMatcher", () => {
     const match = routeMatcher(ROUTES);
     expect(match("GET", "/api/nothing")).toBeNull();
     expect(match("GET", "/api/shops/EX-1")).toBeNull();
-    expect(match("POST", "/api/meta")).toBeNull();
+    expect(match("PUT", "/api/saved-routes")).toBeNull();
     expect(match("GET", "/api/shops/")).toBeNull();
     expect(match("GET", "/api/saved-routes/r1/x")).toBeNull();
     expect(match("DELETE", "/api/saved-routes/%E0%A4%A")).toBeNull();

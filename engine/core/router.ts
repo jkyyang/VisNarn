@@ -14,7 +14,8 @@
  *   lead does not count. It costs `reverseKm` and is reported in Route.reversals so a person can check it.
  * - Changing line at a node is an interchange: allowed only where both lines have track, costs
  *   `interchangeKm` so the router prefers single-line routes.
- * Because state includes the direction of travel, a route keeps its direction through a via point.
+ * Because state includes the direction of travel, a route keeps its direction through a via point,
+ * unless `turnAtStops` lets it leave a via point either way, as it may leave the start.
  */
 import { LINES, type Line } from "../../shared/railroads.ts";
 import { MAX_INTERCHANGES, MAX_TURN_DEG, PASSENGER_TRACK_COST, SNAP_KM } from "../rules.ts";
@@ -61,6 +62,8 @@ export interface RouteOptions extends Track {
   interchangeKm: number;
   /** Cost of reversing direction in a yard, in km-equivalent. */
   reverseKm: number;
+  /** A via point may be left in either direction: a free reversal there. */
+  turnAtStops: boolean;
 }
 
 export class RouteError extends Error {
@@ -310,9 +313,9 @@ export class Router {
   }
 
   /**
-   * Route through [start, ...vias, end]. Direction and railroad carry over at each via point, so a via
-   * point never becomes a free reversal or interchange; every way of arriving at a via point is kept, so
-   * the next part can pick the arrival the car can actually continue from.
+   * Route through [start, ...vias, end]. Railroad carries over at each via point, so a via point never
+   * becomes a free interchange; direction carries over too unless `turnAtStops`. Every way of arriving at
+   * a via point is kept, so the next part can pick the arrival the car can actually continue from.
    */
   route(points: Point[], opt: RouteOptions): Route {
     if (points.length < 2) throw new RouteError("Need at least two points.");
@@ -341,7 +344,7 @@ export class Router {
       if (last) return this.describe(hits[0].steps);
       frontier = hits.map((h) => {
         const end = h.steps[h.steps.length - 1];
-        return { node: end.node, rr: end.rr, edge: end.edge, heading: h.heading, cost: h.cost, prefix: h.steps };
+        return { node: end.node, rr: end.rr, edge: end.edge, heading: opt.turnAtStops ? null : h.heading, cost: h.cost, prefix: h.steps };
       });
     }
     throw new RouteError("unreachable");

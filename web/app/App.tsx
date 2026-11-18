@@ -5,7 +5,7 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import { useBasemap } from "../data/basemap.ts";
-import { useMeta } from "../data/hooks.ts";
+import { useShops } from "../data/hooks.ts";
 import { MapStage, MapStageProvider } from "../map/MapStage.tsx";
 import { RouteWorkspace } from "../screens/route/RouteWorkspace.tsx";
 import { ShopsScreen } from "../screens/shops/ShopsScreen.tsx";
@@ -16,7 +16,8 @@ import { useScreen, type Screen } from "./routes.ts";
 export default function App(): ReactElement {
   const screen = useScreen();
   const network = useBasemap();
-  const meta = useMeta();
+  // Every screen shows the shops: when they cannot be read, the server cannot be reached.
+  const shops = useShops();
   const panel = useRef<HTMLElement>(null);
   const covered = useCoveredLeft(panel);
 
@@ -25,11 +26,11 @@ export default function App(): ReactElement {
       <MapStageProvider network={network}>
         <div className="app">
           <main className="panel glass" ref={panel}>
-            <AppHeader current={screen.name} exampleOnly={meta.status === "ready" && meta.data.exampleOnly} />
-            {meta.status === "error" && (
+            <AppHeader current={screen.name} />
+            {shops.status === "error" && (
               <div className="alert server-note" role="alert">
-                <span>{meta.error.message}</span>
-                <button type="button" className="btn" onClick={meta.retry}>
+                <span>{shops.error.message}</span>
+                <button type="button" className="btn" onClick={shops.retry}>
                   Try again
                 </button>
               </div>

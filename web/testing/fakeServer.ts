@@ -64,7 +64,6 @@ function resolved(ref: PlaceRef, label: string, at: LngLat, method: ResolvedPlac
       railroad,
       railroads: railroads ?? servedAt(at[0], at[1]),
       match: { method, confidence: fraId !== null ? "exact" : "snapped", snapKm: 0.4 },
-      example: false,
     },
   };
 }
@@ -80,7 +79,7 @@ function resolve(state: FakeState, ref: PlaceRef, role: PlaceRole): PlaceResolut
       if (coords) return resolve(state, { kind: "coord", lon: Number(coords[1]), lat: Number(coords[2]) }, role);
       if (role === "shop") {
         const shop = state.shops.find((s) => s.name.toLowerCase() === text.toLowerCase() || s.code?.toLowerCase() === text.toLowerCase());
-        if (shop && shop.place.ok) return { ok: true, place: { ...shop.place.place, ref, label: shop.name, match: { ...shop.place.place.match, method: "shop" }, example: shop.example } };
+        if (shop && shop.place.ok) return { ok: true, place: { ...shop.place.place, ref, label: shop.name, match: { ...shop.place.place.match, method: "shop" } } };
       }
       const city = cityByName(text);
       if (city) return resolved(ref, city.name, city.at, "city", city.railroads);
@@ -89,7 +88,7 @@ function resolve(state: FakeState, ref: PlaceRef, role: PlaceRole): PlaceResolut
     case "shop": {
       const shop = state.shops.find((s) => s.id === ref.shopId);
       if (!shop) return problem("removed", "This shop was removed from Your shops.");
-      return shop.place.ok ? { ok: true, place: { ...shop.place.place, ref, label: shop.name, match: { ...shop.place.place.match, method: "shop" }, example: shop.example } } : shop.place;
+      return shop.place.ok ? { ok: true, place: { ...shop.place.place, ref, label: shop.name, match: { ...shop.place.place.match, method: "shop" } } } : shop.place;
     }
     case "node": {
       const n = NODES.find((x) => x.fraId === ref.fraId);
@@ -198,11 +197,11 @@ function parseCsv(text: string): string[][] {
     .map((line) => [...line.matchAll(/\s*(?:"((?:[^"]|"")*)"|([^,]*))\s*(?:,|$)/g)].slice(0, -1).map((m) => (m[1] !== undefined ? m[1].replaceAll('""', '"') : (m[2] ?? "").trim())));
 }
 
-function shopView(state: FakeState, id: string, draft: ShopDraft, example: boolean): ShopView | { error: string } {
+function shopView(state: FakeState, id: string, draft: ShopDraft): ShopView | { error: string } {
   const place = resolve(state, draft.location, "shop");
   if (!place.ok) return { error: place.problem.message };
   const location = place.place.fraId !== null ? { fraId: place.place.fraId, railroad: place.place.railroad } : { lon: place.place.lon, lat: place.place.lat };
-  return { id: id as ShopId, name: draft.name, code: draft.code, location, example, place: { ok: true, place: { ...place.place, label: draft.name, match: { ...place.place.match, method: "shop" } } } };
+  return { id: id as ShopId, name: draft.name, code: draft.code, location, place: { ok: true, place: { ...place.place, label: draft.name, match: { ...place.place.match, method: "shop" } } } };
 }
 
 function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
@@ -214,7 +213,7 @@ function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
     const name = cells[h("name")] ?? "";
     const code = h("code") >= 0 ? (cells[h("code")] ?? "") : "";
     const location: PlaceRef = { kind: "coord", lon: Number(cells[h("lon")]), lat: Number(cells[h("lat")]) };
-    const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location }, false);
+    const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location });
     if ("error" in view) issues.push({ row, line: row + 2, message: view.error });
     else ready.push(view);
   });
@@ -241,7 +240,7 @@ export function createFakeState(options: { seed?: "example" | "empty" } = {}): F
   const state: FakeState = { shops: [], savedRoutes: [], lastPlan: null, down: false, nextId: 1 };
   if (options.seed === "empty") return state;
   for (const [i, shop] of EXAMPLE_SHOPS.entries()) {
-    const view = shopView(state, `shop-ex-${i + 1}`, { name: shop.name, code: shop.code, location: { kind: "coord", lon: shop.at[0], lat: shop.at[1] } }, true);
+    const view = shopView(state, `shop-ex-${i + 1}`, { name: shop.name, code: shop.code, location: { kind: "coord", lon: shop.at[0], lat: shop.at[1] } });
     if (!("error" in view)) state.shops.push(view);
   }
   return state;
@@ -256,11 +255,6 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
   const parts = path.split("/").filter(Boolean).map(decodeURIComponent);
   const route = `${method} ${path}`;
   const anyBody = body as Record<string, unknown>;
-
-  if (route === "GET /api/meta") {
-    const exampleOnly = state.shops.length > 0 && state.shops.every((s) => s.example) && state.savedRoutes.length === 0;
-    return { exampleOnly };
-  }
 
   if (route === "GET /api/places/suggest") return suggest(state, q.get("q") ?? "", (q.get("role") ?? "position") as PlaceRole);
   if (route === "POST /api/places/resolve") return resolve(state, anyBody.ref as PlaceRef, anyBody.role as PlaceRole);
@@ -282,7 +276,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     if (method === "PUT" && !existing) throw new HttpError(404, "not-found", "This shop no longer exists.");
     const holder = draft.code ? state.shops.find((s) => s.code === draft.code && s.id !== id) : undefined;
     if (holder) throw new HttpError(409, "conflict", `The shop "${holder.name}" already has the code ${draft.code}. Give each shop its own code.`, "code");
-    const view = shopView(state, id, draft, false);
+    const view = shopView(state, id, draft);
     if ("error" in view) throw new HttpError(400, "invalid", view.error, "location");
     state.shops = existing ? state.shops.map((s) => (s.id === id ? view : s)) : [...state.shops, view];
     return view;

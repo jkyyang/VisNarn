@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The screens, rendered from real answers of the real back end: the page's own App, in jsdom,
- * talking over HTTP to `node server/main.ts` started on a temp data folder and a free port. Only the
+ * talking over HTTP to `node server/main.ts` started on a temp data folder (with the EXAMPLE shops) and a free port. Only the
  * map canvas is replaced, because jsdom has no WebGL. The assertions hold for any network build: they
  * check what every answer must look like on screen.
  */
@@ -17,6 +17,7 @@ import type { RequestArgs, Res, Route } from "../shared/api.ts";
 import { RAILROADS } from "../shared/railroads.ts";
 import { callApi, clearQueryCache } from "../web/data/query.ts";
 import { openPage } from "../web/testing/page.tsx";
+import { EXAMPLE_SHOPS } from "./fixtures.ts";
 
 vi.mock("../web/map/MapCanvas.tsx", () => import("../web/testing/FakeMapCanvas.tsx"));
 // Real routing in worker threads: a long continental route can take a few seconds the first time.
@@ -66,6 +67,7 @@ beforeAll(async () => {
   const started = await startServer(dataDir);
   origin = started.url;
   server = started.child;
+  for (const shop of EXAMPLE_SHOPS) await api("POST /api/shops", { body: shop });
   // The page asks for "/api/…" on its own origin; here that origin is the test server. jsdom's
   // AbortSignal is not one Node's fetch accepts, so a superseded read finishes unheard.
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {

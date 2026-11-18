@@ -32,9 +32,9 @@ describe("Shops screen", () => {
     expect(await screen.findByRole("heading", { name: "Your shops" })).toBeInTheDocument();
     expect(await screen.findByText("EX-NLR-01")).toBeInTheDocument();
     const nlr = screen.getByText("EX-NLR-01").closest("tr")!;
-    expect(nlr).toHaveTextContent("North Little Rock, AREX-NLR-01EXAMPLE");
+    expect(nlr).toHaveTextContent("North Little Rock, AREX-NLR-01");
     expect(nlr).toHaveTextContent("BNSF, UP");
-    expect(screen.getByText("6 shops · 6 EXAMPLE")).toBeInTheDocument();
+    expect(screen.getByText("6 shops")).toBeInTheDocument();
     expect(screen.getByText("Map: 6 shops")).toBeInTheDocument();
   });
 

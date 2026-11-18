@@ -87,8 +87,8 @@ describe("query cache", () => {
   it("an error keeps a retry that asks again", async () => {
     const { calls, transport } = fakeTransport();
     const cache = createQueryCache(transport);
-    const key = cache.keyOf("GET /api/meta", undefined);
-    const stop = cache.subscribe("GET /api/meta", undefined, () => {});
+    const key = cache.keyOf("GET /api/shops", undefined);
+    const stop = cache.subscribe("GET /api/shops", undefined, () => {});
     calls[0].reject(new AppError("internal", "down"));
     await flush();
     const state = cache.state(key);
@@ -115,7 +115,7 @@ describe("callApi", () => {
     globalThis.fetch = (async () => {
       throw new TypeError("fetch failed");
     }) as typeof fetch;
-    await expect(callApi("", "GET /api/meta", {})).rejects.toMatchObject({ kind: "internal" });
+    await expect(callApi("", "GET /api/shops", {})).rejects.toMatchObject({ kind: "internal" });
   });
 
   it("sends the route's method, path, query and JSON body", async () => {
@@ -125,7 +125,7 @@ describe("callApi", () => {
       return new Response("null", { status: 200 });
     }) as typeof fetch;
     await callApi("http://127.0.0.1:1", "GET /api/places/suggest", { query: { q: "Tem ple", role: "shop" } });
-    const draft: SavedRouteDraft = { name: "EXAMPLE", plan: { places: [{ kind: "text", text: "a" }, { kind: "text", text: "b" }], include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
+    const draft: SavedRouteDraft = { name: "EXAMPLE", plan: { places: [{ kind: "text", text: "a" }, { kind: "text", text: "b" }], include: DEFAULT_INCLUDE, turnAtStops: false }, option: null, routeString: "BNSF" };
     await callApi("", "PUT /api/saved-routes/:routeId", { params: { routeId: "r/1" }, body: draft });
     expect(seen[0].url).toBe("http://127.0.0.1:1/api/places/suggest?q=Tem+ple&role=shop");
     expect(seen[1].url).toBe("/api/saved-routes/r%2F1");

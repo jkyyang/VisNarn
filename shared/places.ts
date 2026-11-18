@@ -50,8 +50,6 @@ export interface ResolvedPlace extends Waypoint {
   /** Railroads with track here: "served by BNSF and UP". Found from the network, never typed. */
   railroads: Railroad[];
   match: PlaceMatch;
-  /** One of Your shops marked EXAMPLE: a made-up location, to be named as such wherever it shows. */
-  example: boolean;
 }
 
 export interface PlaceSuggestion {
@@ -112,11 +110,9 @@ export function locationOf(place: ResolvedPlace): NodeLocation {
 export interface Shop {
   id: ShopId;
   name: string;
-  /** The user's own code for it, e.g. "EX-NLR-01". A typed place may name the shop by this or by name. */
+  /** The user's own code for it, e.g. "NLR-01". A typed place may name the shop by this or by name. */
   code: string | null;
   location: NodeLocation;
-  /** True for the seeded EXAMPLE rows. */
-  example: boolean;
 }
 
 /**

@@ -7,6 +7,7 @@ import type { ShopId } from "../../../shared/places.ts";
 import type { SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
 import { clearQueryCache } from "../../data/query.ts";
+import { setNextMapClick } from "../../testing/FakeMapCanvas.tsx";
 import { installFakeServer, type FakeServer } from "../../testing/fakeServer.ts";
 import { currentPath, openPage } from "../../testing/page.tsx";
 
@@ -18,6 +19,7 @@ beforeEach(() => {
   fake = installFakeServer();
 });
 afterEach(() => {
+  setNextMapClick();
   fake.restore();
   clearQueryCache();
   localStorage.clear();
@@ -46,7 +48,7 @@ describe("Route planner", () => {
     fake.state.savedRoutes.push({
       id: "route-9" as SavedRouteId,
       name: "EXAMPLE Omaha → North Platte",
-      plan: { places: [{ kind: "text", text: "Omaha, NE" }, { kind: "text", text: "North Platte, NE" }], include: DEFAULT_INCLUDE },
+      plan: { places: [{ kind: "text", text: "Omaha, NE" }, { kind: "text", text: "North Platte, NE" }], include: DEFAULT_INCLUDE, turnAtStops: false },
       option: null,
       routeString: "",
     });
@@ -61,7 +63,6 @@ describe("Route planner", () => {
   it("a typed start and a chosen destination give the routes at once; the legend lists only the selected route's railroads", async () => {
     const user = userEvent.setup();
     openPage("/route");
-    expect(await screen.findByText("EXAMPLE DATA")).toBeInTheDocument();
     await user.type(field("Start"), "Temple, TX{Enter}");
     expect(hint()).toHaveTextContent("Click the map to set the destination.");
     await user.type(field("Destination"), "north little");
@@ -78,7 +79,7 @@ describe("Route planner", () => {
     expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
-    expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE });
+    expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE, turnAtStops: false });
   });
 
   it("a click on the map adds a stop; Undo takes it away and Redo brings it back", async () => {
@@ -147,12 +148,13 @@ describe("Route planner", () => {
   it("Class I is always on; ticking Short lines plans again with short lines included, and Undo unticks it", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
-    const track = screen.getByRole("group", { name: "Track" });
+    const track = screen.getByRole("group", { name: "Route options" });
     expect(within(track).getAllByRole("checkbox").map((box) => [box.parentElement?.textContent, (box as HTMLInputElement).checked])).toEqual([
       ["Class I", true],
       ["Regional", false],
       ["Short lines", false],
       ["Passenger", true],
+      ["Turn at stops", false],
     ]);
     expect(within(track).getByRole("checkbox", { name: "Class I" })).toBeDisabled();
 
@@ -161,6 +163,17 @@ describe("Route planner", () => {
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
     expect(within(track).getByRole("checkbox", { name: "Short lines" })).not.toBeChecked();
+  });
+
+  it("Turn at stops plans again with turning at stops, and Undo unticks it", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    const turn = within(screen.getByRole("group", { name: "Route options" })).getByRole("checkbox", { name: "Turn at stops" });
+    expect(turn.parentElement).toHaveAttribute("title", "Turn at stops: the route may leave a stop in either direction");
+    await user.click(turn);
+    await waitFor(() => expect(fake.state.lastPlan?.turnAtStops).toBe(true));
+    await user.click(screen.getByRole("button", { name: "Undo route change" }));
+    expect(turn).not.toBeChecked();
   });
 
   it("Distances in the layers card shows every distance in miles, and back in km; this browser keeps the choice", async () => {
@@ -190,7 +203,7 @@ describe("Route planner", () => {
     expect(screen.queryByRole("radiogroup", { name: "Distances" })).not.toBeInTheDocument();
   });
 
-  it("a pill or a grey route on the map selects that route: the URL and the pressed row follow", async () => {
+  it("a pill on the map selects that route: the URL and the pressed row follow", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     expect(screen.getByRole("button", { name: "Route 1,046 km, selected" })).toHaveAttribute("aria-pressed", "true");
@@ -199,9 +212,20 @@ describe("Route planner", () => {
     expect(routeRows()[1]).toHaveAttribute("aria-pressed", "true");
     expect(legend()).toEqual(["BNSF", "UP"]);
 
-    await user.click(screen.getByRole("button", { name: "Grey route pick" }));
+    await user.click(screen.getByRole("button", { name: /^Route \+207 km/ }));
     expect(currentPath()).toBe("/route?option=pick");
     expect(routeRows()[0]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("a click on a grey route adds a stop at that line's nearest node and keeps the selected route", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    // On the grey route's track 17 km north of Waco: too far for a click on the map to snap to any node.
+    setNextMapClick(-97.1615, 31.7);
+    await user.click(screen.getByRole("button", { name: "Grey route shortest" }));
+    await waitFor(() => expect(stopRows()).toHaveLength(1));
+    expect(within(stopRows()[0]).getByRole("combobox")).toHaveValue("Waco, TX");
+    expect(currentPath()).toBe("/route");
   });
 
   it("a turn-back shows as ↩ on its row and an amber mark with two lines on hover; a stop that removes it removes both", async () => {
@@ -243,7 +267,7 @@ describe("Route planner", () => {
     fake.state.savedRoutes.push({
       id: "route-9" as SavedRouteId,
       name: "EXAMPLE Kansas City → gone shop",
-      plan: { places: [{ kind: "shop", shopId: "shop-ex-2" as ShopId }, { kind: "shop", shopId: "shop-gone" as ShopId }], include: DEFAULT_INCLUDE },
+      plan: { places: [{ kind: "shop", shopId: "shop-ex-2" as ShopId }, { kind: "shop", shopId: "shop-gone" as ShopId }], include: DEFAULT_INCLUDE, turnAtStops: false },
       option: null,
       routeString: "",
     });
@@ -263,7 +287,6 @@ describe("Route planner", () => {
     await waitFor(() => expect(currentPath()).toBe("/route/saved/route-1"));
     expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
     expect(screen.getByRole("link", { name: "Temple → North Little Rock" })).toHaveAttribute("aria-current", "page");
-    expect(screen.queryByText("EXAMPLE DATA")).not.toBeInTheDocument();
 
     // A change to the plan makes it worth saving again.
     await user.click(screen.getByRole("button", { name: "Click the map" }));

@@ -116,7 +116,7 @@ test.describe("Route planner", () => {
 
   test("ticking Short lines reaches the Ville Platte shop", async ({ page }) => {
     await page.goto("/route");
-    const shortLines = page.getByRole("group", { name: "Track" }).getByRole("checkbox", { name: "Short lines" });
+    const shortLines = page.getByRole("group", { name: "Route options" }).getByRole("checkbox", { name: "Short lines" });
     await expect(shortLines).not.toBeChecked();
     // The map draws the network's short-line track only while the box is ticked.
     const network = page.locator(".map-canvas");
@@ -154,7 +154,7 @@ test.describe("Route planner", () => {
 
   test("hovering a turn-back mark shows where and how the route turns", async ({ page, request }) => {
     // Taylor → Temple (the city) → North Little Rock: the router's own route turns back in Temple yard.
-    const plan: Plan = { places: ["Taylor, TX", "Temple, TX", "North Little Rock, AR"].map((text) => ({ kind: "text", text })), include: DEFAULT_INCLUDE };
+    const plan: Plan = { places: ["Taylor, TX", "Temple, TX", "North Little Rock, AR"].map((text) => ({ kind: "text", text })), include: DEFAULT_INCLUDE, turnAtStops: false };
     const answer = (await (await request.post("/api/route", { data: plan })).json()) as PlannedRoute;
     test.skip(answer.outcome !== "routed" || !answer.routes[0].turnBacks.length, "This network build has no turn-back on that route; web/screens/route/RouteScreen.test.tsx covers the mark.");
     const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null, routeString: "" } })).json()) as { id: string };

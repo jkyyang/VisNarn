@@ -27,17 +27,61 @@ const shop = (over: Partial<Shop> = {}): Shop => ({
   name: "North Little Rock, AR",
   code: "EX-NLR-01",
   location: { lon: -92.27, lat: 34.77 },
-  example: true,
   ...over,
 });
 const route = (id: string, name: string, over: Partial<SavedRoute> = {}): SavedRoute => ({
   id: id as SavedRouteId,
   name,
-  plan: { places: [{ kind: "text", text: "Kansas City, MO" }, { kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }, { kind: "shop", shopId: "s1" as ShopId }], include: DEFAULT_INCLUDE },
+  plan: { places: [{ kind: "text", text: "Kansas City, MO" }, { kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }, { kind: "shop", shopId: "s1" as ShopId }], include: DEFAULT_INCLUDE, turnAtStops: false },
   option: null,
   routeString: "BNSF-[Temple, TX]-UP",
   ...over,
 });
+
+/**
+ * A database file as an older copy of the app left it at schema `version` (1 to 4): one shop with the
+ * EXAMPLE flag set, and before schema 4 the car tables with rows.
+ */
+function olderFile(version: number, shape: (raw: { exec(sql: string): void }) => void): string {
+  const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
+  folders.push(dir);
+  const file = join(dir, "visnarn.db");
+  const current = openStore(file);
+  current.shops.save(shop());
+  current.close();
+  const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+  const raw = new DatabaseSync(file);
+  raw.exec(`ALTER TABLE shops ADD COLUMN example INTEGER NOT NULL DEFAULT 0;
+    UPDATE shops SET example = 1;
+    UPDATE meta SET value = '${version}' WHERE key = 'schema_version';`);
+  if (version < 4) {
+    raw.exec(`PRAGMA foreign_keys = ON;
+    CREATE TABLE settings (key TEXT PRIMARY KEY, json TEXT NOT NULL);
+    CREATE TABLE code_sets (code_type TEXT PRIMARY KEY, label TEXT NOT NULL, imported_at TEXT NOT NULL);
+    CREATE TABLE node_codes (code_type TEXT NOT NULL REFERENCES code_sets (code_type) ON DELETE CASCADE, code TEXT NOT NULL, PRIMARY KEY (code_type, code));
+    CREATE TABLE batches (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+    CREATE TABLE batch_rows (batch_id TEXT NOT NULL REFERENCES batches (id) ON DELETE CASCADE, row INTEGER NOT NULL, PRIMARY KEY (batch_id, row));
+    CREATE TABLE route_fixes (id INTEGER PRIMARY KEY, batch_id TEXT NOT NULL REFERENCES batches (id) ON DELETE CASCADE, row INTEGER NOT NULL);
+    INSERT INTO settings VALUES ('import_profile', '{}');
+    INSERT INTO code_sets VALUES ('SPLC', 'SPLC', 't');
+    INSERT INTO node_codes VALUES ('SPLC', '123');
+    INSERT INTO batches VALUES ('b1', 'EXAMPLE');
+    INSERT INTO batch_rows VALUES ('b1', 1);
+    INSERT INTO route_fixes (batch_id, row) VALUES ('b1', 1);`);
+  }
+  shape(raw);
+  raw.close();
+  return file;
+}
+
+/** The file is at the newest schema and holds no table but meta, shops and saved routes. */
+function expectCurrentSchema(file: string): void {
+  const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+  const check = new DatabaseSync(file);
+  expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "5" });
+  expect(check.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all()).toEqual([{ name: "meta" }, { name: "saved_routes" }, { name: "shops" }]);
+  check.close();
+}
 
 describe("Store", () => {
   it("creates the schema on an empty file and is a no-op on a current one", () => {
@@ -45,7 +89,6 @@ describe("Store", () => {
     folders.push(dir);
     const file = join(dir, "visnarn.db");
     const first = openStore(file);
-    expect(first.fresh).toBe(true);
     first.shops.save(shop());
     first.close();
     // Company data: readable by this user only.
@@ -53,21 +96,24 @@ describe("Store", () => {
 
     const again = openStore(file);
     open.push(again);
-    expect(again.fresh).toBe(false);
     expect(again.shops.all()).toEqual([shop()]);
+    again.close();
+    expectCurrentSchema(file);
   });
 
   it("round-trips a shop and a saved route", () => {
     const store = memory();
     store.shops.save(shop());
-    store.shops.save(shop({ id: "s2" as ShopId, name: "Kansas City, MO", code: null, location: { fraId: 358070 as FraId, railroad: "UP" }, example: false }));
+    store.shops.save(shop({ id: "s2" as ShopId, name: "Kansas City, MO", code: null, location: { fraId: 358070 as FraId, railroad: "UP" } }));
     expect(store.shops.get("s1" as ShopId)).toEqual(shop());
     expect(store.shops.all().map((s) => s.name)).toEqual(["Kansas City, MO", "North Little Rock, AR"]);
     expect(store.shops.named("ex-nlr-01")).toEqual([shop()]);
     expect(store.shops.named("  kansas city, mo ")).toHaveLength(1);
 
-    store.savedRoutes.save(route("r1", "KC → Chicago", { option: "shortest" }));
-    expect(store.savedRoutes.get("r1" as SavedRouteId)).toEqual(route("r1", "KC → Chicago", { option: "shortest" }));
+    const turning = route("r1", "KC → Chicago", { option: "shortest" });
+    turning.plan.turnAtStops = true;
+    store.savedRoutes.save(turning);
+    expect(store.savedRoutes.get("r1" as SavedRouteId)).toEqual(turning);
     expect(store.savedRoutes.get("nope" as SavedRouteId)).toBeNull();
   });
 
@@ -89,50 +135,56 @@ describe("Store", () => {
     expect(store.savedRoutes.all().map((r) => r.id)).toEqual(["r2", "r1"]);
   });
 
-  it("opens a schema 1 file: adds the saved routes table, keeps the shops and leaves the old car tables as they were", () => {
-    const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
-    folders.push(dir);
-    const file = join(dir, "visnarn.db");
-    const current = openStore(file);
-    current.shops.save(shop());
-    current.close();
-    // Back to schema 1 as an older copy of the app wrote it, with a batch in its car tables.
-    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
-    const raw = new DatabaseSync(file);
-    raw.exec(`DROP TABLE saved_routes;
-      UPDATE meta SET value = '1' WHERE key = 'schema_version';
-      INSERT INTO batches (id, name, as_of, created_at, source_json, issues_json, example, content_hash) VALUES ('b1', 'EXAMPLE', 't', 't', '{}', '[]', 1, 'h1');
-      INSERT INTO settings (key, json) VALUES ('import_profile', '{}');`);
-    raw.close();
-
+  it("opens a schema 1 file: adds the saved routes table, keeps the shops and drops the old car tables", () => {
+    const file = olderFile(1, (raw) => raw.exec("DROP TABLE saved_routes;"));
     const migrated = openStore(file);
     open.push(migrated);
     expect(migrated.shops.all()).toEqual([shop()]);
     migrated.savedRoutes.save(route("r1", "KC → Chicago"));
     expect(migrated.savedRoutes.all()).toHaveLength(1);
-    const check = new DatabaseSync(file);
-    expect(check.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get()).toEqual({ value: "3" });
-    expect(check.prepare("SELECT id FROM batches").all()).toEqual([{ id: "b1" }]);
-    expect(check.prepare("SELECT key FROM settings WHERE key = 'import_profile'").get()).toEqual({ key: "import_profile" });
-    check.close();
+    expectCurrentSchema(file);
   });
 
-  it("opens a schema 2 file: a route saved before route strings, the places list and track choice reads in today's shape", () => {
-    const dir = mkdtempSync(join(tmpdir(), "visnarn-store-"));
-    folders.push(dir);
-    const file = join(dir, "visnarn.db");
-    openStore(file).close();
-    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
-    const raw = new DatabaseSync(file);
-    const { places } = route("r1", "x").plan;
-    raw.exec(`ALTER TABLE saved_routes DROP COLUMN route_string;
-      UPDATE meta SET value = '2' WHERE key = 'schema_version';
-      INSERT INTO saved_routes (id, name, plan_json, option) VALUES ('r1', 'KC → Chicago', '${JSON.stringify({ start: places[0], stops: [places[1]], destination: places[2] })}', NULL);`);
-    raw.close();
+  it("opens a schema 3 file: drops the old car tables in one step, shops and saved routes stay", () => {
+    const file = olderFile(3, (raw) =>
+      raw.exec(`INSERT INTO saved_routes (id, name, plan_json, option, route_string) VALUES ('r1', 'KC → Chicago', '${JSON.stringify(route("r1", "x").plan)}', NULL, 'BNSF-[Temple, TX]-UP');`),
+    );
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.shops.all()).toEqual([shop()]);
+    expect(migrated.savedRoutes.all()).toEqual([route("r1", "KC → Chicago")]);
+    expectCurrentSchema(file);
+    // A second start finds nothing left to do.
+    migrated.close();
+    const again = openStore(file);
+    open.push(again);
+    expect(again.savedRoutes.all()).toHaveLength(1);
+  });
 
+  it("opens a schema 2 file: a route saved before route strings, the places list, track choice and turning at stops reads in today's shape", () => {
+    const { places } = route("r1", "x").plan;
+    const file = olderFile(2, (raw) =>
+      raw.exec(`ALTER TABLE saved_routes DROP COLUMN route_string;
+        INSERT INTO saved_routes (id, name, plan_json, option) VALUES ('r1', 'KC → Chicago', '${JSON.stringify({ start: places[0], stops: [places[1]], destination: places[2] })}', NULL);`),
+    );
     const migrated = openStore(file);
     open.push(migrated);
     expect(migrated.savedRoutes.get("r1" as SavedRouteId)).toEqual(route("r1", "KC → Chicago", { routeString: "" }));
+  });
+
+  it("opens a schema 4 file: drops the EXAMPLE flag, shops and saved routes stay", () => {
+    const file = olderFile(4, (raw) =>
+      raw.exec(`INSERT INTO saved_routes (id, name, plan_json, option, route_string) VALUES ('r1', 'KC → Chicago', '${JSON.stringify(route("r1", "x").plan)}', NULL, 'BNSF-[Temple, TX]-UP');`),
+    );
+    const migrated = openStore(file);
+    open.push(migrated);
+    expect(migrated.shops.all()).toEqual([shop()]);
+    expect(migrated.savedRoutes.all()).toEqual([route("r1", "KC → Chicago")]);
+    expectCurrentSchema(file);
+    const { DatabaseSync } = process.getBuiltinModule("node:sqlite");
+    const check = new DatabaseSync(file);
+    expect((check.prepare("PRAGMA table_info(shops)").all() as { name: string }[]).map((column) => column.name)).toEqual(["id", "name", "code", "location_json", "updated_at"]);
+    check.close();
   });
 
   it("revision goes up on every write and on no read", () => {

@@ -89,7 +89,7 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
           item={(suggestion) => (
             <>
               <span>{suggestion.label}</span>
-              {/* "City", "Your shop · EXAMPLE · EX-KCY-01", "FRA node 358070", then the railroads there. */}
+              {/* "City", "Your shop · EX-KCY-01", "FRA node 358070", then the railroads there. */}
               <span className="search-line muted small">
                 <span>{suggestion.detail}</span>
                 <Railroads place={suggestion} />

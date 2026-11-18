@@ -24,7 +24,7 @@ const stopIds = (s: PlanSession) => ids(s).slice(1, -1);
 describe("plan session", () => {
   it("starts with two empty rows and no history", () => {
     const s = fresh();
-    expect(s.plan.present).toEqual({ places: [null, null], include: { regional: false, shortLine: false, passenger: true } });
+    expect(s.plan.present).toEqual({ places: [null, null], include: { regional: false, shortLine: false, passenger: true }, turnAtStops: false });
     expect(s.plan.past).toEqual([]);
     expect(s.pick).toBeNull();
   });
@@ -117,6 +117,16 @@ describe("plan session", () => {
     expect(samePlan(ticked.plan.present, planned().plan.present)).toBe(false);
     expect(planReducer(ticked, { type: "undo" }).plan.present.include).toEqual(DEFAULT_INCLUDE);
     expect(planReducer(ticked, { type: "setInclude", include: { ...ticked.plan.present.include } })).toBe(ticked);
+  });
+
+  it("turning at stops is one undoable change of plan, off to start with", () => {
+    expect(planned().plan.present.turnAtStops).toBe(false);
+    const on = planReducer(planned(), { type: "setTurnAtStops", turnAtStops: true });
+    expect(on.plan.present.turnAtStops).toBe(true);
+    expect(samePlan(on.plan.present, planned().plan.present)).toBe(false);
+    expect(fullPlan(on.plan.present)?.turnAtStops).toBe(true);
+    expect(planReducer(on, { type: "undo" }).plan.present.turnAtStops).toBe(false);
+    expect(planReducer(on, { type: "setTurnAtStops", turnAtStops: true })).toBe(on);
   });
 
   it("saves the set rows only, and needs two of them", () => {

@@ -24,6 +24,7 @@ import { createPortal } from "react-dom";
 import type { LngLat } from "../../shared/geo.ts";
 import type { ResolvedPlace } from "../../shared/places.ts";
 import type { TrackIncluded } from "../../shared/railroads.ts";
+import type { RouteStrategy } from "../../shared/route.ts";
 import { canDrawMaps, type Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { NETWORK_CENTRE } from "./config.ts";
@@ -39,8 +40,8 @@ export interface MapContentProps {
   focus: MapFocus;
   /** The track the plan may use: the network shows the same classes. No plan: DEFAULT_INCLUDE. */
   include?: TrackIncluded;
-  /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here. */
-  onPick?: (lon: number, lat: number, toleranceKm: number) => void;
+  /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here, with the grey route it landed on. */
+  onPick?: (lon: number, lat: number, toleranceKm: number, line: RouteStrategy | null) => void;
   onSelect?: (target: SceneTarget) => void;
   /** Undo / redo of route changes, shown with the map controls when given. */
   history?: { undo: (() => void) | null; redo: (() => void) | null };

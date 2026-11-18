@@ -15,8 +15,8 @@ import { startTestApp, type TestApp } from "./harness.ts";
 vi.setConfig({ testTimeout: 90_000, hookTimeout: 90_000 });
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ places: [start, ...stops, destination], include: DEFAULT_INCLUDE });
-const TAYLOR_TO_NLR: FullPlan = { places: [text("Taylor, TX"), text("EX-NLR-01")], include: DEFAULT_INCLUDE };
+const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: PlaceRef[] = []): Plan => ({ places: [start, ...stops, destination], include: DEFAULT_INCLUDE, turnAtStops: false });
+const TAYLOR_TO_NLR: FullPlan = { places: [text("Taylor, TX"), text("EX-NLR-01")], include: DEFAULT_INCLUDE, turnAtStops: false };
 /** The Temple wye, where BNSF and UP meet. */
 const WYE = 358070 as FraId;
 
@@ -52,9 +52,9 @@ describe("server", () => {
   it("listens on 127.0.0.1 only, and refuses a request whose Host is not loopback", async () => {
     const { port, hostname } = new URL(t.url);
     expect(hostname).toBe("127.0.0.1");
-    expect((await raw(Number(port), "/api/meta", `127.0.0.1:${port}`)).status).toBe(200);
+    expect((await raw(Number(port), "/api/shops", `127.0.0.1:${port}`)).status).toBe(200);
     for (const host of ["evil.example", `evil.example:${port}`, `192.168.1.20:${port}`]) {
-      const answer = await raw(Number(port), "/api/meta", host);
+      const answer = await raw(Number(port), "/api/shops", host);
       expect(answer.status, host).toBe(403);
       expect(JSON.parse(answer.body).error.kind).toBe("invalid");
     }
@@ -79,7 +79,7 @@ describe("server", () => {
     const malformed = await fetch(`${t.url}/api/route`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ places: [{ kind: "lookup" }, null], include: DEFAULT_INCLUDE }),
+      body: JSON.stringify({ places: [{ kind: "lookup" }, null], include: DEFAULT_INCLUDE, turnAtStops: false }),
     });
     expect(malformed.status).toBe(400);
     expect((await malformed.json()).error).toMatchObject({ kind: "invalid", field: "places[0].kind" });
@@ -97,10 +97,9 @@ describe("server", () => {
     try {
       let shopId = "" as ShopId;
       let routeId = "" as SavedRouteId;
-      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { places: [text("Taylor, TX"), text("Waco, TX")], include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" };
+      const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { places: [text("Taylor, TX"), text("Waco, TX")], include: DEFAULT_INCLUDE, turnAtStops: false }, option: null, routeString: "BNSF" };
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
-        "GET /api/meta": () => s.api("GET /api/meta"),
         "GET /api/places/suggest": () => s.api("GET /api/places/suggest", { query: { q: "temple", role: "position" } }),
         "POST /api/places/resolve": () => s.api("POST /api/places/resolve", { body: { ref: text("Temple, TX"), role: "position" } }),
         "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } }),
@@ -133,25 +132,11 @@ describe("server", () => {
     }
   });
 
-  it("knows it holds EXAMPLE data only until the user adds their own: a shop, or a saved route", async () => {
-    const s = await startTestApp();
+  it("a new database holds no shops and no saved routes: the app adds nothing of its own", async () => {
+    const s = await startTestApp({ shops: [] });
     try {
-      const meta = await s.api("GET /api/meta");
-      expect(meta).toEqual({ exampleOnly: true });
-      const shops = await s.api("GET /api/shops");
-      expect(shops.map((shop) => [shop.code, shop.example])).toEqual(
-        expect.arrayContaining([
-          ["EX-NLR-01", true],
-          ["EX-KCY-01", true],
-        ]),
-      );
+      expect(await s.api("GET /api/shops")).toEqual([]);
       expect(await s.api("GET /api/saved-routes")).toEqual([]);
-      const saved = await s.api("POST /api/saved-routes", { body: { name: "Taylor → NLR", plan: TAYLOR_TO_NLR, option: null, routeString: "" } });
-      expect((await s.api("GET /api/meta")).exampleOnly).toBe(false);
-      await s.api("DELETE /api/saved-routes/:routeId", { params: { routeId: saved.id } });
-      expect((await s.api("GET /api/meta")).exampleOnly).toBe(true);
-      await s.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL", location: text("Temple, TX") } });
-      expect((await s.api("GET /api/meta")).exampleOnly).toBe(false);
     } finally {
       await s.close();
     }
@@ -169,7 +154,7 @@ describe("Route screen: plan a route", () => {
   it("routes the EXAMPLE plan the same way twice, the router's own route first", async () => {
     const first = routed(await t.api("POST /api/route", { body: TAYLOR_TO_NLR }));
     expect(first.routes[0].strategies[0]).toBe("pick");
-    expect(first.places[1]).toMatchObject({ ok: true, place: { label: "North Little Rock, AR", match: { method: "shop" }, example: true } });
+    expect(first.places[1]).toMatchObject({ ok: true, place: { label: "North Little Rock, AR", match: { method: "shop" } } });
     expect(await t.api("POST /api/route", { body: TAYLOR_TO_NLR })).toEqual(first);
   });
 
@@ -191,7 +176,7 @@ describe("Route screen: plan a route", () => {
 
   it("GET /api/places/suggest, POST /api/places/resolve and GET /api/places/nearest answer what the fields and the map need", async () => {
     const suggestions = await t.api("GET /api/places/suggest", { query: { q: "north", role: "shop" } });
-    expect(suggestions[0]).toMatchObject({ source: "shop", label: "North Little Rock, AR", detail: "Your shop · EXAMPLE · EX-NLR-01", ref: { kind: "shop" } });
+    expect(suggestions[0]).toMatchObject({ source: "shop", label: "North Little Rock, AR", detail: "Your shop · EX-NLR-01", ref: { kind: "shop" } });
     expect(suggestions.some((s) => s.source === "city")).toBe(true);
     expect(await t.api("GET /api/places/suggest", { query: { q: "", role: "shop" } })).toEqual([]);
 
@@ -237,7 +222,7 @@ describe("Shops screen", () => {
 
   it("POST, PUT, DELETE /api/shops; 'On lines' comes from the network", async () => {
     const created = await s.api("POST /api/shops", { body: { name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { kind: "text", text: "FRA 358070" } } });
-    expect(created).toMatchObject({ name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { fraId: 358070, railroad: null }, example: false });
+    expect(created).toMatchObject({ name: "EXAMPLE Temple shop", code: "EX-TPL-01", location: { fraId: 358070, railroad: null } });
     expect(created.place).toMatchObject({ ok: true, place: { railroads: ["BNSF", "UP"] } });
     const moved = await s.api("PUT /api/shops/:shopId", { params: { shopId: created.id }, body: { name: "EXAMPLE Waco shop", code: "EX-TPL-01", location: { kind: "text", text: "Waco, TX" } } });
     expect(moved).toMatchObject({ id: created.id, name: "EXAMPLE Waco shop", location: { lon: expect.any(Number), lat: expect.any(Number) } });
@@ -286,13 +271,9 @@ describe("Shops screen", () => {
 
 describe("restart", () => {
   it("a new server on the same data folder has the shops and the saved routes; routes are worked out again", async () => {
-    const first = await startTestApp();
+    const first = await startTestApp({ shops: [] });
     const shop = await first.api("POST /api/shops", { body: { name: "Temple shop", code: "TPL-1", location: text("FRA 358070") } });
-    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { places: [text("Taylor, TX"), { kind: "shop", shopId: shop.id }], include: DEFAULT_INCLUDE }, option: null, routeString: "BNSF" } });
-    // The user deletes every EXAMPLE shop: they must not come back on the next start.
-    for (const example of (await first.api("GET /api/shops")).filter((s) => s.example)) {
-      await first.api("DELETE /api/shops/:shopId", { params: { shopId: example.id } });
-    }
+    const saved = await first.api("POST /api/saved-routes", { body: { name: "Taylor → Temple shop", plan: { places: [text("Taylor, TX"), { kind: "shop", shopId: shop.id }], include: DEFAULT_INCLUDE, turnAtStops: false }, option: null, routeString: "BNSF" } });
     await first.close({ keepData: true });
 
     const second = await startTestApp({ dataDir: first.dataDir });
@@ -304,7 +285,6 @@ describe("restart", () => {
       // A saved route naming a deleted shop says so at that place.
       await second.api("DELETE /api/shops/:shopId", { params: { shopId: shop.id } });
       expect(await second.api("POST /api/route", { body: saved.plan })).toMatchObject({ outcome: "incomplete", places: [{ ok: true }, { ok: false, problem: { kind: "removed" } }] });
-      expect((await second.api("GET /api/meta")).exampleOnly).toBe(false);
     } finally {
       await second.close();
     }

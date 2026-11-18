@@ -48,7 +48,9 @@ test.describe("on a phone", () => {
   test.use(PHONE);
 
   test("the box runs across the top of the map, clear of the layers button and the legend", async ({ page }) => {
-    await findCity(page, "Kansas City");
+    const card = await findCity(page, "Kansas City");
+    // The found card takes the legend's room on a phone: the legend is back once the card is closed.
+    await card.getByRole("button", { name: "Close" }).click();
     const search = await page.locator(".map-search").boundingBox();
     const map = await mapRegion(page).boundingBox();
     const layers = await page.getByRole("button", { name: /^Map layers/ }).boundingBox();

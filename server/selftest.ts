@@ -20,7 +20,7 @@ export async function selfTest(config: Pick<Config, "networkDir">, log: (line: s
     if (!found) throw new Error(`The network has no city named ${name}.`);
     return { label: found.name, lon: found.lon, lat: found.lat, fraId: null, railroad: null };
   };
-  const trip: Trip = { points: [city("Taylor, TX"), city("Temple, TX"), city("North Little Rock, AR")], include: DEFAULT_INCLUDE };
+  const trip: Trip = { points: [city("Taylor, TX"), city("Temple, TX"), city("North Little Rock, AR")], include: DEFAULT_INCLUDE, turnAtStops: false };
   const planner = startRoutePlanner({ networkDir: config.networkDir, networkVersion: network.version, workers: 1 });
   try {
     const routed = await planner.plan(trip);

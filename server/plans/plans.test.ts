@@ -27,7 +27,7 @@ afterAll(async () => {
 });
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: (PlaceRef | null)[] = []): Plan => ({ places: [start, ...stops, destination], include: DEFAULT_INCLUDE });
+const plan = (start: PlaceRef | null, destination: PlaceRef | null, stops: (PlaceRef | null)[] = []): Plan => ({ places: [start, ...stops, destination], include: DEFAULT_INCLUDE, turnAtStops: false });
 const TAYLOR_TO_NLR = plan(text("Taylor, TX"), text("North Little Rock, AR"));
 /** The Temple wye, where BNSF and UP meet. */
 const WYE = 358070 as FraId;
@@ -143,7 +143,7 @@ describe("Plans.route", () => {
 describe("Plans: saved routes", () => {
   const draft = (name: string, over: Partial<SavedRouteDraft> = {}): SavedRouteDraft => ({
     name,
-    plan: { places: [text("Kansas City, MO"), text("Chicago, IL")], include: DEFAULT_INCLUDE },
+    plan: { places: [text("Kansas City, MO"), text("Chicago, IL")], include: DEFAULT_INCLUDE, turnAtStops: false },
     option: null,
     routeString: "BNSF",
     ...over,

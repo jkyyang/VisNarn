@@ -9,6 +9,12 @@ export const REVERSE_KM = 100;
 /** Largest change of heading allowed outside a yard, in degrees: a sharper move is a reversal. */
 export const MAX_TURN_DEG = 90;
 
+/**
+ * An alternative within this share of a shown route's length, with the same interchanges and
+ * turn-backs, reads as the same route to a person: it is not shown.
+ */
+export const NEAR_DUPLICATE_SHARE = 0.03;
+
 /** Most railroad changes one route may make. Sets the router's memory: states grow with it. */
 export const MAX_INTERCHANGES = 3;
 

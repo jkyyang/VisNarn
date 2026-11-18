@@ -27,7 +27,7 @@ const TEMPLE = 358070 as FraId;
 const KANSAS_CITY = { lon: -94.58, lat: 39.1 };
 const WACO = { lon: -97.14, lat: 31.55 };
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
-const shop = (over: Partial<Shop>): Shop => ({ id: "s1" as ShopId, name: "EXAMPLE shop", code: null, location: KANSAS_CITY, example: true, ...over });
+const shop = (over: Partial<Shop>): Shop => ({ id: "s1" as ShopId, name: "EXAMPLE shop", code: null, location: KANSAS_CITY, ...over });
 const csv = (body: string): UploadSource => ({ kind: "csv", fileName: "EXAMPLE.csv", text: body });
 
 const placeOf = (r: PlaceResolution) => {
@@ -116,12 +116,7 @@ describe("Directory.suggest / nearest", () => {
     store.shops.save(shop({ name: "Kansas City, MO", code: "EX-KCY-01" }));
     const forShop = directory.suggest("kansas", "shop", 8);
     expect(forShop.map((s) => s.source)).toEqual(["shop", "city"]);
-    expect(forShop[0]).toEqual({ ref: { kind: "shop", shopId: "s1" }, label: "Kansas City, MO", detail: "Your shop · EXAMPLE · EX-KCY-01", source: "shop", railroads: expect.arrayContaining(["BNSF"]) });
-    // A shop the person added is not marked; one of the EXAMPLE rows is, wherever it is offered or used.
-    store.shops.save(shop({ id: "s2" as ShopId, name: "Real Yard Shop", code: "KRS", example: false }));
-    expect(directory.suggest("real yard", "shop", 8)[0].detail).toBe("Your shop · KRS");
-    const resolved = (text: string) => placeOf(directory.resolve({ kind: "text", text }, "shop"));
-    expect([resolved("EX-KCY-01").example, resolved("KRS").example]).toEqual([true, false]);
+    expect(forShop[0]).toEqual({ ref: { kind: "shop", shopId: "s1" }, label: "Kansas City, MO", detail: "Your shop · EX-KCY-01", source: "shop", railroads: expect.arrayContaining(["BNSF"]) });
     expect(forShop[1]).toMatchObject({ ref: { kind: "coord" }, label: "Kansas City, MO", detail: "City" });
     expect(forShop.every((s) => s.ref.kind !== "text")).toBe(true);
     expect(directory.suggest("kansas", "position", 8).map((s) => s.source)).toEqual(["city", "shop"]);
@@ -159,7 +154,7 @@ describe("Shops", () => {
     expect(store.shops.get(byFra.id)?.location).toEqual({ fraId: TEMPLE, railroad: null });
     expect(store.shops.get(byNode.id)?.location).toEqual({ fraId: TEMPLE, railroad: "BNSF" });
     expect(store.shops.get(byCity.id)?.location).toEqual({ lon: network.city("Temple, TX")!.lon, lat: network.city("Temple, TX")!.lat });
-    expect(byFra).toMatchObject({ example: false, place: { ok: true, place: { railroads: ["BNSF", "UP"] } } });
+    expect(byFra).toMatchObject({ place: { ok: true, place: { railroads: ["BNSF", "UP"] } } });
 
     const refused = (run: () => unknown) => {
       try {

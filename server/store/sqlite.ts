@@ -2,11 +2,11 @@
  * The Store on node:sqlite. The only file that knows the schema.
  *
  *   meta         (key PK, value)                                  schema_version
- *   shops        (id PK, name, code UNIQUE NULL, location_json, example, updated_at)
+ *   shops        (id PK, name, code UNIQUE NULL, location_json, updated_at)
  *   saved_routes (id PK, name, plan_json, option NULL, route_string)            since schema 2; route_string since 3
  *
- * Dormant, kept because they may hold user data: settings, code_sets, node_codes, batches, batch_rows,
- * route_fixes. Nothing reads or writes them.
+ * Schema 4 drops the car tables of an earlier stage (settings, code_sets, node_codes, batches, batch_rows,
+ * route_fixes); a new database never creates them. Schema 5 drops the shops' EXAMPLE flag.
  *
  * Nested domain values (NodeLocation, a plan) are stored as JSON text: no query needs to look inside
  * them. Columns exist only for what is looked up: ids, shop code and name, a saved route's name.
@@ -20,10 +20,12 @@ import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES, type RouteStrategy } from "../../shared/route.ts";
 import type { Store } from "./store.ts";
 
-/** Applied in order; the database records how many it has. Never edit one that has shipped: add another. */
+/**
+ * Applied in order; the database records how many it has. A shipped migration may change only in ways
+ * that leave every database at the same end state: add another to change the schema.
+ */
 const MIGRATIONS: string[] = [
   `
-  CREATE TABLE settings (key TEXT PRIMARY KEY, json TEXT NOT NULL);
   CREATE TABLE shops (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -33,46 +35,24 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   CREATE INDEX shops_by_name ON shops (name COLLATE NOCASE);
-  CREATE TABLE code_sets (code_type TEXT PRIMARY KEY COLLATE NOCASE, label TEXT NOT NULL, imported_at TEXT NOT NULL);
-  CREATE TABLE node_codes (
-    code_type TEXT NOT NULL COLLATE NOCASE REFERENCES code_sets (code_type) ON DELETE CASCADE,
-    code TEXT NOT NULL COLLATE NOCASE,
-    name TEXT,
-    location_json TEXT NOT NULL,
-    PRIMARY KEY (code_type, code)
-  );
-  CREATE INDEX node_codes_by_code ON node_codes (code COLLATE NOCASE);
-  CREATE TABLE batches (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    as_of TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    source_json TEXT NOT NULL,
-    issues_json TEXT NOT NULL,
-    example INTEGER NOT NULL DEFAULT 0,
-    content_hash TEXT NOT NULL UNIQUE
-  );
-  CREATE TABLE batch_rows (
-    batch_id TEXT NOT NULL REFERENCES batches (id) ON DELETE CASCADE,
-    row INTEGER NOT NULL,
-    report_json TEXT NOT NULL,
-    PRIMARY KEY (batch_id, row)
-  );
-  CREATE TABLE route_fixes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    batch_id TEXT NOT NULL REFERENCES batches (id) ON DELETE CASCADE,
-    row INTEGER NOT NULL,
-    stops_json TEXT NOT NULL,
-    saved_at TEXT NOT NULL,
-    reverted_at TEXT
-  );
-  CREATE INDEX route_fixes_by_row ON route_fixes (batch_id, row, id);
   `,
   `
   CREATE TABLE saved_routes (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan_json TEXT NOT NULL, option TEXT);
   `,
   `
   ALTER TABLE saved_routes ADD COLUMN route_string TEXT NOT NULL DEFAULT '';
+  `,
+  // The car tables of an earlier stage, never read: children before parents, so no foreign key stops a drop.
+  `
+  DROP TABLE IF EXISTS route_fixes;
+  DROP TABLE IF EXISTS batch_rows;
+  DROP TABLE IF EXISTS batches;
+  DROP TABLE IF EXISTS node_codes;
+  DROP TABLE IF EXISTS code_sets;
+  DROP TABLE IF EXISTS settings;
+  `,
+  `
+  ALTER TABLE shops DROP COLUMN example;
   `,
 ];
 
@@ -103,7 +83,6 @@ export function openStore(file: string): Store {
     }
   };
 
-  const fresh = !db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'").get();
   transaction(() => {
     db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
     const stored = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as Row | undefined;
@@ -132,7 +111,6 @@ export function openStore(file: string): Store {
     name: String(row.name),
     code: row.code === null ? null : String(row.code),
     location: parse<NodeLocation>(row.location_json),
-    example: row.example === 1,
   });
 
   const planOf = (text: unknown): FullPlan => {
@@ -140,8 +118,9 @@ export function openStore(file: string): Store {
     return {
       // Routes saved before the places list keep start, stops and destination as three fields.
       places: plan.places ?? [plan.start!, ...(plan.stops ?? []), plan.destination!],
-      // A route saved before track could be chosen has no `include`.
+      // A route saved before track could be chosen has no `include`, one saved before turning at stops no `turnAtStops`.
       include: plan.include ?? DEFAULT_INCLUDE,
+      turnAtStops: plan.turnAtStops ?? false,
     };
   };
 
@@ -155,7 +134,6 @@ export function openStore(file: string): Store {
   });
 
   return {
-    fresh,
     get revision() {
       return revision;
     },
@@ -177,10 +155,10 @@ export function openStore(file: string): Store {
             if (other) throw new AppError("conflict", `The shop "${String(other.name)}" already has the code ${shop.code}. Give each shop its own code.`, "code");
           }
           db.prepare(
-            `INSERT INTO shops (id, name, code, location_json, example, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+            `INSERT INTO shops (id, name, code, location_json, updated_at) VALUES (?, ?, ?, ?, ?)
              ON CONFLICT (id) DO UPDATE SET name = excluded.name, code = excluded.code, location_json = excluded.location_json,
-               example = excluded.example, updated_at = excluded.updated_at`,
-          ).run(shop.id, shop.name, shop.code, json(shop.location), shop.example ? 1 : 0, now());
+               updated_at = excluded.updated_at`,
+          ).run(shop.id, shop.name, shop.code, json(shop.location), now());
           wrote(null);
         }),
       remove: (id) => {

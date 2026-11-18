@@ -49,15 +49,15 @@ let routeAborted: Promise<unknown> = Promise.resolve();
 
 const DRAFT = {
   name: "EXAMPLE route",
-  plan: { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "Waco, TX" }], include: DEFAULT_INCLUDE },
+  plan: { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "Waco, TX" }], include: DEFAULT_INCLUDE, turnAtStops: false },
   option: null,
   routeString: "BNSF",
 };
 
 /** Only what these tests call; the rest of App is never reached. */
 const fakeApp = {
-  meta: () => ({ exampleOnly: true }),
   shops: {
+    list: () => [],
     remove: (id: string) => {
       if (id === "gone") throw new AppError("not-found", "No such shop.");
       if (id === "taken") throw new AppError("conflict", "Code in use.");
@@ -97,10 +97,10 @@ afterEach(() => {
 describe("serve: local only", () => {
   it("listens on 127.0.0.1 only, and refuses a request whose Host is not loopback", async () => {
     expect(server.url).toBe(`http://127.0.0.1:${port}`);
-    expect((await raw(port, "GET", "/api/meta")).status).toBe(200);
-    expect((await raw(port, "GET", "/api/meta", { host: `localhost:${port}` })).status).toBe(200);
+    expect((await raw(port, "GET", "/api/shops")).status).toBe(200);
+    expect((await raw(port, "GET", "/api/shops", { host: `localhost:${port}` })).status).toBe(200);
     for (const host of ["evil.example", `evil.example:${port}`, `127.0.0.1:${port + 1}`, `192.168.1.20:${port}`]) {
-      const answer = await raw(port, "GET", "/api/meta", { host });
+      const answer = await raw(port, "GET", "/api/shops", { host });
       expect(answer.status, host).toBe(403);
       expect(JSON.parse(answer.body).error.kind).toBe("invalid");
     }
@@ -121,7 +121,7 @@ describe("serve: local only", () => {
   it("refuses API calls from another page's Origin, and a body that is not JSON", async () => {
     const body = JSON.stringify(DRAFT);
     expect((await raw(port, "POST", "/api/saved-routes", json({ origin: "https://evil.example" }), body)).status).toBe(403);
-    expect((await raw(port, "GET", "/api/meta", { origin: "http://127.0.0.1:1" })).status).toBe(403);
+    expect((await raw(port, "GET", "/api/shops", { origin: "http://127.0.0.1:1" })).status).toBe(403);
     expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://127.0.0.1:${port}` }), body)).status).toBe(200);
     expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://localhost:${port}` }), body)).status).toBe(200);
     const asForm = await raw(port, "POST", "/api/saved-routes", { "content-type": "text/plain" }, body);
@@ -130,7 +130,7 @@ describe("serve: local only", () => {
   });
 
   it("never lets an answer be cached", async () => {
-    for (const answer of [await raw(port, "GET", "/api/meta"), await raw(port, "GET", "/api/nothing"), await raw(port, "DELETE", "/api/shops/gone")]) {
+    for (const answer of [await raw(port, "GET", "/api/shops"), await raw(port, "GET", "/api/nothing"), await raw(port, "DELETE", "/api/shops/gone")]) {
       expect(answer.headers["cache-control"]).toBe("no-store");
     }
   });
@@ -141,7 +141,7 @@ describe("serve: the API envelope", () => {
     const unknown = await raw(port, "GET", "/api/nothing");
     expect(unknown.status).toBe(404);
     expect(JSON.parse(unknown.body)).toEqual({ error: { kind: "not-found", message: "There is no GET /api/nothing.", field: null } });
-    expect((await raw(port, "POST", "/api/meta", json(), "{}")).status).toBe(404);
+    expect((await raw(port, "PUT", "/api/saved-routes", json(), "{}")).status).toBe(404);
 
     const notJson = await raw(port, "POST", "/api/saved-routes", json(), "{ not json");
     expect(notJson.status).toBe(400);
@@ -187,7 +187,7 @@ describe("serve: the API envelope", () => {
 
   it("aborts the app's work when the browser gives up on the request", async () => {
     const started = new Promise<void>((done) => (routeStarted = done));
-    const body = JSON.stringify({ places: [{ kind: "text", text: "A" }, { kind: "text", text: "B" }], include: DEFAULT_INCLUDE });
+    const body = JSON.stringify({ places: [{ kind: "text", text: "A" }, { kind: "text", text: "B" }], include: DEFAULT_INCLUDE, turnAtStops: false });
     const socket = connect(port, "127.0.0.1");
     socket.write(`POST /api/route HTTP/1.1\r\nhost: 127.0.0.1:${port}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\n\r\n${body}`);
     await started;
@@ -227,7 +227,7 @@ describe("serve: the page", () => {
     expect(script.headers["cache-control"]).toMatch(/immutable/);
     expect(script.headers["x-frame-options"]).toBe("DENY");
     expect((await raw(sitePort, "GET", "/assets/missing.js")).status).toBe(404);
-    expect((await raw(sitePort, "GET", "/api/meta")).status).toBe(200);
+    expect((await raw(sitePort, "GET", "/api/shops")).status).toBe(200);
   });
 
   it("never serves a file outside its folder", async () => {
@@ -277,7 +277,7 @@ describe("serve: development", () => {
     const entry = await raw(devPort, "GET", "/web/main.tsx");
     expect(entry.status).toBe(200);
     expect(entry.headers["content-type"]).toMatch(/javascript/);
-    expect(JSON.parse((await raw(devPort, "GET", "/api/meta")).body)).toEqual({ exampleOnly: true });
+    expect(JSON.parse((await raw(devPort, "GET", "/api/shops")).body)).toEqual([]);
     expect(await upgrade(`127.0.0.1:${devPort}`)).toBe("HTTP/1.1 101 Switching Protocols");
   });
 

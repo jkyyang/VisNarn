@@ -46,7 +46,7 @@ export type MapScene =
   | {
       kind: "route";
       selected: SceneRoute | null;
-      /** The other routes, drawn thin and grey underneath; clicking one selects it. */
+      /** The other routes, drawn thin and grey underneath; a click on one adds a stop on it. */
       alternatives: SceneRoute[];
       /** Empty unless there are two or more routes. */
       pills: ScenePill[];

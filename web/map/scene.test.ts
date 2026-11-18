@@ -7,7 +7,7 @@ import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
-import { LAYER, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { LAYER, lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { legendFor } from "./Legend.tsx";
 import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneRoute } from "./scene.ts";
 
@@ -22,7 +22,7 @@ const colors: ThemeColors = {
   rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255], passenger: [9, 0, 0, 255] },
 };
 
-const TEMPLE_TO_NLR: Plan = { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "North Little Rock, AR" }], include: DEFAULT_INCLUDE };
+const TEMPLE_TO_NLR: Plan = { places: [{ kind: "text", text: "Temple, TX" }, { kind: "text", text: "North Little Rock, AR" }], include: DEFAULT_INCLUDE, turnAtStops: false };
 const WITH_WYE: Plan = { ...TEMPLE_TO_NLR, places: [TEMPLE_TO_NLR.places[0], { kind: "node", fraId: 358070 as FraId, railroad: "BNSF" }, TEMPLE_TO_NLR.places[1]] };
 
 let twoRoutes: PlannedRoute;
@@ -227,10 +227,13 @@ describe("layers", () => {
     expect(count(7)).toBeLessThan(count(10));
   });
 
-  it("a grey route selects it; a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
+  it("a grey route is a click on the map on that line; a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
     const pick = (id: string, object: unknown) => ({ layer: layers.find((l) => l.id === id), object }) as PickingInfo;
     const routeScene = scene as Extract<MapScene, { kind: "route" }>;
-    expect(sceneTarget(pick(LAYER.alternatives, { ...routeScene.alternatives[0].legs[0], option: "shortest" }))).toEqual({ kind: "option", id: "shortest" });
+    const grey = pick(LAYER.alternatives, { ...routeScene.alternatives[0].legs[0], option: "shortest" });
+    expect(sceneTarget(grey)).toBeNull();
+    expect(lineAt(grey)).toBe("shortest");
+    expect(lineAt(pick(LAYER.route, {}))).toBeNull();
     const square = routeScene.pins.find((p) => p.kind === "shop")!;
     expect(sceneTarget(pick(LAYER.pins, square))).toEqual({ kind: "place", ref: { kind: "shop", shopId: square.shopId }, position: square.position });
     expect(sceneTarget(pick(LAYER.pins, routeScene.pins.find((p) => p.kind === "start")))).toBe("inert");
