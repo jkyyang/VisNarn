@@ -4,7 +4,8 @@
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import MapGL, { AttributionControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
+import { createPortal } from "react-dom";
+import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { useThemeColors } from "../theme.ts";
@@ -55,6 +56,15 @@ const INITIAL_VIEW = {
   ] as [[number, number], [number, number]],
   fitBoundsOptions: { padding: 24 },
 };
+/**
+ * How far the map pans: North America with a wide margin, so a glimpse of Greenland, the Caribbean
+ * and northern South America stays but the map cannot drift to another continent. MapLibre keeps
+ * the whole screen inside these, which also stops zooming out once they fill the screen.
+ */
+const PAN_BOUNDS: [[number, number], [number, number]] = [
+  [-170, 5],
+  [-20, 83],
+];
 
 /** Web-mercator ground distance covered by one screen pixel (MapLibre zoom levels use 512 px tiles). */
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
@@ -81,7 +91,7 @@ function FlyTo({ focus }: { focus: MapFocus | undefined }) {
 
 /**
  * MapLibre opens a compact attribution at first and folds it only after the first drag. Open, it
- * runs under the legend, so it starts folded; the (i) button opens it.
+ * lifts the legend above it, so it starts folded; the (i) button opens it.
  */
 function FoldAttribution() {
   const map = useMap().current;
@@ -98,6 +108,16 @@ function FoldAttribution() {
     return () => void map.off("idle", tryFold);
   }, [map]);
   return null;
+}
+
+/**
+ * The legend as a control in the map's bottom-left corner, added after the credits: MapLibre stacks
+ * the controls of a corner, so the legend sits above the credits and the two never overlap.
+ */
+function CornerLegend(props: Parameters<typeof Legend>[0]) {
+  const [box] = useState(() => Object.assign(document.createElement("div"), { className: "maplibregl-ctrl" }));
+  useControl(() => ({ onAdd: () => box, onRemove: () => box.remove() }), { position: "bottom-left" });
+  return createPortal(<Legend {...props} />, box);
 }
 
 /** The controls need the map instance for zoom, so they live inside the map. */
@@ -148,6 +168,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     <div className="map-canvas" ref={root}>
       <MapGL
         initialViewState={INITIAL_VIEW}
+        maxBounds={PAN_BOUNDS}
         // `zoom` changes only when a move ends, so the style never swaps in the middle of a zoom.
         mapStyle={basemapStyle(layers.basemap, darkStreets)}
         // Map ↔ Satellite ↔ dark share nothing, so load each style clean instead of diffing into it.
@@ -178,7 +199,8 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
             }
           }}
         />
-        <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-right" />
+        <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
+        <CornerLegend {...legendFor(scene, layers.network)} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} />}
@@ -187,7 +209,6 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
       </MapGL>
-      <Legend {...legendFor(scene, layers.network)} />
     </div>
   );
 }

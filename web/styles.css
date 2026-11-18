@@ -27,6 +27,8 @@
   --rr-NS: #6b55b0;
   --rr-CN: #c0392b;
   --rr-CPKC: #23866a;
+  --rr-regional: #5f6368;
+  --rr-short-line: #8d6e63;
   /* Text on a filled button or tag: white on the dark light-theme fills, dark navy on the light dark-theme ones. */
   --on-fill: #ffffff;
   --risk-text: #7a1714;
@@ -73,6 +75,8 @@
     --rr-NS: #a594e8;
     --rr-CN: #ee7a6d;
     --rr-CPKC: #4cc49e;
+    --rr-regional: #bdc1c6;
+    --rr-short-line: #bcaaa4;
     --on-fill: #10213b;
     --risk-text: #f6aea9;
     --on-rr-BNSF: #10213b;
@@ -117,6 +121,8 @@
   --rr-NS: #6b55b0;
   --rr-CN: #c0392b;
   --rr-CPKC: #23866a;
+  --rr-regional: #5f6368;
+  --rr-short-line: #8d6e63;
   --on-fill: #ffffff;
   --risk-text: #7a1714;
   --on-rr-BNSF: #111111;
@@ -157,6 +163,8 @@
   --rr-NS: #a594e8;
   --rr-CN: #ee7a6d;
   --rr-CPKC: #4cc49e;
+  --rr-regional: #bdc1c6;
+  --rr-short-line: #bcaaa4;
   --on-fill: #10213b;
   --risk-text: #f6aea9;
   --on-rr-BNSF: #10213b;
@@ -721,6 +729,19 @@ input[aria-invalid="true"] {
   background: var(--route-soft);
   color: var(--route-text);
   font-weight: 600;
+}
+.track-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  padding-left: 30px;
+  font-size: 13px;
+  color: var(--fg2);
+}
+.track-choice label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .hint-row {
   display: flex;
@@ -1301,11 +1322,8 @@ input[aria-invalid="true"] {
   color: var(--route-text);
   font-weight: 600;
 }
+/* A MapLibre control in the bottom-left corner, stacked above the credits (web/map/MapCanvas.tsx). */
 .legend {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  z-index: 2;
   background: var(--panel);
   border-radius: 10px;
   box-shadow: var(--shadow-1);
@@ -1315,7 +1333,6 @@ input[aria-invalid="true"] {
   gap: 6px;
   font-size: 12px;
   color: var(--fg2);
-  max-width: calc(100% - 32px);
 }
 /* As wide as what it lists: one railroad is one short row; all six wrap to three a row. */
 .legend-rr {
@@ -1335,6 +1352,10 @@ input[aria-invalid="true"] {
   width: 16px;
   height: 4px;
   border-radius: 2px;
+}
+/* Regional and short-line sections are drawn thinner than Class I. */
+.legend-line.is-thin {
+  height: 2px;
 }
 .map-card {
   position: absolute;
@@ -1557,9 +1578,6 @@ input[aria-invalid="true"] {
   }
   .legend {
     padding: 5px 8px;
-    left: 12px;
-    bottom: 12px;
-    max-width: calc(100% - 64px);
   }
   .legend-rr {
     column-gap: 8px;

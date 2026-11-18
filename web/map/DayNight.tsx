@@ -40,30 +40,55 @@ function firstLabelLayer(style: StyleSpecification): string | undefined {
 const NIGHT_LABEL_PAINT = { "text-color": "#eef1f6", "text-halo-color": "rgba(8, 10, 18, 0.92)", "text-halo-width": 1.6, "text-halo-blur": 0.4 } as const;
 type LabelPaintKey = keyof typeof NIGHT_LABEL_PAINT;
 const LABEL_KEYS = Object.keys(NIGHT_LABEL_PAINT) as LabelPaintKey[];
-interface LabelMap {
+interface PaintMap {
   getPaintProperty(layer: string, name: string): unknown;
   setPaintProperty(layer: string, name: string, value: unknown): void;
 }
 /**
- * Each style's own label paint, kept per map so Day can put it back without reloading the style.
+ * The loaded style's own paint, kept per map so Day can put it back without reloading the style.
  * getStyle() returns a fresh copy each call, so the loaded style is told apart by its name and sprite.
  */
-const savedLabelPaint = new WeakMap<LabelMap, { style: string; paint: Map<string, Partial<Record<LabelPaintKey, unknown>>> }>();
+const savedPaint = new WeakMap<PaintMap, { style: string; paint: Map<string, unknown> }>();
 
-/** Switches every text layer of the loaded style to the night paint, or back to its own. */
-export function paintLabels(map: LabelMap, style: StyleSpecification, night: boolean): void {
+/** The style's own value of one paint property, read before anything here changes it. */
+function ownPaint(map: PaintMap, style: StyleSpecification, layer: string, key: string): unknown {
   const styleKey = `${style.name ?? ""}|${JSON.stringify(style.sprite ?? "")}`;
-  let saved = savedLabelPaint.get(map);
+  let saved = savedPaint.get(map);
   if (!saved || saved.style !== styleKey) {
     saved = { style: styleKey, paint: new Map() };
-    savedLabelPaint.set(map, saved);
+    savedPaint.set(map, saved);
   }
+  const id = `${layer}:${key}`;
+  if (!saved.paint.has(id)) saved.paint.set(id, map.getPaintProperty(layer, key));
+  return saved.paint.get(id);
+}
+
+/** Switches every text layer of the loaded style to the night paint, or back to its own. */
+export function paintLabels(map: PaintMap, style: StyleSpecification, night: boolean): void {
   for (const layer of style.layers) {
     if (layer.type !== "symbol" || !(layer.layout && "text-field" in layer.layout)) continue;
-    if (!saved.paint.has(layer.id)) saved.paint.set(layer.id, Object.fromEntries(LABEL_KEYS.map((key) => [key, map.getPaintProperty(layer.id, key)])));
-    const own = saved.paint.get(layer.id) ?? {};
-    for (const key of LABEL_KEYS) map.setPaintProperty(layer.id, key, night ? NIGHT_LABEL_PAINT[key] : own[key]);
+    for (const key of LABEL_KEYS) {
+      const own = ownPaint(map, style, layer.id, key);
+      map.setPaintProperty(layer.id, key, night ? NIGHT_LABEL_PAINT[key] : own);
+    }
   }
+}
+
+/** Open water seen from space: the deep blue that fades into Black Marble's dark night ocean. */
+export const OCEAN_FROM_SPACE = "#1d4670";
+
+/**
+ * In Auto, the street map's water turns the deep blue of the Earth from space when zoomed out, so
+ * the edge of night reads as day turning to night, not as a dark smudge over pale blue. It is the
+ * map's own colour again by zoom 7, where Auto switches to the dark street map at night
+ * (AUTO_DARK_ZOOM in ./MapCanvas.tsx). Satellite has no "water" layer and is left alone.
+ */
+export function paintOcean(map: PaintMap, style: StyleSpecification, fromSpace: boolean): void {
+  if (!style.layers.some((layer) => layer.id === "water")) return;
+  const own = ownPaint(map, style, "water", "fill-color");
+  // A zoom ramp can only end on a plain colour; any other own paint stays as it is.
+  const space = typeof own === "string" ? ["interpolate", ["linear"], ["zoom"], 5, OCEAN_FROM_SPACE, 7, own] : own;
+  map.setPaintProperty("water", "fill-color", fromSpace ? space : own);
 }
 
 /**
@@ -99,13 +124,14 @@ export function NightLights({ mode, now, satellite }: { mode: NightTileMode | "o
       }
       map.setLayoutProperty(LIGHTS_ID, "visibility", shown ? "visible" : "none");
       paintLabels(map, style, shown);
+      paintOcean(map, style, mode === "auto");
       if (shown) map.setPaintProperty(LIGHTS_ID, "raster-opacity", lightsOpacity(opacityMode, satellite));
     };
     ensure();
     // A basemap switch replaces the whole style, this layer with it.
     map.on("style.load", ensure);
     return () => void map.off("style.load", ensure);
-  }, [map, shown, tiles, opacityMode, satellite]);
+  }, [map, mode, shown, tiles, opacityMode, satellite]);
 
   return null;
 }
