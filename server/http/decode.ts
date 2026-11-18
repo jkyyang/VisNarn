@@ -11,7 +11,7 @@ import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { Assumptions, EstimateBasis } from "../../shared/assumptions.ts";
 import type { LngLat } from "../../shared/geo.ts";
-import { SHOP_TEXT_MAX, type CodeType, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
+import { SHOP_TEXT_MAX, UNSEEN, type CodeType, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE, RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
 import { ROUTE_STRATEGIES } from "../../shared/route.ts";
@@ -54,21 +54,17 @@ const nonEmpty =
     return t;
   };
 
-/**
- * Control, format (zero-width, bidi overrides), line-separator and unpaired-surrogate characters.
- * SQLite cuts text at NUL and swaps a lone surrogate for U+FFFD, and the rest hide or reorder what a
- * person sees, so a name holding one could be listed differently from how it was saved.
- */
-const UNSEEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
-
-/** A name a person reads back in a list: plain visible text, so it is stored exactly as answered. */
-const name =
-  (max: number): Decoder<string> =>
+/** Text stored and read back as given: no character SQLite would cut at or a person could not see. */
+const visible =
+  (decode: Decoder<string>): Decoder<string> =>
   (value, path) => {
-    const t = nonEmpty(max)(value, path);
+    const t = decode(value, path);
     if (UNSEEN.test(t)) invalid(path, `${path} cannot hold control or invisible characters.`);
     return t;
   };
+
+/** A name a person reads back in a list: plain visible text, so it is stored exactly as answered. */
+const name = (max: number): Decoder<string> => visible(nonEmpty(max));
 
 const nullable =
   <T>(decode: Decoder<T>): Decoder<T | null> =>
@@ -166,12 +162,12 @@ const savedRouteDraft: Decoder<SavedRouteDraft> = (value, path) => ({
   name: field(value, path, "name", name(120)),
   plan: field(value, path, "plan", fullPlan),
   option: field(value, path, "option", nullable(oneOf(ROUTE_STRATEGIES))),
-  routeString: field(value, path, "routeString", text(5_000)),
+  routeString: field(value, path, "routeString", visible(text(5_000))),
 });
 
 const shopDraft: Decoder<ShopDraft> = (value, path) => ({
-  name: field(value, path, "name", text(SHOP_TEXT_MAX)),
-  code: field(value, path, "code", nullable(text(SHOP_TEXT_MAX))),
+  name: field(value, path, "name", visible(text(SHOP_TEXT_MAX))),
+  code: field(value, path, "code", nullable(visible(text(SHOP_TEXT_MAX)))),
   location: field(value, path, "location", placeRef),
 });
 

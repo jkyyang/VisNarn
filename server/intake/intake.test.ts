@@ -17,10 +17,10 @@ async function refusal(run: () => Promise<unknown>): Promise<string> {
 }
 
 describe("parseCsv (through the intake door)", () => {
-  it("keeps a line break inside a quoted cell", async () => {
+  it("keeps a line break inside a quoted cell, which a shop name then may not hold (as in the shop form)", async () => {
     const { items, issues } = await readShops(csv(`name,lon,lat\n"EXAMPLE Taylor,\nTX",-97.41,30.57\n`));
-    expect(issues).toEqual([]);
     expect(items[0].name).toBe("EXAMPLE Taylor,\nTX");
+    expect(issues.map((i) => i.message)).toEqual(["The shop name holds control or invisible characters."]);
   });
 
   it("reads quotes, doubled quotes, CRLF and a UTF-8 BOM; skips blank lines; reports file line numbers", async () => {
@@ -78,6 +78,14 @@ describe("readShops / readCodes", () => {
     expect(issues.map((i) => [i.row, i.message])).toEqual([
       [0, `The shop name is longer than ${SHOP_TEXT_MAX} characters.`],
       [1, `The shop code is longer than ${SHOP_TEXT_MAX} characters.`],
+    ]);
+  });
+
+  it("reports a shop name or code with control or invisible characters instead of storing a cut value", async () => {
+    const { issues } = await readShops(csv("name,code,lon,lat\nZZ\u0000N,EX-A,-96.5,39.1\nEXAMPLE B,EX\u200bB,-96.5,39.1\nEXAMPLE C,EX-C,-96.5,39.1\n"));
+    expect(issues.map((i) => [i.row, i.message])).toEqual([
+      [0, "The shop name holds control or invisible characters."],
+      [1, "The shop code holds control or invisible characters."],
     ]);
   });
 

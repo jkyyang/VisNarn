@@ -8,7 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import { AppError } from "../../shared/app.ts";
-import { SHOP_TEXT_MAX, type CodeType, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type SourceInfo, type UploadSource } from "../../shared/places.ts";
+import { SHOP_TEXT_MAX, UNSEEN, type CodeType, type FraId, type PlaceRef, type RowIssue, type ShopDraft, type SourceInfo, type UploadSource } from "../../shared/places.ts";
 import { csvSource } from "./csv.ts";
 
 export interface RawRecord {
@@ -58,10 +58,12 @@ export async function readShops(source: RecordSource): Promise<Parsed<ShopDraft>
     const name = record.cells.name ?? "";
     if (!name) issue("The shop name is empty.");
     else if (name.length > SHOP_TEXT_MAX) issue(`The shop name is longer than ${SHOP_TEXT_MAX} characters.`);
+    else if (UNSEEN.test(name)) issue("The shop name holds control or invisible characters.");
     const nodeCode = record.cells.node_code ?? "";
     const code = record.cells.code || nodeCode || null;
     // The same limits as the shop form (POST /api/shops), so both doors store the same shops.
     if (code && code.length > SHOP_TEXT_MAX) issue(`The shop code is longer than ${SHOP_TEXT_MAX} characters.`);
+    else if (code && UNSEEN.test(code)) issue("The shop code holds control or invisible characters.");
     const location = locationOf(record, nodeCode ? { kind: "text", text: nodeCode } : null, issue, "Give the shop a node_code, an fra_id, or lon and lat.");
     items.push({ name, code, location });
   });

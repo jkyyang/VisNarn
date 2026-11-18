@@ -129,6 +129,14 @@ export interface Shop {
 /** Longest shop name or code, the same through the shop form and a file import: longer text breaks map labels. */
 export const SHOP_TEXT_MAX = 200;
 
+/**
+ * Control, format (zero-width, bidi overrides), line-separator and unpaired-surrogate characters.
+ * SQLite cuts text at NUL and swaps a lone surrogate for U+FFFD, and the rest hide or reorder what a
+ * person sees, so text holding one could be listed differently from how it was saved. Refused in
+ * names, shop codes and route strings, through the forms and a file import alike.
+ */
+export const UNSEEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
+
 export interface ShopDraft {
   name: string;
   code: string | null;

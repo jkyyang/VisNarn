@@ -2,12 +2,12 @@ import type { Layer, PickingInfo } from "deck.gl";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, ShopView } from "../../shared/places.ts";
-import { DEFAULT_INCLUDE, RAILROADS, type Line } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, drawnClasses, NETWORK_CLASSES, RAILROADS, type Line, type NetworkClass } from "../../shared/railroads.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
-import { LAYER, networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { LAYER, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { legendFor } from "./Legend.tsx";
 import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneRoute } from "./scene.ts";
 
@@ -19,6 +19,7 @@ const colors: ThemeColors = {
   alternative: [154, 160, 166, 255],
   casing: [255, 255, 255, 255],
   rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255] },
+  passenger: [9, 0, 0, 255],
 };
 
 const TEMPLE_TO_NLR: Plan = { start: { kind: "text", text: "Temple, TX" }, stops: [], destination: { kind: "text", text: "North Little Rock, AR" }, include: DEFAULT_INCLUDE };
@@ -178,10 +179,11 @@ describe("shopsScene", () => {
 });
 
 describe("legend", () => {
-  it("lists the selected route's railroads; with no route, all six only while the network is drawn", () => {
-    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops }), true).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
-    expect(legendFor(null, true).railroads).toEqual(RAILROADS);
-    expect(legendFor(null, false).railroads).toEqual([]);
+  it("lists the selected route's railroads; with no route, the lines of the network classes drawn", () => {
+    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops }), ["class_i"]).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
+    expect(legendFor(null, ["class_i"]).railroads).toEqual(RAILROADS);
+    expect(legendFor(null, ["class_i", "short_line", "passenger"]).railroads).toEqual([...RAILROADS, "short line", "passenger"]);
+    expect(legendFor(null, []).railroads).toEqual([]);
   });
 });
 
@@ -245,14 +247,32 @@ describe("layers", () => {
     expect(sceneTooltip(pick(LAYER.alternatives, { railroad: "BNSF" }))).toBeNull();
   });
 
-  it("colours the network by owner and keeps it mounted while hidden", () => {
-    const network = { type: "FeatureCollection" as const, features: [] };
-    const hidden = networkLayer(network, false, true, colors) as Layer;
-    expect(hidden.props).toMatchObject({ visible: false, opacity: 0.35 });
-    const getLineColor = (hidden.props as unknown as { getLineColor: (f: { properties: { owner: string } }) => RGBA }).getLineColor;
-    expect(getLineColor({ properties: { owner: "UP" } })).toBe(colors.rail.UP);
-    expect(getLineColor({ properties: { owner: "KCTL" } })).toBe(grey);
-    expect((networkLayer(network, true, false, colors) as Layer).props.opacity).toBeGreaterThan(0.5);
+  it("draws Class I always and each other class only while its track box is ticked", () => {
+    expect(drawnClasses(DEFAULT_INCLUDE)).toEqual(["class_i", "passenger"]);
+    expect(drawnClasses({ regional: false, shortLine: true, passenger: false })).toEqual(["class_i", "short_line"]);
+    expect(drawnClasses({ regional: true, shortLine: true, passenger: true })).toEqual(NETWORK_CLASSES);
+  });
+
+  it("gives each class its own layer, mounted while hidden, Class I coloured by owner and the rest in their route colour", () => {
+    const network = Object.fromEntries(NETWORK_CLASSES.map((c) => [c, []])) as unknown as Parameters<typeof networkLayers>[0];
+    const byClass = (drawn: NetworkClass[], dimmed = false) => Object.fromEntries((networkLayers(network, drawn, dimmed, colors) as Layer[]).map((l) => [l.id, l.props]));
+    const lineColor = (props: unknown, owner: string) => (props as { getLineColor: (f: { properties: { owner: string } }) => RGBA }).getLineColor({ properties: { owner } });
+
+    const shown = byClass(["class_i", "short_line"]);
+    expect(Object.keys(shown).at(-1)).toBe("network-class_i");
+    expect(Object.fromEntries(Object.entries(shown).map(([id, props]) => [id, props.visible]))).toEqual({
+      "network-passenger": false,
+      "network-short_line": true,
+      "network-regional": false,
+      "network-class_i": true,
+    });
+    expect(lineColor(shown["network-class_i"], "UP")).toBe(colors.rail.UP);
+    expect(lineColor(shown["network-class_i"], "KCTL")).toBe(grey);
+    expect(lineColor(shown["network-short_line"], "KCTL")).toBe(colors.rail["short line"]);
+    expect(lineColor(shown["network-regional"], "WSOR")).toBe(colors.rail.regional);
+    expect(lineColor(shown["network-passenger"], "AMTK")).toBe(colors.passenger);
+    expect(shown["network-short_line"].opacity).toBeLessThan(shown["network-class_i"].opacity as number);
+    expect(byClass([], true)["network-class_i"]).toMatchObject({ visible: false, opacity: 0.35 });
   });
 });
 

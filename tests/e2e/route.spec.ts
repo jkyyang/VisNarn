@@ -121,6 +121,9 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     const shortLines = page.getByRole("group", { name: "Track" }).getByRole("checkbox", { name: "Short lines" });
     await expect(shortLines).not.toBeChecked();
+    // The map draws the network's short-line track only while the box is ticked.
+    const network = page.locator(".map-canvas");
+    await expect(network).toHaveAttribute("data-network-classes", "class_i passenger");
     const firstAnswer = page.waitForResponse((r) => r.url().endsWith("/api/route") && (r.request().postDataJSON() as { destination: unknown }).destination !== null);
     await page.getByRole("combobox", { name: "Start" }).fill("Baton Rouge, LA");
     await page.getByRole("combobox", { name: "Start" }).press("Enter");
@@ -133,6 +136,7 @@ test.describe("Route planner", () => {
     const ticked = nextRoute(page);
     await shortLines.check();
     expect((await ticked).outcome).toBe("routed");
+    await expect(network).toHaveAttribute("data-network-classes", "class_i short_line passenger");
     await expect(routeRows(page).first()).toContainText("Short line");
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("UP → Short line");
     await expect(legend(page)).toHaveText(["UP", "Short line"]);

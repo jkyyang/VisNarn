@@ -1,7 +1,8 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_NETWORK_DIR } from "../engine/index.ts";
 import { kmChanges, parseShops, sourceChanged, sourceDateOf, validate } from "./update-network.ts";
 
 describe("change detection", () => {
@@ -49,5 +50,13 @@ describe("validation", () => {
     writeFileSync(join(dir, "graph_meta.json"), '{"railroads":[]}');
     const { problems } = await validate(dir);
     expect(problems).toHaveLength(1);
+  });
+
+  it("rejects a build whose map lines lack a class", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "classless-basemap-"));
+    cpSync(DEFAULT_NETWORK_DIR, dir, { recursive: true });
+    writeFileSync(join(dir, "basemap_mainline.geojson"), '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"owner":"UP"},"geometry":null}]}');
+    const { problems } = await validate(dir);
+    expect(problems).toEqual(["basemap_mainline.geojson has line classes none, not class_i, regional, short_line, passenger"]);
   });
 });

@@ -4,7 +4,7 @@
  *
  * 1. Ask the ArcGIS layer for its data edit date; the same date as data/source-version.json means "up to date".
  * 2. Otherwise run the pipeline in a temporary copy of it, so the live files are never half-written.
- * 3. Validate the new files: they load, the selftest passes, every shop routes from every origin.
+ * 3. Validate the new files: they load, the map has every class of line, the selftest passes, every shop routes from every origin.
  * 4. Only then copy them over public/data and commit them (those files and nothing else).
  * Every run ends with one line in the log and a macOS notification.
  */
@@ -18,6 +18,7 @@ import { selfTest } from "../server/selftest.ts";
 import { DEFAULT_ASSUMPTIONS } from "../shared/assumptions.ts";
 import { haversineKm } from "../shared/geo.ts";
 import type { FraId, Waypoint } from "../shared/places.ts";
+import { NETWORK_CLASSES } from "../shared/railroads.ts";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
 const LAYER_URL = "https://services.arcgis.com/xOi1kZaI0eWDREZv/ArcGIS/rest/services/NTAD_North_American_Rail_Network_Lines/FeatureServer/0";
@@ -127,12 +128,21 @@ function checkRoutes(dir: string, shops: Shop[]): RouteCheck[] {
   );
 }
 
+/** Why the map's network file in `dir` will not do: its lines must have exactly the classes the map draws (web/map/layers.ts). */
+function basemapProblem(dir: string): string | null {
+  const { features } = JSON.parse(readFileSync(join(dir, "basemap_mainline.geojson"), "utf8")) as { features: { properties: { class: string } }[] };
+  const classes = [...new Set(features.map((f) => f.properties.class))].sort();
+  return classes.join() === [...NETWORK_CLASSES].sort().join() ? null : `basemap_mainline.geojson has line classes ${classes.join(", ") || "none"}, not ${NETWORK_CLASSES.join(", ")}`;
+}
+
 /** Problems with the network in `dir` (none means it may replace the live one), and routes whose length changed. */
 export async function validate(dir: string): Promise<{ problems: string[]; changes: string[]; routes: number }> {
   const shops = parseShops(readFileSync(join(REPO, SHOPS_CSV), "utf8"));
   let after: RouteCheck[];
   try {
     loadNetwork(dir);
+    const basemap = basemapProblem(dir);
+    if (basemap) return { problems: [basemap], changes: [], routes: 0 };
     const selfTestLines: string[] = [];
     if (!(await selfTest({ networkDir: dir }, (line) => selfTestLines.push(line)))) return { problems: selfTestLines, changes: [], routes: 0 };
     after = checkRoutes(dir, shops);

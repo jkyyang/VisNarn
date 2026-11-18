@@ -81,6 +81,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
       <MapContent
         scene={scene}
         focus={{ kind: "fit" }}
+        include={plan.include}
         onPick={(lon, lat, km) => {
           setClickError(null);
           clickMap(lon, lat, km, places, chosen?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(error instanceof Error ? error.message : "The click could not be placed."));

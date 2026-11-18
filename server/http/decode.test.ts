@@ -57,6 +57,8 @@ describe("decodeBody", () => {
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, option: "fastest" }))).toMatch(/^invalid option: .*no-turn-backs/);
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, plan: { ...plan, start: null } }))).toMatch(/^invalid plan\.start: /);
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: undefined }))).toMatch(/^invalid routeString: /);
+    // The route string is stored and compared on save the same way, so it is held to the same rule.
+    expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, routeString: "a\u0000b" }))).toMatch(/^invalid routeString: .*invisible/);
   });
 
   it("reads assumptions in their three groups and refuses a number that is not finite", () => {
@@ -77,6 +79,12 @@ describe("decodeBody", () => {
       code: null,
       location: { kind: "text", text: "" },
     });
+    // A NUL-leading name or code would be saved as "": a shop listed without its name.
+    const shop = { name: "EXAMPLE shop", code: "EX-1", location: { kind: "coord", lon: -96.5, lat: 39.1 } };
+    for (const bad of ["\u0000hidden", "A\u0000x", "a\tb", "a\nb", "a\u202eb", "a\u200bb"]) {
+      expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, name: bad }))).toMatch(/^invalid name: .*invisible/);
+      expect(refusal(() => decodeBody["POST /api/shops"]({ ...shop, code: bad }))).toMatch(/^invalid code: .*invisible/);
+    }
   });
 });
 

@@ -4,6 +4,7 @@
  * pills, turn-back marks, legend and map controls are drawn, so those are the real ones.
  */
 import type { ReactElement } from "react";
+import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { MapCanvasProps } from "../map/MapCanvas.tsx";
 import { MapControls } from "../map/MapControls.tsx";
 import { Legend, legendFor } from "../map/Legend.tsx";
@@ -54,7 +55,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
       {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} corner={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
       {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => <TurnBackMark key={i} turnBack={turnBack.turnBack} />)}
       <MapControls layers={layers} onLayers={onLayers} look={look} onZoom={() => {}} onFit={() => {}} history={content?.history ?? null} />
-      <Legend {...legendFor(scene, layers.network)} />
+      <Legend {...legendFor(scene, layers.network ? drawnClasses(content?.include ?? DEFAULT_INCLUDE) : [])} />
     </div>
   );
 }
