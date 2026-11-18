@@ -25,6 +25,15 @@ describe("styles.css", () => {
     expect(rule?.[1]).toMatch(/white-space:\s*normal/);
   });
 
+  // jsdom has no layout: a 190-character unbroken shop name made the Sections list and the shop table thousands of px wide on a phone.
+  it("lets a long unbroken shop name or code break anywhere", () => {
+    const anywhere = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => /overflow-wrap:\s*anywhere/.test(m[2] ?? ""));
+    const selectors = anywhere.flatMap((m) => (m[1] ?? "").split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
+    for (const selector of [".section-text", ".shop-name", ".shop-table td.mono", ".suggestions li > span:first-child"]) {
+      expect(selectors).toContain(selector);
+    }
+  });
+
   // jsdom has no layout: the Location input is a block child of .place-field, so without a width it stayed about 196 px and cut the picked place.
   it("makes the shop form's Location input fill the card like Name and Shop code", () => {
     const rule = /\.shop-form \.place-field > input\s*\{([^}]*)\}/.exec(css);

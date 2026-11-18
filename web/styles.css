@@ -1115,6 +1115,14 @@ input[aria-invalid="true"] {
   margin: 0 8px 0 -22px;
   vertical-align: -3px;
 }
+/* A shop name or code may be up to 200 characters with no space or hyphen; breaking anywhere keeps it from widening a card or the shop table. */
+.section-text,
+.shop-name,
+.shop-table td.mono,
+.suggestions li > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .rr-bars {
   display: inline-flex;
   gap: 2px;
