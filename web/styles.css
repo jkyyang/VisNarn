@@ -1652,6 +1652,14 @@ input[aria-invalid="true"] {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  position: relative;
+}
+/* A 44 px touch target round the small disc (not on the badge, where it would take taps meant for the pin). */
+.route-mark:not(.route-mark--badge) .turn-mark::before {
+  content: "";
+  position: absolute;
+  inset: -13px;
+  border-radius: 50%;
 }
 /* Beside a pin it would otherwise cover (see turnBackShift): smaller, so the pin's number shows. */
 .route-mark--badge .turn-mark {

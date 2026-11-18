@@ -79,15 +79,26 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [pinned]);
-  // Near an edge of the map the details slide sideways, or go below the disc, instead of being cut off.
+  // The details stay in the free part of the map: they go below the disc where the map's top edge or the
+  // search bar would cover them, then slide sideways to stay inside the map and clear of the map buttons.
   const pop = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const details = pop.current;
-    const frame = details?.closest(".map-canvas")?.getBoundingClientRect();
-    if (!details || !frame) return;
-    const box = details.getBoundingClientRect();
-    details.style.marginLeft = `${Math.max(frame.left + 8 - box.left, 0) + Math.min(frame.right - 8 - box.right, 0)}px`;
-    details.classList.toggle("turn-pop--below", box.top < frame.top + 8);
+    const canvas = details?.closest(".map-canvas");
+    if (!details || !canvas) return;
+    const frame = canvas.getBoundingClientRect();
+    const rects = (selector: string) => [...canvas.querySelectorAll(selector)].map((element) => element.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
+    let box = details.getBoundingClientRect();
+    const searchOver = rects(".map-search").filter((rect) => rect.left < box.right && rect.right > box.left);
+    if (box.top < Math.max(frame.top, ...searchOver.map((rect) => rect.bottom)) + 8) {
+      details.classList.add("turn-pop--below");
+      box = details.getBoundingClientRect();
+    }
+    // Only the buttons at the popover's own height matter; below them the map is free to its edge.
+    const buttonsBeside = rects(".map-controls > *").filter((rect) => rect.top < box.bottom && rect.bottom > box.top);
+    const right = Math.min(frame.right, ...buttonsBeside.map((rect) => rect.left)) - 8;
+    // Clear of the right side first; the left edge wins if both cannot fit, so the text starts in view.
+    details.style.marginLeft = `${Math.max(Math.min(right - box.right, 0), frame.left + 8 - box.left)}px`;
   }, [open]);
   return (
     <span className="turn-mark-wrap">
