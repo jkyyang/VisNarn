@@ -27,12 +27,13 @@ export function openTrackShapes(network: RailNetwork, bin: ArrayBuffer): TrackSh
   const points = new Float32Array(bin, 4 * (edges + 2));
   if (points.length !== 2 * first[edges]) throw new Error(`track.bin size mismatch: ${points.length / 2} points, ${first[edges]} expected`);
 
-  // Paths name nodes by their coordinates rounded to 5 decimals (engine/trip.ts). Two nodes can round
-  // to the same point (2 pairs in 142,835), so each point keeps every node there.
-  const key = (lon: number, lat: number) => `${round5(lon)},${round5(lat)}`;
-  const nodesAt = new Map<string, number[]>();
+  // Paths name nodes by their coordinates rounded to 5 decimals (engine/trip.ts), here as one number:
+  // whole 1e-5 degrees of longitude, then of latitude. Two nodes can round to the same point (2 pairs
+  // in 142,835), so each point keeps every node there.
+  const key = (lon: number, lat: number) => Math.round(lon * 1e5) * 1e8 + Math.round(lat * 1e5);
+  const nodesAt = new Map<number, number[]>();
   for (let n = 0; n < graph.nodeCount; n++) {
-    const k = key(graph.lon[n], graph.lat[n]);
+    const k = key(round5(graph.lon[n]), round5(graph.lat[n]));
     const known = nodesAt.get(k);
     if (known) known.push(n);
     else nodesAt.set(k, [n]);

@@ -91,8 +91,11 @@ function HintLine(props: { text: string; children?: ReactNode }): ReactElement {
 
 // ---- places ----
 
-/** What a reference shows before the server has named it. */
-function givenText(ref: PlaceRef): string {
+/**
+ * What a reference shows before the server has named it. A shop or node the server could not
+ * resolve (a deleted shop) shows nothing: "…" would read as still loading next to its problem line.
+ */
+function givenText(ref: PlaceRef, failed: boolean): string {
   switch (ref.kind) {
     case "text":
       return ref.text;
@@ -102,7 +105,7 @@ function givenText(ref: PlaceRef): string {
       return `${ref.lon}, ${ref.lat}`;
     case "node":
     case "shop":
-      return "…";
+      return failed ? "" : "…";
   }
 }
 
@@ -242,10 +245,18 @@ function LineChips(props: { stop: number; railroads: Railroad[]; line: Railroad 
   );
 }
 
-function StopRow(props: { index: number; count: number; stop: PlaceRef; place: ResolvedPlace | null; problem: string | null; dispatch: (action: PlanAction) => void }): ReactElement {
+function StopRow(props: {
+  index: number;
+  count: number;
+  stop: PlaceRef;
+  place: ResolvedPlace | null;
+  failed: boolean;
+  problem: string | null;
+  dispatch: (action: PlanAction) => void;
+}): ReactElement {
   const { index, stop, place, dispatch } = props;
   const n = index + 1;
-  const label = place?.label ?? givenText(stop);
+  const label = place?.label ?? givenText(stop, props.failed);
   const lines = stop.kind === "node" && place && place.railroads.length > 1 ? place.railroads : null;
   return (
     <li className={`stop-row${props.problem ? " is-wrong" : ""}`}>
@@ -513,7 +524,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
         <PlaceField
           label={label}
           role="shop"
-          committed={{ ref, label: ref ? (place?.label ?? givenText(ref)) : "" }}
+          committed={{ ref, label: ref ? (place?.label ?? givenText(ref, current?.places[field]?.ok === false)) : "" }}
           problem={problemAt(field, current?.places[field])}
           found={!!current && !!resolvedOf(current.places[field])}
           picking={session.pick === field}
@@ -559,6 +570,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
                 count={plan.stops.length}
                 stop={stop}
                 place={placeOf(stop)}
+                failed={current?.places.stops[index]?.ok === false}
                 problem={problemAt(index, current?.places.stops[index])}
                 dispatch={dispatch}
               />

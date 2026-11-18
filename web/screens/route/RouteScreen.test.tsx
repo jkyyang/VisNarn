@@ -3,6 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ShopId } from "../../../shared/places.ts";
 import type { SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
 import { clearQueryCache } from "../../data/query.ts";
@@ -169,6 +170,19 @@ describe("Route planner", () => {
     expect(screen.queryByRole("region", { name: "Routes" })).not.toBeInTheDocument();
     // With no route there is no stop to add: the field's own line says what is wrong.
     expect(hint()).toBeEmptyDOMElement();
+  });
+
+  it("a saved route whose shop was deleted leaves that field empty with its one line, not the loading '…'", async () => {
+    fake.state.savedRoutes.push({
+      id: "route-9" as SavedRouteId,
+      name: "EXAMPLE Kansas City → gone shop",
+      plan: { start: { kind: "shop", shopId: "shop-ex-2" as ShopId }, stops: [], destination: { kind: "shop", shopId: "shop-gone" as ShopId }, include: DEFAULT_INCLUDE },
+      option: null,
+    });
+    openPage("/route/saved/route-9");
+    await waitFor(() => expect(field("Destination")).toHaveAttribute("aria-invalid", "true"));
+    expect(field("Destination")).toHaveValue("");
+    expect(field("Start")).toHaveValue("Kansas City, MO");
   });
 
   it("saves a route, lists it, saves a change, reopens it from the list and deletes it after a confirm", async () => {
