@@ -9,6 +9,7 @@ import type { PlaceRef } from "../../../shared/places.ts";
 import type { FullPlan, Plan, PlanField, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import { snapToNetwork } from "../../data/hooks.ts";
+import { PICK_RADIUS_PX } from "../../map/MapStage.tsx";
 
 type LonLat = { lon: number; lat: number };
 
@@ -187,11 +188,55 @@ export function insertIndex(plan: Plan, places: PlanPlaces | null, at: LonLat): 
   return known.length === stops.length ? stopInsertIndex(start.place, known, destination.place, at) : plan.stops.length;
 }
 
+/** A click this close to the selected route, in pixels, is a click on it (the drawn line follows the track, the legs run node to node). */
+const ON_ROUTE_PX = 10;
+/** Route vertices are node coordinates rounded to about 1 m; this finds that node and no other. */
+const VERTEX_KM = 0.01;
+
+/** Distance from p to the segment a–b, on a flat map around p: fine at the few km a click spans. */
+function segmentKm(p: LonLat, a: LngLat, b: LngLat): number {
+  const kx = 111.32 * Math.cos((p.lat * Math.PI) / 180);
+  const ky = 110.57;
+  const ax = (a[0] - p.lon) * kx, ay = (a[1] - p.lat) * ky;
+  const bx = (b[0] - p.lon) * kx, by = (b[1] - p.lat) * ky;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+  return Math.hypot(ax + t * dx, ay + t * dy);
+}
+
+/**
+ * The node of the route nearest a click that lands on the route (within `withinKm` of its legs),
+ * else null. Snapping there, not to whatever node is nearest, keeps a stop clicked on the line on
+ * the line: a spur node a few km off it would bend the route, or break it. The two ends are left
+ * out: they are the start and destination already.
+ */
+export function routeNodeNear(legs: readonly LngLat[][], at: LonLat, withinKm: number): LngLat | null {
+  const onRoute = legs.some((path) => path.some((point, i) => i > 0 && segmentKm(at, path[i - 1], point) <= withinKm));
+  if (!onRoute) return null;
+  const points = legs.flat();
+  let best: LngLat | null = null;
+  let bestKm = Infinity;
+  points.forEach((point, i) => {
+    if (i === 0 || i === points.length - 1) return;
+    const d = km(at, { lon: point[0], lat: point[1] });
+    if (d < bestKm) {
+      bestKm = d;
+      best = point;
+    }
+  });
+  return best;
+}
+
 export interface PlanSessionHandle {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
-  /** Snap, then fill nextTarget. Ignored while a previous snap is in flight. Rejects when the server cannot be reached. */
-  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null) => Promise<void>;
+  /**
+   * Snap, then fill nextTarget: to a node of the selected route (its legs' paths) when the click is
+   * on it, else to the nearest node. Ignored while a previous snap is in flight. Rejects when the
+   * server cannot be reached.
+   */
+  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<void>;
   /** A shop square: fill nextTarget with that ref. */
   clickPlace: (ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => void;
 }
@@ -277,11 +322,12 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
   );
 
   const clickMap = useCallback(
-    async (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null) => {
+    async (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => {
       if (snapping.current) return;
       snapping.current = true;
       try {
-        const node = await snapToNetwork(lon, lat, toleranceKm);
+        const vertex = route ? routeNodeNear(route, { lon, lat }, (toleranceKm * ON_ROUTE_PX) / PICK_RADIUS_PX) : null;
+        const node = (vertex && (await snapToNetwork(vertex[0], vertex[1], VERTEX_KM))) ?? (await snapToNetwork(lon, lat, toleranceKm));
         if (!node) dispatch({ type: "missed" });
         else place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
       } finally {

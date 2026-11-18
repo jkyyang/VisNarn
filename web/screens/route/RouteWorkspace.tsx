@@ -83,7 +83,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         focus={{ kind: "fit" }}
         onPick={(lon, lat, km) => {
           setClickError(null);
-          clickMap(lon, lat, km, places).catch((error: unknown) => setClickError(error instanceof Error ? error.message : "The click could not be placed."));
+          clickMap(lon, lat, km, places, chosen?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(error instanceof Error ? error.message : "The click could not be placed."));
         }}
         onSelect={onSelect}
         placeActions={[

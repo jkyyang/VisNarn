@@ -29,6 +29,9 @@ import { mapLook, sunPosition } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
+/** A click snaps to a track node if one is within this many screen pixels; the tolerance in km follows the zoom. */
+export const PICK_RADIUS_PX = 36;
+
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
 

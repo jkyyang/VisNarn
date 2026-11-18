@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
-import type { FraId, PlaceRef, ShopId } from "../../../shared/places.ts";
+// @vitest-environment jsdom
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { LngLat } from "../../../shared/geo.ts";
+import type { FraId, NetworkNode, PlaceRef, ShopId } from "../../../shared/places.ts";
 import type { SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
-import { EMPTY_PLAN, nextTarget, planReducer, samePlan, startSession, stopInsertIndex, type PlanAction, type PlanSession } from "./session.ts";
+import { snapToNetwork } from "../../data/hooks.ts";
+import { EMPTY_PLAN, forgetPlan, nextTarget, planReducer, routeNodeNear, samePlan, startSession, stopInsertIndex, usePlanSession, type PlanAction, type PlanSession } from "./session.ts";
+
+vi.mock("../../data/hooks.ts", () => ({ snapToNetwork: vi.fn() }));
 
 const node = (fraId: number): PlaceRef => ({ kind: "node", fraId: fraId as FraId, railroad: null });
 const shop = (id: string): PlaceRef => ({ kind: "shop", shopId: id as ShopId });
@@ -128,5 +134,36 @@ describe("plan session", () => {
     expect(stopInsertIndex(start, stops, destination, { lon: 5, lat: 0.1 })).toBe(1);
     expect(stopInsertIndex(start, stops, destination, { lon: 9, lat: 0.1 })).toBe(2);
     expect(stopInsertIndex(start, [], destination, { lon: 4, lat: 3 })).toBe(0);
+  });
+
+  // A straight line east along the equator, a node every 0.1° (about 11 km), and a spur node 1 km north of it.
+  const line: LngLat[][] = [[[0, 0], [0.1, 0], [0.2, 0]], [[0.2, 0], [0.3, 0], [0.4, 0]]];
+
+  it("routeNodeNear snaps a click on the route to its nearest inner node, and leaves a click off it alone", () => {
+    expect(routeNodeNear(line, { lon: 0.12, lat: 0.009 }, 2)).toEqual([0.1, 0]);
+    expect(routeNodeNear(line, { lon: 0.27, lat: -0.005 }, 2)).toEqual([0.3, 0]);
+    // The two ends are the start and destination: the nearest inner node instead.
+    expect(routeNodeNear(line, { lon: 0.01, lat: 0 }, 2)).toEqual([0.1, 0]);
+    expect(routeNodeNear(line, { lon: 0.2, lat: 0.05 }, 2)).toBeNull();
+    expect(routeNodeNear([], { lon: 0.2, lat: 0 }, 2)).toBeNull();
+  });
+
+  it("a click on the selected route adds the route's own node, not a spur node nearer the click", async () => {
+    forgetPlan();
+    const at = (fraId: number, lon: number, lat: number): NetworkNode => ({ fraId: fraId as FraId, lon, lat, near: "EXAMPLE", railroads: ["BNSF"], yard: false, km: 0 });
+    const nodes: Record<string, NetworkNode> = { "0.1,0": at(10, 0.1, 0), spur: at(99, 0.14, 0.009) };
+    // The server's nearest node: the route node when asked at its own point, else the spur.
+    vi.mocked(snapToNetwork).mockImplementation(async (lon, lat) => nodes[`${lon},${lat}`] ?? nodes.spur);
+    const { result } = renderHook(() => usePlanSession(null, null));
+    act(() => {
+      result.current.dispatch({ type: "setPlace", field: "start", ref: KC });
+      result.current.dispatch({ type: "setPlace", field: "destination", ref: CHICAGO });
+    });
+    // 36 px of tolerance, 9 km: the route counts within 10 px, 2.5 km.
+    await act(() => result.current.clickMap(0.14, 0.005, 9, null, line));
+    expect(stopIds(result.current.session)).toEqual([10]);
+    // Off the route, the nearest node wins as before.
+    await act(() => result.current.clickMap(0.15, 0.05, 9, null, line));
+    expect(stopIds(result.current.session)).toEqual([10, 99]);
   });
 });

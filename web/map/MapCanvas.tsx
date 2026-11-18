@@ -22,7 +22,7 @@ import { networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.t
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
-import type { MapContentProps, MapFocus } from "./MapStage.tsx";
+import { PICK_RADIUS_PX, type MapContentProps, type MapFocus } from "./MapStage.tsx";
 import { REAL_TRACKS_MIN_ZOOM, RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
 import { NETWORK_BOUNDS, routePaths, withRoutePaths } from "./scene.ts";
@@ -48,8 +48,6 @@ export interface MapCanvasProps {
   onCentre: (centre: LngLat) => void;
 }
 
-/** A click snaps to a track node if one is within this many screen pixels; the tolerance in km follows the zoom. */
-export const PICK_RADIUS_PX = 36;
 /** The farthest the server snaps a click (GET /api/places/nearest): zoomed far out, 36 px is more than that. */
 const MAX_PICK_KM = 100;
 
