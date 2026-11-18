@@ -119,20 +119,16 @@ describe("Route planner", () => {
     expect(within(screen.getByRole("list", { name: "Sections" })).getByText("router's pick")).toBeInTheDocument();
   });
 
-  it("a railroad change with no place name: Save warns first and saves only on Save anyway; Reverse route flips the ends", async () => {
+  it("Save saves a route with a railroad change; Reverse route flips the ends", async () => {
     const user = userEvent.setup();
     openPage("/route");
     await user.type(field("Start"), "Kansas City, MO{Enter}");
     await user.type(field("Destination"), "Chicago, IL{Enter}");
     const string = await screen.findByRole("region", { name: "Route string" });
     expect(string).toHaveTextContent(/^BNSF – \[\d+ km from [^\]]+\] – CN/);
-    expect(within(screen.getByRole("list", { name: "Sections" })).getByText("no place name")).toBeInTheDocument();
 
     const save = screen.getByRole("form", { name: "Save route" });
     await user.click(within(save).getByRole("button", { name: "Save" }));
-    expect(within(save).getByRole("alert")).toHaveTextContent(/Railroad change with no place name: \d+ km from/);
-    expect(fake.state.savedRoutes).toEqual([]);
-    await user.click(within(save).getByRole("button", { name: "Save anyway" }));
     await waitFor(() => expect(fake.state.savedRoutes).toHaveLength(1));
     expect(fake.state.savedRoutes[0].routeString).toMatch(/^BNSF-\[\d+ km from [^\]]+\]-CN$/);
 

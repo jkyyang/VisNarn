@@ -14,7 +14,6 @@ import type { RoutePath } from "./route.ts";
 export interface Junction {
   /** Our own place name, or "72 km from Topeka, KS" when no named place is near. */
   place: string;
-  named: boolean;
   /** The person chose the next carrier here; otherwise it is the router's pick. */
   chosen: boolean;
   /** Its interchange row in `route.steps`. */
@@ -41,7 +40,7 @@ export function routeStringOf(route: RoutePath, stops: PlaceRef[]): RouteString 
   route.steps.forEach((step, i) => {
     if (step.kind === "interchange") {
       // A change before the first carrier is a tie the router broke at the start, not a handoff; nor is a change to the same carrier.
-      if (carriers.length && step.from !== step.to) change = { place: step.at, named: isPlaceName(step.at), chosen: false, step: i };
+      if (carriers.length && step.from !== step.to) change = { place: step.at, chosen: false, step: i };
     } else if (step.kind === "leg") {
       const carrier = route.legs[step.leg].railroad;
       if (!carriers.length) carriers.push(carrier);
@@ -67,6 +66,3 @@ export const compactRouteString = (route: RouteString): string => parts(route).j
 
 /** "BNSF – [Kansas City, MO] – UP": the form that is shown. */
 export const shownRouteString = (route: RouteString): string => parts(route).join(" – ");
-
-/** Railroad changes with no place name: saving such a route asks first. */
-export const unnamedJunctions = (route: RouteString): string[] => route.junctions.filter((junction) => !junction.named).map((junction) => junction.place);

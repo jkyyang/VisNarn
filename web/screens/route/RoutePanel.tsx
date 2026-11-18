@@ -8,7 +8,7 @@ import type { PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ResolvedPla
 import type { PlanField, PlannedRoute, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
 import { RAILROADS, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
-import { compactRouteString, routeStringOf, shownRouteString, unnamedJunctions, type RouteString } from "../../../shared/routeString.ts";
+import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
 import { usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtKmShort } from "../../format.ts";
@@ -347,13 +347,12 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
 
 type SectionRow = { key: string; mark: ReactNode; text: ReactNode; kind: "place" | "leg" | "interchange" | "turn-back" };
 
-/** "you chose" or "router's pick", and "no place name" when the change has none. */
+/** "you chose" or "router's pick". */
 function JunctionChips({ junction }: { junction: RouteString["junctions"][number] }): ReactElement {
   return (
     <>
       {" "}
       <span className={`who-chip${junction.chosen ? " is-chosen" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
-      {!junction.named && <span className="who-chip is-unnamed">no place name</span>}
     </>
   );
 }
@@ -434,22 +433,15 @@ function RouteStringRow(props: { string: RouteString; saved: string | null }): R
 
 // ---- saving ----
 
-/** `unnamed`: railroad changes with no place name. Saving then asks first: a change must name its junction. */
-function SaveBar(props: { initial: string; canSave: boolean; unnamed: string[]; changed: (name: string) => boolean; onSave: (name: string) => Promise<void> }): ReactElement {
+function SaveBar(props: { initial: string; canSave: boolean; changed: (name: string) => boolean; onSave: (name: string) => Promise<void> }): ReactElement {
   const id = useId();
   const [typed, setTyped] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
   const name = typed ?? props.initial;
   const dirty = props.changed(name.trim());
-  const save = async (anyway: boolean) => {
+  const save = async () => {
     if (!props.canSave || !name.trim() || !dirty || busy) return;
-    if (props.unnamed.length && !anyway) {
-      setAsking(true);
-      return;
-    }
-    setAsking(false);
     setBusy(true);
     setError(null);
     try {
@@ -462,7 +454,7 @@ function SaveBar(props: { initial: string; canSave: boolean; unnamed: string[]; 
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void save(false);
+    void save();
   };
   return (
     <form className="save-bar" aria-label="Save route" onSubmit={submit}>
@@ -473,14 +465,6 @@ function SaveBar(props: { initial: string; canSave: boolean; unnamed: string[]; 
       <button type="submit" className="btn btn--primary" disabled={!props.canSave || !name.trim() || !dirty || busy}>
         {busy ? "Saving…" : dirty ? "Save" : "Saved"}
       </button>
-      {asking && props.unnamed.length > 0 && (
-        <p className="save-warning" role="alert">
-          <span>Railroad change with no place name: {props.unnamed.join(" · ")}</span>
-          <button type="button" className="btn btn--small" onClick={() => void save(true)}>
-            Save anyway
-          </button>
-        </p>
-      )}
       {error && (
         <p className="error" role="alert">
           {error}
@@ -666,7 +650,6 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
               key={open?.id ?? "new"}
               initial={open?.name ?? routeName(result.places)}
               canSave={plan.start !== null && plan.destination !== null}
-              unnamed={unnamedJunctions(string)}
               changed={changed}
               onSave={(name) => props.onSave(name, compactRouteString(string))}
             />

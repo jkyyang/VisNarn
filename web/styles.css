@@ -884,16 +884,6 @@ input[aria-invalid="true"] {
 .save-bar .error {
   flex-basis: 100%;
 }
-.save-warning {
-  flex-basis: 100%;
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--turn);
-}
 /* The route string: "BNSF – [Kansas City, MO] – UP", and what it is not. */
 .route-string {
   display: flex;
@@ -912,7 +902,7 @@ input[aria-invalid="true"] {
   font-size: 12px;
   color: var(--muted);
 }
-/* On each railroad change: "you chose" or "router's pick", and "no place name". */
+/* On each railroad change: "you chose" or "router's pick". */
 .who-chip {
   display: inline-block;
   margin-left: 6px;
@@ -927,10 +917,6 @@ input[aria-invalid="true"] {
   border-color: var(--route);
   background: var(--route-soft);
   color: var(--route-text);
-}
-.who-chip.is-unnamed {
-  border-color: var(--turn);
-  color: var(--turn);
 }
 .saved-list summary {
   cursor: pointer;

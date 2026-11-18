@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FraId, PlaceRef } from "./places.ts";
 import type { Line } from "./railroads.ts";
 import type { Leg, Milestone, RoutePath } from "./route.ts";
-import { compactRouteString, routeStringOf, shownRouteString, unnamedJunctions } from "./routeString.ts";
+import { compactRouteString, routeStringOf, shownRouteString } from "./routeString.ts";
 
 /** A route from rows written in travel order: a line is a leg, "[place]" a railroad change, "stop N" a stop, "↩" a turn-back. */
 function route(...rows: string[]): RoutePath {
@@ -54,13 +54,6 @@ describe("route string", () => {
   it("drops a change of railroad before the first carrier (the router breaking a tie at the start) and a change to the same carrier", () => {
     expect(shownRouteString(routeStringOf(route("[Chicago, IL]", "CSXT"), []))).toBe("CSXT");
     expect(shownRouteString(routeStringOf(route("BNSF", "[Temple, TX]", "BNSF", "[Fort Worth, TX]", "UP"), []))).toBe("BNSF – [Fort Worth, TX] – UP");
-  });
-
-  it("marks a railroad change with no place name, for the warning before saving", () => {
-    const string = routeStringOf(route("BNSF", "[33 km from Chicago, IL]", "CN", "[Chicago, IL]", "UP"), []);
-    expect(string.junctions.map((j) => j.named)).toEqual([false, true]);
-    expect(unnamedJunctions(string)).toEqual(["33 km from Chicago, IL"]);
-    expect(shownRouteString(string)).toBe("BNSF – [33 km from Chicago, IL] – CN – [Chicago, IL] – UP");
   });
 
   it("marks the change before a stop with a chosen next carrier as the person's choice", () => {

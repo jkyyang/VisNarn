@@ -97,9 +97,6 @@ test.describe("Route planner", () => {
     await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Taylor → North Little Rock via Temple");
     const save = page.getByRole("form", { name: "Save route" });
     await save.getByRole("button", { name: "Save" }).click();
-    // This route changes railroad where no named place is near: saving asks first.
-    await expect(save.getByRole("alert")).toContainText("Railroad change with no place name");
-    await save.getByRole("button", { name: "Save anyway" }).click();
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
     await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
     const savedAt = new URL(page.url()).pathname;
@@ -144,10 +141,6 @@ test.describe("Route planner", () => {
     await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Baton Rouge → Ville Platte");
     const save = page.getByRole("form", { name: "Save route" });
     await save.getByRole("button", { name: "Save" }).click();
-    // UP hands over to the short line where no named place is near: saving asks first, and only Save anyway saves.
-    await expect(save.getByRole("alert")).toContainText("Railroad change with no place name");
-    await expect(page).not.toHaveURL(/\/route\/saved\//);
-    await save.getByRole("button", { name: "Save anyway" }).click();
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
     await page.reload();
     await expect(shortLines).toBeChecked();
