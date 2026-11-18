@@ -1,7 +1,8 @@
 /** The Shops screen's parts. Views only. */
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactElement } from "react";
-import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
-import { usePlace } from "../../data/hooks.ts";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
+import type { ImportReport, ImportRequest, NetworkNode, PlaceRef, PlaceResolution, PlaceSuggestion, RowIssue, ShopDraft, ShopView } from "../../../shared/places.ts";
+import { usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
+import { moveActive } from "../../map/MapSearch.tsx";
 import { readFileText } from "../../ui/files.ts";
 
 /** "On the network · BNSF, UP", "Nearest track 12 km away · BNSF", or the problem in words. */
@@ -142,6 +143,9 @@ export function ShopForm(props: {
   const [code, setCode] = useState(props.shop?.code ?? "");
   const [locText, setLocText] = useState(initial.text);
   const [locRef, setLocRef] = useState<PlaceRef | null>(initial.ref);
+  // The suggestions are open from a keystroke until one is chosen, Esc, or leaving the box. -1: none highlighted.
+  const [suggesting, setSuggesting] = useState(false);
+  const [active, setActive] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -163,7 +167,33 @@ export function ShopForm(props: {
 
   // The server reads the text the way it reads an import cell: a code, "lon, lat", a city, a node.
   const ref = useMemo<PlaceRef | null>(() => locRef ?? (locText.trim() ? { kind: "text", text: locText.trim() } : null), [locRef, locText]);
-  const resolution = usePlace(ref, "shop");
+  // "position", as the server saves a shop's own location: codes and cities before Your shops.
+  const resolution = usePlace(ref, "position");
+  const suggestions = usePlaceSuggestions(suggesting ? locText : "", "position");
+  // A stale list belongs to the text before the last keystroke.
+  const list: PlaceSuggestion[] = suggesting && suggestions.status === "ready" && !suggestions.stale ? suggestions.data : [];
+  const listOpen = list.length > 0;
+  const closeList = () => {
+    setSuggesting(false);
+    setActive(-1);
+  };
+  const choose = (suggestion: PlaceSuggestion) => {
+    setLocText(suggestion.label);
+    setLocRef(suggestion.ref);
+    closeList();
+  };
+  const onLocKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (listOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      setActive(moveActive(active, event.key, list.length));
+    } else if (listOpen && event.key === "Enter") {
+      // Enter takes the highlighted suggestion, else the first, instead of saving the form.
+      event.preventDefault();
+      choose(list[Math.max(active, 0)]);
+    } else if (listOpen && event.key === "Escape") {
+      closeList();
+    }
+  };
   const resolved = resolution.status === "ready" && !resolution.stale ? resolution.data : null;
   const hint = resolution.status === "ready" ? placeHint(resolution.data) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
   const canSave = !!name.trim() && !!resolved?.ok && !busy;
@@ -205,18 +235,49 @@ export function ShopForm(props: {
         </div>
         <div className="field">
           <label htmlFor={`${ids}-loc`}>Location</label>
-          <input
-            id={`${ids}-loc`}
-            className="mono"
-            value={locText}
-            aria-invalid={hint && !hint.ok ? true : undefined}
-            aria-describedby={hint ? `${ids}-hint` : undefined}
-            onChange={(e) => {
-              setLocText(e.target.value);
-              setLocRef(null);
-            }}
-            placeholder="e.g. -92.27, 34.77"
-          />
+          <div className="place-field">
+            <input
+              id={`${ids}-loc`}
+              className="mono"
+              role="combobox"
+              aria-expanded={listOpen}
+              aria-controls={`${ids}-loc-list`}
+              aria-autocomplete="list"
+              aria-activedescendant={listOpen && active >= 0 ? `${ids}-loc-list-${active}` : undefined}
+              autoComplete="off"
+              value={locText}
+              aria-invalid={hint && !hint.ok ? true : undefined}
+              aria-describedby={hint ? `${ids}-hint` : undefined}
+              onChange={(e) => {
+                setLocText(e.target.value);
+                setLocRef(null);
+                setSuggesting(true);
+                setActive(-1);
+              }}
+              onKeyDown={onLocKeyDown}
+              onBlur={closeList}
+              placeholder="e.g. Kansas City, MO or -92.27, 34.77"
+            />
+            {listOpen && (
+              <ul className="suggestions" role="listbox" id={`${ids}-loc-list`} aria-label="Suggestions for Location">
+                {list.map((suggestion, i) => (
+                  <li
+                    key={`${suggestion.source}-${suggestion.label}-${i}`}
+                    id={`${ids}-loc-list-${i}`}
+                    role="option"
+                    aria-selected={i === active}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      choose(suggestion);
+                    }}
+                  >
+                    <span>{suggestion.label}</span>
+                    <span className="muted small">{suggestion.detail}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {hint && (
             <span id={`${ids}-hint`} className={`hint ${hint.ok ? "hint--ok" : "hint--bad"}`}>
               {hint.text}

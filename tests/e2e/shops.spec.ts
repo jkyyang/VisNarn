@@ -26,7 +26,7 @@ test.describe("Shops", () => {
     const save = form.getByRole("button", { name: "Save shop" });
     await form.getByRole("textbox", { name: "Name", exact: true }).fill("Temple test shop");
     await expect(save).toBeDisabled();
-    const location = form.getByRole("textbox", { name: "Location" });
+    const location = form.getByRole("combobox", { name: "Location" });
     await location.fill("-140, 70");
     await expect(form).toContainText("-140, 70 is more than 15 km from any Class I main line.");
     await expect(save).toBeDisabled();

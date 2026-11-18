@@ -56,11 +56,11 @@ describe("Shops screen", () => {
     await user.type(within(form).getByRole("textbox", { name: "Name" }), "Temple yard shop");
     expect(save).toBeDisabled();
 
-    await user.type(within(form).getByRole("textbox", { name: "Location" }), "-140, 70");
+    await user.type(within(form).getByRole("combobox", { name: "Location" }), "-140, 70");
     expect(await within(form).findByText("No track near -140, 70.")).toBeInTheDocument();
     expect(save).toBeDisabled();
 
-    const location = within(form).getByRole("textbox", { name: "Location" });
+    const location = within(form).getByRole("combobox", { name: "Location" });
     await user.clear(location);
     await user.type(location, "-97.34, 31.10");
     expect(await within(form).findByText("On the network · BNSF, UP")).toBeInTheDocument();
@@ -71,6 +71,21 @@ describe("Shops screen", () => {
     expect(currentPath()).toBe("/shops");
     expect(fake.state.shops.map((s) => s.name)).toContain("Temple yard shop");
     expect(screen.queryByRole("region", { name: "Add shop" })).not.toBeInTheDocument();
+  });
+
+  it("Location suggests places as the planner does: a typed 'kansas' offers Kansas City, MO, and Enter takes it", async () => {
+    const user = userEvent.setup();
+    openPage("/shops/new");
+    const form = await screen.findByRole("region", { name: "Add shop" });
+    await user.type(within(form).getByRole("textbox", { name: "Name" }), "x");
+    const location = within(form).getByRole("combobox", { name: "Location" });
+    await user.type(location, "kansas");
+    expect(await within(form).findByRole("option", { name: /Kansas City, MO.*City/ })).toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(location).toHaveValue("Kansas City, MO");
+    expect(within(form).queryByRole("listbox")).not.toBeInTheDocument();
+    expect(await within(form).findByText(/^On the network/)).toBeInTheDocument();
+    await waitFor(() => expect(within(form).getByRole("button", { name: "Save shop" })).toBeEnabled());
   });
 
   it("edits a shop's name, and refuses a code another shop already has", async () => {
