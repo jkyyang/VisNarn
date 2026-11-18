@@ -10,9 +10,14 @@
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 18px;
+  --radius-pill: 999px;
+  --hairline: 0.5px;
   --inset: 12px;
   --panel-w: 380px;
+  /* The map beside the panel, less a margin each side: no card over the map is wider. */
+  --free-w: calc(100vw - var(--panel-w) - 3 * var(--inset));
   --ctl: 32px;
+  --icon-btn: 28px;
   --row: 40px;
   --sheet-rest: 42svh;
   /* Motion: a press, a popover opening, a fade, rows sliding into place (web/ui/reorder.ts). */
@@ -98,6 +103,7 @@
     --text-md: 16px;
     --text-lg: 17px;
     --text-xl: 24px;
+    --free-w: calc(100vw - 2 * var(--inset));
     --ctl: 44px;
     --row: 48px;
   }
@@ -133,13 +139,6 @@ h2 {
   margin: 0;
   font-size: inherit;
   text-wrap: balance;
-}
-kbd {
-  font: inherit;
-  font-size: var(--text-sm);
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--fill);
 }
 :focus-visible {
   outline: 2px solid var(--route);
@@ -222,7 +221,7 @@ kbd {
   top: 0;
   left: var(--sep-inset, 12px);
   right: 0;
-  height: 0.5px;
+  height: var(--hairline);
   background: var(--sep);
 }
 .group > :first-child,
@@ -283,7 +282,7 @@ kbd {
   height: 26px;
   padding: 0 10px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--fill);
   color: var(--fg);
   font-size: var(--text-sm);
@@ -315,8 +314,10 @@ kbd {
   outline: 2px solid var(--route);
   outline-offset: 2px;
 }
+/* Always on: grey, so the blue chips are the ones to press. */
 .chip:has(:disabled) {
-  opacity: 0.55;
+  background: var(--fill);
+  color: var(--muted);
   cursor: default;
 }
 .btn {
@@ -362,8 +363,8 @@ kbd {
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -475,7 +476,7 @@ input[aria-invalid="true"] {
   height: 18px;
   min-width: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--turn);
   color: var(--on-fill);
   font-size: var(--text-xs);
@@ -623,7 +624,7 @@ input[aria-invalid="true"] {
 }
 .drag-handle {
   align-self: start;
-  margin-top: calc((var(--row) - 28px) / 2);
+  margin-top: calc((var(--row) - var(--icon-btn)) / 2);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -879,14 +880,19 @@ input[aria-invalid="true"] {
   border-collapse: collapse;
 }
 .shop-table td {
-  height: 44px;
-  padding: 6px 8px;
+  height: var(--row);
+  padding: 6px 12px 6px 0;
 }
+/* The first cell takes the room the others leave, so a name wraps only when it is longer than the row. */
 .shop-table td:first-child {
+  width: 100%;
   padding-left: 12px;
 }
+.shop-table td + td {
+  white-space: nowrap;
+}
 .shop-table tr + tr td {
-  border-top: 0.5px solid var(--sep);
+  border-top: var(--hairline) solid var(--sep);
 }
 .shop-table tr.is-editing td {
   background: var(--route-soft);
@@ -895,28 +901,31 @@ input[aria-invalid="true"] {
 .shop-table tr.is-editing .link-btn {
   color: var(--fg);
 }
-.shop-code {
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+/* The pin hangs left of the name; the code and EXAMPLE sit under the name, in its column. */
+.shop-name,
+.shop-sub {
+  padding-left: 22px;
 }
-/* Pin, name and EXAMPLE as running text with a hanging indent: a long name wraps and the table still fits the panel. */
 .shop-name {
   display: block;
-  padding-left: 22px;
 }
 .shop-name svg {
   margin: 0 8px 0 -22px;
   vertical-align: -3px;
 }
-.shop-name .caption {
-  margin-left: 6px;
+.shop-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 /* A shop name or code may be up to 200 characters with no space or hyphen; breaking anywhere keeps it from widening a card or the shop table. */
 .section-text,
 .shop-name,
-.shop-table td.shop-code,
+.shop-sub,
+.import-preview,
 .suggestions li > span:first-child {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1060,7 +1069,7 @@ input[aria-invalid="true"] {
   cursor: pointer;
 }
 .map-btn + .map-btn {
-  border-top: 0.5px solid var(--sep);
+  border-top: var(--hairline) solid var(--sep);
 }
 .map-btn:disabled {
   cursor: default;
@@ -1071,11 +1080,16 @@ input[aria-invalid="true"] {
 .map-btn[aria-expanded="true"] {
   color: var(--route);
 }
+/* A popover under the search box and left of the buttons: opening it moves nothing and covers no button. */
 .layers-card {
+  position: absolute;
+  top: calc(var(--ctl) + var(--inset));
+  right: calc(var(--ctl) + var(--inset));
   display: flex;
   flex-direction: column;
   gap: 12px;
   width: 280px;
+  max-width: calc(var(--free-w) - var(--ctl) - var(--inset));
   padding: 12px;
   transform-origin: top right;
 }
@@ -1116,7 +1130,7 @@ input[aria-invalid="true"] {
 .legend-line {
   width: 14px;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 /* Regional and short-line sections are drawn thinner than Class I. */
 .legend-line.is-thin {
@@ -1137,9 +1151,10 @@ input[aria-invalid="true"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: calc(100% - 140px);
+  max-width: var(--free-w);
   padding: 8px 8px 8px 14px;
   border-radius: var(--radius);
+  text-wrap: balance;
 }
 /* The search box: top left of the free map, clear of the panel, the map buttons and the legend. */
 .map-search {
@@ -1148,7 +1163,7 @@ input[aria-invalid="true"] {
   top: var(--inset);
   left: calc(var(--panel-w) + 2 * var(--inset));
   width: 340px;
-  max-width: calc(100% - var(--panel-w) - 4 * var(--inset) - var(--ctl));
+  max-width: calc(var(--free-w) - var(--ctl) - var(--inset));
 }
 .map-search-box {
   height: 40px;
@@ -1209,7 +1224,7 @@ input[aria-invalid="true"] {
   flex-direction: column;
   gap: 8px;
   width: 320px;
-  max-width: calc(100vw - 24px);
+  max-width: var(--free-w);
   padding: 12px;
   color: var(--fg);
   cursor: default;
@@ -1240,14 +1255,8 @@ input[aria-invalid="true"] {
   grid-auto-flow: column;
   gap: 6px;
 }
-/* Three equal buttons: a long label wraps instead of widening its button. */
 .found-actions .btn {
-  height: auto;
-  min-height: var(--ctl);
-  padding: 6px;
-  white-space: normal;
-  text-wrap: balance;
-  line-height: 1.2;
+  padding: 0 6px;
 }
 /* Route pills and turn-back discs: map markers over deck.gl's canvas (which sits at z-index 2). */
 .route-mark {
@@ -1276,7 +1285,7 @@ input[aria-invalid="true"] {
   height: 26px;
   padding: 0 8px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--panel);
   color: var(--fg);
   font: 600 var(--text-sm) / 1 var(--sans);
@@ -1385,7 +1394,7 @@ input[aria-invalid="true"] {
 .btn:active,
 .icon-btn:not(.drag-handle):active,
 .map-btn:active,
-.chip:active,
+.chip:not(:has(:disabled)):active,
 .route-row:active,
 .segmented > :active {
   scale: 0.97;
@@ -1421,12 +1430,15 @@ input[aria-invalid="true"] {
     height: auto;
     overflow: visible;
   }
+  /* Two rest points: the top of the page, with the map over most of the screen, or the panel at the top.
+     The first is on the frame: the map is sticky, and a sticky element's rest point moves as the page scrolls. */
   .app {
     display: flex;
     flex-direction: column;
     height: auto;
     min-height: 100svh;
     overflow: visible;
+    scroll-snap-align: start;
   }
   .map {
     position: sticky;
@@ -1434,9 +1446,7 @@ input[aria-invalid="true"] {
     order: -1;
     flex: none;
     height: calc(100svh - var(--sheet-rest) + var(--radius-lg));
-    scroll-snap-align: start;
   }
-  /* Two rest points: the map over most of the screen, or the panel at the top. */
   .panel {
     position: relative;
     inset: auto;
@@ -1485,7 +1495,10 @@ input[aria-invalid="true"] {
     bottom: auto;
     left: var(--inset);
     right: calc(var(--ctl) + 2 * var(--inset));
-    max-width: none;
+  }
+  /* The map is short here: a card open over it takes the legend's room. */
+  .map:has(.layers-card, .found-card) .legend {
+    visibility: hidden;
   }
   /* Pinch zooms on a phone. */
   .ctl-group--zoom {
@@ -1505,16 +1518,6 @@ input[aria-invalid="true"] {
   }
   .legend-rr {
     column-gap: 8px;
-  }
-  .shop-table td {
-    padding-left: 5px;
-    padding-right: 5px;
-  }
-  /* A long code breaks after a hyphen ("DRAFT-" / "UTLX-ECH"), so each row's Edit stays inside a 360 px panel.
-     9ch plus the cell padding (a table cell's min-width counts it) keeps "EX-BHM-01" whole. */
-  .shop-table td.shop-code {
-    white-space: normal;
-    min-width: calc(9ch + 10px);
   }
   .import-row {
     flex-wrap: wrap;

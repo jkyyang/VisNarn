@@ -1,16 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { Bounds } from "../../shared/geo.ts";
-import { FIT_MAX_ZOOM, FIT_MS } from "./config.ts";
+import { FIT_MAX_ZOOM, FIT_MS, FIT_PADDING } from "./config.ts";
 
-/**
- * The free part of the map, right of the panel, with room for the floating controls, and at the sides
- * for the labels that hang off the outermost pins. A wide map can spare that room; a phone cannot.
- * The map buttons take the right edge.
- */
+/** The free part of the map, right of the panel, less FIT_PADDING. */
 function fitOptions(mapWidth: number, coveredLeft: number) {
-  const side = Math.round(Math.min(150, Math.max(40, (mapWidth - coveredLeft) * 0.14)));
-  return { padding: { top: 72, bottom: 84, left: coveredLeft + side, right: Math.max(side, 72) }, maxZoom: FIT_MAX_ZOOM };
+  const { top, bottom, sideShare, sideMin, sideMax, buttons } = FIT_PADDING;
+  const side = Math.round(Math.min(sideMax, Math.max(sideMin, (mapWidth - coveredLeft) * sideShare)));
+  return { padding: { top, bottom, left: coveredLeft + side, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
 }
 
 type View = { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };

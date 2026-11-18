@@ -13,6 +13,7 @@ import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRouteP
 
 const grey: RGBA = [90, 100, 110, 255];
 const colors: ThemeColors = {
+  sans: "sans-serif",
   fg: [0, 0, 0, 255],
   muted: grey,
   route: [26, 115, 232, 255],

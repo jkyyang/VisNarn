@@ -51,9 +51,7 @@ export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; on
       aria-label={pill.selected ? `Route ${pill.text}, selected` : `Route ${pill.text}`}
     >
       {pill.text}
-      {pill.turnBacks > 0 && (
-        <TurnBadge count={pill.turnBacks} />
-      )}
+      {pill.turnBacks > 0 && <TurnBadge count={pill.turnBacks} />}
     </button>
   );
 }

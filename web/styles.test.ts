@@ -1,32 +1,25 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { PIN_ICONS } from "./map/layers.ts";
 
 const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 describe("styles.css", () => {
-  // jsdom has no layout, so this reads the rule: a nowrap "DRAFT-UTLX-ECH" made the shop table wider than a 360 px card and clipped Edit.
-  it("lets a shop code wrap on a phone so each row's Edit stays visible", () => {
-    // The last phone block holds the layout; the first only resizes the tokens.
-    const start = css.lastIndexOf("@media (max-width: 640px)");
-    expect(start).toBeGreaterThan(-1);
-    let depth = 0;
-    let end = css.indexOf("{", start);
-    do {
-      if (css[end] === "{") depth++;
-      if (css[end] === "}") depth--;
-      end++;
-    } while (depth > 0 && end < css.length);
-    const phone = css.slice(start, end);
-    const rule = /\.shop-table td\.shop-code\s*\{([^}]*)\}/.exec(phone);
-    expect(rule?.[1]).toMatch(/white-space:\s*normal/);
-  });
-
-  // jsdom has no layout: a 190-character unbroken shop name made the Sections list and the shop table thousands of px wide on a phone.
+  // jsdom has no layout: a 190-character unbroken shop name made the Sections list and the shop table thousands of px wide on a phone,
+  // and a nowrap "DRAFT-UTLX-ECH" code pushed each row's Edit out of a 360 px panel.
   it("lets a long unbroken shop name or code break anywhere", () => {
     const anywhere = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => /overflow-wrap:\s*anywhere/.test(m[2] ?? ""));
     const selectors = anywhere.flatMap((m) => (m[1] ?? "").split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()));
-    for (const selector of [".section-text", ".shop-name", ".shop-table td.shop-code", ".suggestions li > span:first-child"]) {
+    for (const selector of [".section-text", ".shop-name", ".shop-sub", ".import-preview", ".suggestions li > span:first-child"]) {
       expect(selectors).toContain(selector);
+    }
+  });
+
+  // The pins are images, which cannot read CSS variables: their colours are written out in web/map/layers.ts.
+  it("draws the map's pins in the day look's pin colours", () => {
+    const day = (token: string) => new RegExp(`${token}: (#[0-9a-f]{6});`).exec(css)?.[1];
+    for (const [pin, token] of [["start", "--pin-a"], ["destination", "--shop"], ["stop", "--route"]] as const) {
+      expect(decodeURIComponent(PIN_ICONS[pin].url), `${pin} pin is ${token}`).toContain(day(token));
     }
   });
 

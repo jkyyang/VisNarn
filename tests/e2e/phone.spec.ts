@@ -23,7 +23,20 @@ test("Phone: map on top, then the places, the routes and the sections in one col
   await expect(page.getByRole("combobox", { name: "Start" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true })).toBeVisible();
   await expect(page.getByRole("list", { name: "Sections" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Undo route change" })).toBeVisible();
+  const undo = page.getByRole("button", { name: "Undo route change" });
+  await expect(undo).toBeVisible();
+
+  // The layers card is a popover: opening it moves no button, it stays on the map, and Escape closes it.
+  const before = await undo.boundingBox();
+  await page.getByRole("button", { name: /^Map layers/ }).tap();
+  const card = await page.locator(".layers-card").boundingBox();
+  const shown = await map.boundingBox();
+  if (!card || !shown) throw new Error("The layers card or the map is not on the page.");
+  expect(await undo.boundingBox()).toEqual(before);
+  expect(card.x).toBeGreaterThanOrEqual(shown.x);
+  expect(card.y + card.height).toBeLessThanOrEqual(shown.y + shown.height);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".layers-card")).toBeHidden();
 
   // Nothing wider than the phone: no sideways scrolling.
   await expectNoSideScroll(page);
@@ -44,4 +57,13 @@ test("Phone: Shops fits the width; a shop's form comes into view when Edit is ta
   await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
   await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeInViewport();
   await expectNoSideScroll(page);
+
+  // With the sheet already slid up over the map, the form still opens at its heading.
+  await page.goto("/shops");
+  const last = page.getByRole("button", { name: /^Edit / }).last();
+  await last.scrollIntoViewIfNeeded();
+  await page.evaluate(() => window.scrollBy({ top: 400 }));
+  await expect.poll(() => page.locator(".panel").evaluate((panel) => panel.getBoundingClientRect().top)).toBeLessThan(20);
+  await last.tap();
+  await expect(form.getByRole("heading", { name: "Edit shop" })).toBeInViewport({ ratio: 1 });
 });

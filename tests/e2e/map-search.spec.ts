@@ -17,7 +17,7 @@ async function findCity(page: Page, name: string) {
   return page.getByRole("region", { name: /^Found: / });
 }
 
-test("Search Kansas City: the map centres on it, and Set as start makes it the planner's start", async ({ page }) => {
+test("Search Kansas City: the map centres on it, and Start makes it the planner's start", async ({ page }) => {
   const requests: URL[] = [];
   page.on("request", (request) => requests.push(new URL(request.url())));
 
@@ -33,7 +33,7 @@ test("Search Kansas City: the map centres on it, and Set as start makes it the p
   expect(Math.abs(pin.y + pin.height / 2 - centre.y)).toBeLessThan(3);
   await keepScreenshot(page, "map-search");
 
-  await card.getByRole("button", { name: "Set as start" }).click();
+  await card.getByRole("button", { name: "Start" }).click();
   await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("Kansas City, MO");
   // The click on the card placed nothing else on the map.
   await expect(page.getByRole("combobox", { name: "Destination" })).toHaveValue("");

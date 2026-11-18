@@ -92,9 +92,9 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         }}
         onSelect={onSelect}
         placeActions={[
-          { label: "Set as start", run: (found) => dispatch(placeAtEnd(plan, "start", found.ref)) },
-          { label: "Add as stop", run: (found) => dispatch({ type: "insert", at: insertIndex(plan, places, found), ref: found.ref }) },
-          { label: "Set as destination", run: (found) => dispatch(placeAtEnd(plan, "destination", found.ref)) },
+          { label: "Start", run: (found) => dispatch(placeAtEnd(plan, "start", found.ref)) },
+          { label: "Add stop", run: (found) => dispatch({ type: "insert", at: insertIndex(plan, places, found), ref: found.ref }) },
+          { label: "Destination", run: (found) => dispatch(placeAtEnd(plan, "destination", found.ref)) },
         ]}
         history={{
           undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,

@@ -175,7 +175,7 @@ test.describe("Route planner", () => {
     await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     await page.getByRole("combobox", { name: "Search the map" }).fill("Temple, TX");
     await page.getByRole("option").first().click();
-    await page.getByRole("button", { name: "Add as stop" }).click();
+    await page.getByRole("region", { name: /^Found: / }).getByRole("button", { name: "Add stop" }).click();
     await expect(placeRows(page)).toHaveCount(3);
     const values = () => placeRows(page).getByRole("combobox").evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
     await expect.poll(values).toEqual(["Taylor, TX", "Temple, TX", "North Little Rock, AR"]);
@@ -201,7 +201,7 @@ test.describe("Route planner", () => {
     // FRA node 412783 in Chicago, where BNSF, UP, NS and CN meet: NS takes the car on there.
     await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 412783");
     await page.getByRole("option", { name: /FRA node 412783/ }).click();
-    await page.getByRole("button", { name: "Add as stop" }).click();
+    await page.getByRole("region", { name: /^Found: / }).getByRole("button", { name: "Add stop" }).click();
     const lines = page.getByRole("radiogroup", { name: "Next carrier at Stop 1" });
     await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"NS"'));

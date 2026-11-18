@@ -26,6 +26,13 @@ export const FIT_MS = 800;
 /** Framing a route never zooms in closer than this: a short route still shows the lines around it. */
 export const FIT_MAX_ZOOM = 11;
 
+/**
+ * Room kept round a framed route, in px: under the search box, over the legend, and at each side a
+ * share of the free map for the labels that hang off the outermost pins, never less than the map
+ * buttons take on the right.
+ */
+export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 72 };
+
 /** A place found with the search box is shown this close: its yard and the lines through it. */
 export const FOUND_ZOOM = 12;
 

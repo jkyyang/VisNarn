@@ -157,7 +157,7 @@ export function nextTarget(session: PlanSession): number | null {
   return empty >= 0 ? empty : null;
 }
 
-/** "Set as start" or "Set as destination": that end's row when it is empty, else a new row at that end. */
+/** The found place's "Start" or "Destination": that end's row when it is empty, else a new row at that end. */
 export function placeAtEnd(plan: Plan, end: "start" | "destination", ref: PlaceRef): PlanAction {
   const at = end === "start" ? 0 : plan.places.length - 1;
   return plan.places[at] === null ? { type: "setPlace", at, ref } : { type: "insert", at: end === "start" ? 0 : plan.places.length, ref };

@@ -17,8 +17,6 @@ export const LAYER = {
   pinGlyphs: "pin-glyphs",
 } as const;
 
-/** --sans in web/styles.css: deck.gl draws its text on a canvas, which cannot read CSS variables. */
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif';
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
 const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 
@@ -142,7 +140,7 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
       getText: (pin) => pin.glyph,
       getSize: 11,
       getColor: colors.route,
-      fontFamily: FONT,
+      fontFamily: colors.sans,
       fontWeight: 700,
       updateTriggers: { getColor: colors },
     }),
@@ -195,7 +193,7 @@ const TOOLTIP_STYLE: Partial<CSSStyleDeclaration> = {
   boxShadow: "var(--shadow-float)",
   padding: "5px 9px",
   fontFamily: "var(--sans)",
-  fontSize: "12px",
+  fontSize: "var(--text-sm)",
   lineHeight: "1.45",
   maxWidth: "280px",
   marginLeft: "12px",

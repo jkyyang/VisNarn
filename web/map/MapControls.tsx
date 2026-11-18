@@ -1,5 +1,6 @@
 import { useId, useState, type ReactElement } from "react";
-import { DISTANCE_UNITS, type DistanceUnit } from "../units.ts";
+import { useEscape } from "../ui/useEscape.ts";
+import { DISTANCE_UNITS, useDistanceUnit, type DistanceUnit } from "../units.ts";
 import type { BasemapKind } from "./basemaps.ts";
 import type { LightMode, LightPhase, MapLook } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
@@ -7,8 +8,6 @@ import type { MapLayerChoice } from "./MapCanvas.tsx";
 interface MapControlsProps {
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
-  unit: DistanceUnit;
-  onUnit: (unit: DistanceUnit) => void;
   /** What Auto shows now, for the button's name. */
   look: MapLook;
   onZoom: (step: 1 | -1) => void;
@@ -16,17 +15,14 @@ interface MapControlsProps {
   history: { undo: (() => void) | null; redo: (() => void) | null } | null;
 }
 
+/** Each choice and its word, in the order shown. */
 const BASEMAPS: Record<BasemapKind, string> = { map: "Map", satellite: "Satellite" };
-const LIGHTS: [LightMode, string][] = [
-  ["auto", "Auto"],
-  ["day", "Day"],
-  ["night", "Night"],
-];
-const UNITS = DISTANCE_UNITS.map((unit): [DistanceUnit, string] => [unit, unit]);
+const LIGHTS: Record<LightMode, string> = { auto: "Auto", day: "Day", night: "Night" };
+const UNITS = Object.fromEntries(DISTANCE_UNITS.map((unit) => [unit, unit])) as Record<DistanceUnit, string>;
 const LIGHT_WORDS: Record<LightPhase, string> = { day: "Day", sunrise: "Sunrise", sunset: "Sunset", night: "Night" };
 
 /** One setting of the layers card: its name over a segmented choice. */
-function ChoiceRow<T extends string>(props: { label: string; options: [T, string][]; value: T; onChange: (value: T) => void }): ReactElement {
+function ChoiceRow<T extends string>(props: { label: string; options: Record<T, string>; value: T; onChange: (value: T) => void }): ReactElement {
   const labelId = useId();
   return (
     <div className="choice-row">
@@ -34,7 +30,7 @@ function ChoiceRow<T extends string>(props: { label: string; options: [T, string
         {props.label}
       </span>
       <div className="segmented" role="radiogroup" aria-labelledby={labelId}>
-        {props.options.map(([value, label]) => (
+        {(Object.entries(props.options) as [T, string][]).map(([value, label]) => (
           <button key={value} type="button" role="radio" aria-checked={props.value === value} onClick={() => props.onChange(value)}>
             {label}
           </button>
@@ -51,6 +47,8 @@ function ChoiceRow<T extends string>(props: { label: string; options: [T, string
 export function MapControls(props: MapControlsProps): ReactElement {
   const { layers, onLayers } = props;
   const [open, setOpen] = useState(false);
+  const [unit, setUnit] = useDistanceUnit();
+  useEscape(open, () => setOpen(false));
   const summary = `${BASEMAPS[layers.basemap]} · ${LIGHT_WORDS[props.look.phase]}${layers.tracks ? " + tracks" : ""}`;
 
   return (
@@ -65,9 +63,9 @@ export function MapControls(props: MapControlsProps): ReactElement {
       </div>
       {open && (
         <div className="glass layers-card">
-          <ChoiceRow label="Map layer" options={Object.entries(BASEMAPS) as [BasemapKind, string][]} value={layers.basemap} onChange={(basemap) => onLayers({ ...layers, basemap })} />
+          <ChoiceRow label="Map layer" options={BASEMAPS} value={layers.basemap} onChange={(basemap) => onLayers({ ...layers, basemap })} />
           <ChoiceRow label="Time of day" options={LIGHTS} value={layers.light} onChange={(light) => onLayers({ ...layers, light })} />
-          <ChoiceRow label="Distances" options={UNITS} value={props.unit} onChange={props.onUnit} />
+          <ChoiceRow label="Distances" options={UNITS} value={unit} onChange={setUnit} />
           <div className="chips">
             <label className="chip">
               <input type="checkbox" checked={layers.network} onChange={(e) => onLayers({ ...layers, network: e.target.checked })} />

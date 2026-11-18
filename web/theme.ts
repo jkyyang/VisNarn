@@ -9,6 +9,8 @@ export const CLASS_LINES: Record<NetworkClass, readonly MapLine[]> = { class_i: 
 
 export type RGBA = [number, number, number, number];
 export interface ThemeColors {
+  /** The page's font stack, for text deck.gl draws on its canvas. */
+  sans: string;
   fg: RGBA;
   muted: RGBA;
   /** The accent of the selected route's pill and of the stop pins. */
@@ -21,8 +23,9 @@ export interface ThemeColors {
   rail: Record<MapLine, RGBA>;
 }
 
-/** jsdom has no stylesheet, so there every token reads empty: grey. */
+/** jsdom has no stylesheet, so there every token reads empty: grey, in the default sans. */
 const NO_TOKEN = "#808080";
+const NO_FONT = "sans-serif";
 
 function hexOf(style: CSSStyleDeclaration, name: string): RGBA {
   const h = (style.getPropertyValue(name).trim() || NO_TOKEN).replace("#", "");
@@ -38,6 +41,7 @@ function read(scope?: Element | null): ThemeColors {
   const style = getComputedStyle(scope ?? document.documentElement);
   const hex = (name: string) => hexOf(style, name);
   return {
+    sans: style.getPropertyValue("--sans").trim() || NO_FONT,
     fg: hex("--fg"),
     muted: hex("--muted"),
     route: hex("--route"),
@@ -47,7 +51,7 @@ function read(scope?: Element | null): ThemeColors {
   };
 }
 
-/** CSS theme tokens as deck.gl colors, read from `scope` (an element inside the map) after each change of `look`. */
+/** CSS theme tokens as deck.gl values, read from `scope` (an element inside the map) after each change of `look`. */
 export function useThemeColors(scope?: RefObject<Element | null>, look?: string): ThemeColors {
   const [colors, setColors] = useState(() => read());
   useLayoutEffect(() => {

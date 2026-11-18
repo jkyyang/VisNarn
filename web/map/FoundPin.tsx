@@ -1,6 +1,6 @@
 /**
  * Where a place found with the search box (./MapSearch.tsx) is: a pin, and a card with the place, what
- * it is, the railroads there, and what the screen can do with it (the planner's "Set as start", …).
+ * it is, the railroads there, and what the screen can do with it (the planner's "Start", "Add stop", "Destination").
  */
 import { useRef, type ReactElement } from "react";
 import { Marker } from "react-map-gl/maplibre";

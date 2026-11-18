@@ -14,14 +14,14 @@ import { clickToSet, errorText, NO_TRACK_NEAR, placeHint, plural } from "../../w
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
 
-const ShopPin = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={Math.round(size * 1.22)} viewBox="0 0 18 22" aria-hidden="true">
+const ShopPin = () => (
+  <svg width="14" height="17" viewBox="0 0 18 22" aria-hidden="true">
     <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--shop)" />
-    <rect x="6.5" y="6.5" width="5" height="5" rx="1" fill="#fff" />
+    <rect x="6.5" y="6.5" width="5" height="5" rx="1" fill="var(--panel)" />
   </svg>
 );
 
-/** Search by name or code · Add shop · the table (Shop, Shop code, On lines, Edit) · the count line. Where a shop is, the map shows. */
+/** Search by name or code · Add shop · the table (Shop with its code, On lines, Edit) · the count line. Where a shop is, the map shows. */
 export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" | null; onEdit: (shop: ShopView) => void; onAdd: () => void }): ReactElement {
   const [query, setQuery] = useState("");
   const searchId = useId();
@@ -52,7 +52,6 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
           <thead className="visually-hidden">
             <tr>
               <th scope="col">Shop</th>
-              <th scope="col">Shop code</th>
               <th scope="col">On lines</th>
               <th scope="col">
                 <span className="visually-hidden">Edit</span>
@@ -65,13 +64,17 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
               return (
                 <tr key={shop.id} className={editing ? "is-editing" : undefined}>
                   <td>
-                    <span className="shop-name">
+                    <span className={`shop-name${editing ? " strong" : ""}`}>
                       <ShopPin />
-                      <span className={editing ? "strong" : undefined}>{shop.name}</span>
-                      {shop.example && <span className="caption">EXAMPLE</span>}
+                      {shop.name}
                     </span>
+                    {(shop.code || shop.example) && (
+                      <span className="shop-sub">
+                        {shop.code}
+                        {shop.example && <span className="caption">EXAMPLE</span>}
+                      </span>
+                    )}
                   </td>
-                  <td className="shop-code">{shop.code ?? "–"}</td>
                   <td>
                     {shop.place.ok ? (
                       // The legend on the map says which colour is which railroad.
@@ -95,7 +98,7 @@ export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" 
             })}
             {!shown.length && (
               <tr>
-                <td colSpan={4} className="muted">
+                <td colSpan={3} className="muted">
                   {props.shops.length ? "No match" : "No shops yet"}
                 </td>
               </tr>
@@ -373,7 +376,7 @@ function FileButton(props: { label: string; onFile: (file: File | undefined) => 
 }
 
 /**
- * "Import shop list (CSV)": choose a file, see a preview (how many rows are ready, and each row that
+ * "Import shop list": choose a file, see a preview (how many rows are ready, and each row that
  * will not be saved, with why), then save. `run` is called with commit false for the preview, then true.
  */
 export function ShopImportCard(props: { run: (request: ImportRequest) => Promise<ImportReport<ShopView>> }): ReactElement {
@@ -382,7 +385,7 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
     <section className="group import-card" aria-label="Import shop list">
       <div className="import-row">
         <div className="grow">
-          <h2>Import shop list (CSV)</h2>
+          <h2>Import shop list</h2>
           <div className="muted small">name, lon, lat</div>
         </div>
         <FileButton label={flow.busy ? "Reading…" : "Choose CSV file"} onFile={flow.choose} disabled={flow.busy} />
@@ -433,7 +436,7 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
   );
 }
 
-/** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near there". */
+/** Over the map while picking a shop's location: "Click the map to set the shop", or "No track near there", and Cancel (Esc does the same). */
 export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
   // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be clicked.
   useEffect(() => {
@@ -442,10 +445,7 @@ export function PickPrompt(props: { missed: boolean; onCancel: () => void }): Re
   return (
     <div className="glass map-card pick-prompt" role="status">
       <Crosshair />
-      <span>
-        {props.missed ? `${NO_TRACK_NEAR} · ` : `${clickToSet("the shop")} · `}
-        <kbd>Esc</kbd> to cancel
-      </span>
+      <span>{props.missed ? NO_TRACK_NEAR : clickToSet("the shop")}</span>
       <button type="button" className="link-btn" onClick={props.onCancel}>
         Cancel
       </button>

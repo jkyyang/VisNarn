@@ -26,12 +26,10 @@ import type { ResolvedPlace } from "../../shared/places.ts";
 import type { TrackIncluded } from "../../shared/railroads.ts";
 import { canDrawMaps, type Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
-import { useDistanceUnit } from "../units.ts";
 import { NETWORK_CENTRE } from "./config.ts";
 import { mapLook, sunPosition } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
-
 
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
@@ -46,7 +44,7 @@ export interface MapContentProps {
   onSelect?: (target: SceneTarget) => void;
   /** Undo / redo of route changes, shown with the map controls when given. */
   history?: { undo: (() => void) | null; redo: (() => void) | null };
-  /** What a place found with the map's search box can become here: "Set as start", "Add as stop". */
+  /** What a place found with the map's search box can become here: "Start", "Add stop". */
   placeActions?: PlaceAction[];
   /** Cards laid over the map (the pick prompt on Shops). */
   children?: ReactNode;
@@ -122,7 +120,6 @@ export function MapStageProvider(props: { network: Mainline | null; children: Re
   );
 }
 
-
 function NoMap(): ReactElement {
   return (
     <div className="no-map" role="note">
@@ -147,6 +144,7 @@ function useNow(running: boolean): number {
   }, [running]);
   return now;
 }
+
 const nothing = () => null;
 
 /**
@@ -160,7 +158,6 @@ export function MapStage(props: { coveredLeft: number }): ReactElement {
   const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto" });
   const [drawable] = useState(canDrawMaps);
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
-  const [unit, setUnit] = useDistanceUnit();
   const now = useNow(layers.light === "auto");
   const look = mapLook(layers.light, sunPosition(now, centre));
 
@@ -174,8 +171,6 @@ export function MapStage(props: { coveredLeft: number }): ReactElement {
               content={content}
               layers={layers}
               onLayers={setLayers}
-              unit={unit}
-              onUnit={setUnit}
               look={look}
               now={now}
               onCentre={setCentre}

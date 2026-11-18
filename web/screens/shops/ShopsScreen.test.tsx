@@ -32,7 +32,7 @@ describe("Shops screen", () => {
     expect(await screen.findByRole("heading", { name: "Your shops" })).toBeInTheDocument();
     expect(await screen.findByText("EX-NLR-01")).toBeInTheDocument();
     const nlr = screen.getByText("EX-NLR-01").closest("tr")!;
-    expect(nlr).toHaveTextContent("North Little Rock, AREXAMPLE");
+    expect(nlr).toHaveTextContent("North Little Rock, AREX-NLR-01EXAMPLE");
     expect(nlr).toHaveTextContent("BNSF, UP");
     expect(screen.getByText("6 shops · 6 EXAMPLE")).toBeInTheDocument();
     expect(screen.getByText("Map: 6 shops")).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe("Shops screen", () => {
     openPage("/shops");
     await screen.findByText("EX-NLR-01");
     await user.type(screen.getByRole("textbox", { name: "Search shops" }), "ex-c");
-    expect(names()).toEqual(["Chicago, ILEXAMPLE", "Calgary, ABEXAMPLE"]);
+    expect(names()).toEqual(["Chicago, IL", "Calgary, AB"]);
   });
 
   it("adds a shop: Save stays off until the location is on the network", async () => {
@@ -126,7 +126,7 @@ describe("Shops screen", () => {
     expect(fake.state.shops).toHaveLength(6);
     await user.click(screen.getByRole("button", { name: "Delete" }));
     await user.click(within(confirm()!).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(names()).not.toContain("Calgary, ABEXAMPLE"));
+    await waitFor(() => expect(names()).not.toContain("Calgary, AB"));
     expect(fake.state.shops).toHaveLength(5);
   });
 

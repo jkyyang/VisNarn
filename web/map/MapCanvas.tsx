@@ -12,7 +12,6 @@ import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
-import type { DistanceUnit } from "../units.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
 import { NightLights } from "./DayNight.tsx";
@@ -42,8 +41,6 @@ export interface MapCanvasProps {
   content: MapContentProps | null;
   layers: MapLayerChoice;
   onLayers: (next: MapLayerChoice) => void;
-  unit: DistanceUnit;
-  onUnit: (unit: DistanceUnit) => void;
   /** The day or night look for the clock and the map centre, worked out by the stage. */
   look: MapLook;
   /** The clock the look was worked out for, as epoch ms; Auto's night tiles follow it too. */
@@ -57,7 +54,6 @@ export interface MapCanvasProps {
    */
   coveredLeft: number;
 }
-
 
 const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
 /** The whole network, in the part of the map the panel leaves free. */
@@ -74,7 +70,6 @@ const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 
 /** Web-mercator ground distance covered by one screen pixel (MapLibre zoom levels use 512 px tiles). */
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-
 
 /** Flies to one place when the screen asks for it, into the middle of the free map. Renders nothing; must be a child of the map. */
 function FlyTo({ focus, coveredLeft }: { focus: MapFocus | undefined; coveredLeft: number }) {
@@ -124,13 +119,11 @@ function CornerLegend(props: Parameters<typeof Legend>[0]) {
 /** The controls need the map instance for zoom, so they live inside the map. */
 function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactElement {
   const map = useMap().current;
-  const { content, layers, onLayers, unit, onUnit } = props.canvas;
+  const { content, layers, onLayers } = props.canvas;
   return (
     <MapControls
       layers={layers}
       onLayers={onLayers}
-      unit={unit}
-      onUnit={onUnit}
       look={props.canvas.look}
       onZoom={(step) => (step > 0 ? map?.zoomIn() : map?.zoomOut())}
       onFit={props.onFit}

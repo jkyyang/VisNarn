@@ -184,6 +184,10 @@ describe("Route planner", () => {
     await user.click(within(distances).getByRole("radio", { name: "km" }));
     expect(routeRows()[0]).toHaveTextContent(/^1,046 km/);
     expect(localStorage.getItem("visnarn.distance-unit")).toBe("km");
+
+    // The card is a popover: Escape closes it.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("radiogroup", { name: "Distances" })).not.toBeInTheDocument();
   });
 
   it("a pill or a grey route on the map selects that route: the URL and the pressed row follow", async () => {

@@ -125,7 +125,7 @@ describe("plan session", () => {
     expect(fullPlan(planReducer(fresh(), { type: "setPlace", at: 0, ref: KC }).plan.present)).toBeNull();
   });
 
-  it("Set as start or destination fills that end's empty row, else adds a new end", () => {
+  it("a found place's Start or Destination fills that end's empty row, else adds a new end", () => {
     const half = planReducer(fresh(), { type: "setPlace", at: 0, ref: KC }).plan.present;
     expect(placeAtEnd(half, "destination", CHICAGO)).toEqual({ type: "setPlace", at: 1, ref: CHICAGO });
     expect(placeAtEnd(half, "start", CHICAGO)).toEqual({ type: "insert", at: 0, ref: CHICAGO });
