@@ -29,6 +29,7 @@
   --rr-CPKC: #23866a;
   --rr-regional: #5f6368;
   --rr-short-line: #8d6e63;
+  --rr-passenger: #a8708f;
   /* Text on a filled button or tag: white on the dark light-theme fills, dark navy on the light dark-theme ones. */
   --on-fill: #ffffff;
   --risk-text: #7a1714;
@@ -77,6 +78,7 @@
     --rr-CPKC: #4cc49e;
     --rr-regional: #bdc1c6;
     --rr-short-line: #bcaaa4;
+    --rr-passenger: #d9a7c4;
     --on-fill: #10213b;
     --risk-text: #f6aea9;
     --on-rr-BNSF: #10213b;
@@ -123,6 +125,7 @@
   --rr-CPKC: #23866a;
   --rr-regional: #5f6368;
   --rr-short-line: #8d6e63;
+  --rr-passenger: #a8708f;
   --on-fill: #ffffff;
   --risk-text: #7a1714;
   --on-rr-BNSF: #111111;
@@ -165,6 +168,7 @@
   --rr-CPKC: #4cc49e;
   --rr-regional: #bdc1c6;
   --rr-short-line: #bcaaa4;
+  --rr-passenger: #d9a7c4;
   --on-fill: #10213b;
   --risk-text: #f6aea9;
   --on-rr-BNSF: #10213b;

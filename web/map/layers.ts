@@ -1,13 +1,12 @@
-/** deck.gl layers for a scene: the Class I network underneath, the scene on top. The only file that knows deck.gl layer classes. */
+/** deck.gl layers for a scene: the rail network underneath, the scene on top. The only file that knows deck.gl layer classes. */
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
-import { isClassI } from "../../shared/railroads.ts";
+import { isClassI, NETWORK_CLASSES, type NetworkClass } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
 import { lineName } from "../words.ts";
 import type { MapScene, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
 export const LAYER = {
-  network: "class1-network",
   alternativesCasing: "alternatives-casing",
   alternatives: "alternatives",
   routeCasing: "route-casing",
@@ -44,23 +43,30 @@ const CHEVRON = { url: svgUrl(12, 12, '<path d="M4 2.5l4 3.5-4 3.5" fill="none" 
 const angleOf = (bearingDeg: number) => 90 - bearingDeg;
 
 /**
- * Class I mainline coloured by owner. Stays mounted while hidden so toggling it back on does not
- * re-tessellate 4 MB of track; dims when a route needs the attention.
+ * The mainline, one layer per class, each shown only while `drawn` lists its class. Class I is
+ * coloured by owner; regional, short-line and passenger track is thinner and fainter, in the colour
+ * those sections have in a route. Hidden layers stay mounted so showing one again does not
+ * re-tessellate megabytes of track; all dim when a route needs the attention.
  */
-export function networkLayer(network: Mainline, visible: boolean, dimmed: boolean, colors: ThemeColors): LayersList[number] {
-  return new GeoJsonLayer<{ owner: string }>({
-    id: LAYER.network,
-    data: network,
-    visible,
-    opacity: dimmed ? 0.35 : 0.8,
-    filled: false,
-    lineWidthUnits: "pixels",
-    lineCapRounded: true,
-    lineJointRounded: true,
-    getLineWidth: (f) => (isClassI(f.properties.owner) ? 1.8 : 1),
-    getLineColor: (f) => (isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
-    updateTriggers: { getLineColor: colors },
-  });
+export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], dimmed: boolean, colors: ThemeColors): LayersList {
+  const quiet: Record<Exclude<NetworkClass, "class_i">, RGBA> = { regional: colors.rail.regional, short_line: colors.rail["short line"], passenger: colors.passenger };
+  // Class I last, on top.
+  return [...NETWORK_CLASSES].reverse().map(
+    (c) =>
+      new GeoJsonLayer<{ owner: string }>({
+        id: `network-${c}`,
+        data: network[c],
+        visible: drawn.includes(c),
+        opacity: (dimmed ? 0.35 : 0.8) * (c === "class_i" ? 1 : 0.7),
+        filled: false,
+        lineWidthUnits: "pixels",
+        lineCapRounded: true,
+        lineJointRounded: true,
+        getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
+        getLineColor: (f) => (c !== "class_i" ? quiet[c] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
+        updateTriggers: { getLineColor: colors },
+      }),
+  );
 }
 
 type Leg = SceneRoute["legs"][number];

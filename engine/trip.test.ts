@@ -173,6 +173,23 @@ describe("createCarRouter().route", () => {
     expect(kms).toEqual([...kms].sort((x, y) => x - y));
   });
 
+  it("places stop rows where every option passes them, also when a cheap interchange lands right on the stop", () => {
+    // Shortest makes interchanges almost free, so it reaches Chicago on one line and leaves on another (2026-11-18).
+    const stops = [city("Chicago, IL"), city("Kansas City, MO")];
+    const oakville: Waypoint = { label: "EXAMPLE Oakville shop", lon: -79.7195, lat: 43.4169, fraId: null, railroad: null };
+    const trip: Trip = { a: city("Houston, TX"), b: city("Houston, TX"), stops, shop: oakville, rules: rules() };
+    for (const strategy of ROUTE_STRATEGIES) {
+      const { path } = routed(trip, strategy);
+      const rows = path.steps.flatMap((s) => (s.kind === "stop" ? [s] : []));
+      expect(rows.map((s) => s.stop)).toEqual([0, 1]);
+      for (const row of rows) {
+        expect(row.kmFromB).toBeLessThan(path.km);
+        const [lon, lat] = pointAtKm(path, row.kmFromB);
+        expect(haversineKm(lon, lat, stops[row.stop].lon, stops[row.stop].lat)).toBeLessThan(25);
+      }
+    }
+  });
+
   it("answers no-path (not an exception) when the allowed railroads cannot make the trip", () => {
     // On UP track alone, the UP lines around Pasco, WA are not joined to Houston.
     const result = router.route({ a: city("Austin, TX"), b: city("Houston, TX"), stops: [], shop: city("Pasco, WA"), rules: rules(["UP"]) }, "pick");

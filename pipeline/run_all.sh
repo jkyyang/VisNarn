@@ -12,7 +12,7 @@ $PY -I pipeline/build_graph.py
 $PY -I pipeline/export_web_graph.py
 
 $PY -I pipeline/export_basemap.py
-$MS data/processed/mainline_full.geojson -dissolve owner -simplify 8% keep-shapes \
+$MS data/processed/mainline_full.geojson -dissolve owner,class -simplify 8% keep-shapes \
   -o precision=0.0001 public/data/basemap_mainline.geojson
 rm data/processed/mainline_full.geojson
 

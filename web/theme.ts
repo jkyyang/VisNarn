@@ -13,6 +13,8 @@ export interface ThemeColors {
   casing: RGBA;
   /** The selected route is drawn in its lines' colours. */
   rail: Record<Line, RGBA>;
+  /** Passenger-owned track on the network map. */
+  passenger: RGBA;
 }
 
 function hexOf(style: CSSStyleDeclaration, name: string, fallback: string): RGBA {
@@ -34,9 +36,9 @@ const RAIL_FALLBACK: Record<Line, string> = {
   "short line": "#8d6e63",
 };
 
-/** The CSS colour token of a line: `--rr-UP`, `--rr-short-line`. */
-const lineToken = (line: Line) => `--rr-${line.replace(" ", "-")}`;
-export const lineColor = (line: Line) => `var(${lineToken(line)})`;
+/** The CSS colour token of a line: `--rr-UP`, `--rr-short-line`, `--rr-passenger`. */
+const lineToken = (line: Line | "passenger") => `--rr-${line.replace(" ", "-")}`;
+export const lineColor = (line: Line | "passenger") => `var(${lineToken(line)})`;
 
 /** Tokens as `scope` sees them: the map redefines them for its day or night look (styles.css, `.map[data-look]`). */
 function read(scope?: Element | null): ThemeColors {
@@ -49,6 +51,7 @@ function read(scope?: Element | null): ThemeColors {
     alternative: hex("--alt-route", "#9aa0a6"),
     casing: hex("--casing", "#ffffff"),
     rail: Object.fromEntries(LINES.map((line) => [line, hex(lineToken(line), RAIL_FALLBACK[line])])) as Record<Line, RGBA>,
+    passenger: hex(lineToken("passenger"), "#a8708f"),
   };
 }
 

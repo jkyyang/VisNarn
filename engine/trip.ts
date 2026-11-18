@@ -206,6 +206,10 @@ function describe(
     track: r.arrivedOn === r.leftOn ? "stub-end" : "yard",
   }));
   const stopNodes = stops.map((p) => graph.serving(p, track));
+  // A stop pinned to a railroad is reached on that railroad. Any other stop is reached at any line's entry node:
+  // the router may arrive on one line and change railroad right there, at another line's entry node (2026-11-18).
+  const reaches = (stop: number, node: number, rr: number) =>
+    stops[stop].only !== undefined ? stopNodes[stop].get(rr) === node : [...stopNodes[stop].values()].includes(node);
 
   const legs: (Leg & { nodes: number[] })[] = [];
   const steps: Milestone[] = [];
@@ -218,7 +222,7 @@ function describe(
   const visit = (node: number, rr: number) => {
     if (!first && aNodes.has(node)) passesA = true;
     first = false;
-    while (nextStop < stops.length && stopNodes[nextStop].get(rr) === node) {
+    while (nextStop < stops.length && reaches(nextStop, node, rr)) {
       steps.push({ kind: "stop", kmFromB: km, stop: nextStop, label: stops[nextStop].label });
       nextStop++;
     }

@@ -24,3 +24,12 @@ export interface TrackIncluded {
 
 /** Passenger-owned track only: the router then takes it only where no freight-owned way is close in length. */
 export const DEFAULT_INCLUDE: TrackIncluded = { regional: false, shortLine: false, passenger: true };
+
+/** The track box that lets a route use each stretch of the network map (pipeline/export_basemap.py). */
+export const NETWORK_CLASSES = ["class_i", "regional", "short_line", "passenger"] as const;
+export type NetworkClass = (typeof NETWORK_CLASSES)[number];
+
+const BOX = { regional: "regional", short_line: "shortLine", passenger: "passenger" } as const satisfies Record<Exclude<NetworkClass, "class_i">, keyof TrackIncluded>;
+
+/** The network the map draws for a plan: Class I always, the other classes while their box is ticked. */
+export const drawnClasses = (include: TrackIncluded): NetworkClass[] => NETWORK_CLASSES.filter((c) => c === "class_i" || include[BOX[c]]);
