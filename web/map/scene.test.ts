@@ -9,7 +9,7 @@ import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
 import { LAYER, networkLayer, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { legendFor } from "./Legend.tsx";
-import { chosenRoute, pillAnchors, planScene, shopsScene, type MapScene, type SceneRoute } from "./scene.ts";
+import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneRoute } from "./scene.ts";
 
 const grey: RGBA = [90, 100, 110, 255];
 const colors: ThemeColors = {
@@ -115,6 +115,33 @@ describe("planScene", () => {
     const routes = routesOf(twoRoutes);
     expect(chosenRoute(routes, "no-turn-backs").strategies).toContain("no-turn-backs");
     expect(chosenRoute(routes, null)).toBe(routes[0]);
+  });
+});
+
+describe("routes on the real track", () => {
+  it("asks for the same paths whichever route is selected", () => {
+    const pick = routePaths(routeScene(twoRoutes));
+    expect(pick.length).toBeGreaterThan(1);
+    expect(routePaths(routeScene(twoRoutes, "shortest"))).toEqual(pick);
+    expect(routePaths(routeScene(startOnly))).toEqual([]);
+  });
+
+  it("swaps in the paths it is given, leg by leg, and puts the chevrons along them again", () => {
+    const scene = routeScene(twoRoutes, "shortest");
+    // Each leg one degree further east: easy to tell apart, the same shape and length.
+    const moved = routePaths(scene).map((path) => path.map(([lon, lat]): LngLat => [lon + 1, lat]));
+    const drawn = withRoutePaths(scene, moved);
+    if (drawn.kind !== "route" || !drawn.selected || !scene.selected) throw new Error("route scene expected");
+    expect(drawn.selected.id).toBe(scene.selected.id);
+    expect(drawn.selected.legs.map((leg) => leg.path[0][0])).toEqual(scene.selected.legs.map((leg) => leg.path[0][0] + 1));
+    expect(drawn.alternatives.map((route) => route.id)).toEqual(scene.alternatives.map((route) => route.id));
+    expect(drawn.selected.chevrons[0].position[0]).toBeCloseTo(scene.selected.chevrons[0].position[0] + 1, 6);
+    expect(routePaths(drawn)).toEqual(moved);
+  });
+
+  it("keeps the scene as it is when the paths do not fit it (an answer for another scene)", () => {
+    const scene = routeScene(twoRoutes);
+    expect(withRoutePaths(scene, routePaths(scene).slice(1))).toBe(scene);
   });
 });
 

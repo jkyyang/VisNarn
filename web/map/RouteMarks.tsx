@@ -19,7 +19,7 @@ const EDGE = { side: 8, right: 60, bottom: 28 };
 
 const centred = (x: number, y: number, size: number): Box => ({ left: x - size / 2, top: y - size / 2, right: x + size / 2, bottom: y + size / 2 });
 
-/** Where each pill goes on screen now, given the route lines, the pins, the turn-backs, the legend and the map buttons. */
+/** Where each pill goes on screen now, given the route lines, the pins, the turn-backs, the legend, the map buttons and the search box. */
 function layout(map: MapLibreMap, scene: RouteScene): PillPlace[] {
   const container = map.getContainer();
   const frame = container.getBoundingClientRect();
@@ -36,7 +36,7 @@ function layout(map: MapLibreMap, scene: RouteScene): PillPlace[] {
     const { x, y } = point(turnBack.position);
     obstacles.push(centred(x, y, 26));
   }
-  const overlays = container.closest(".map-canvas")?.querySelectorAll(".legend, .map-controls > *") ?? [];
+  const overlays = container.closest(".map-canvas")?.querySelectorAll(".legend, .map-controls > *, .map-search") ?? [];
   for (const element of overlays) {
     const rect = element.getBoundingClientRect();
     if (rect.width && rect.height) obstacles.push({ left: rect.left - frame.left, top: rect.top - frame.top, right: rect.right - frame.left, bottom: rect.bottom - frame.top });

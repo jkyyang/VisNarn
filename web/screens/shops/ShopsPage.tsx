@@ -417,8 +417,14 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
 
 /** Over the map while picking a shop's location: "Click the map to set the shop · Esc to cancel", or "No track near there". */
 export function PickPrompt(props: { missed: boolean; onCancel: () => void }): ReactElement {
+  const ref = useRef<HTMLDivElement>(null);
+  // On a phone the map sits above the panel and scrolls away with it: bring the map back to be clicked.
+  useEffect(() => {
+    const prompt = ref.current;
+    (prompt?.closest(".map") ?? prompt)?.scrollIntoView?.({ block: "nearest" });
+  }, []);
   return (
-    <div className="map-card pick-prompt" role="status">
+    <div ref={ref} className="map-card pick-prompt" role="status">
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
         <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

@@ -1,18 +1,15 @@
 /**
  * The search box over the map, as in a maps app: Your shops, cities, company codes and "FRA 358070".
- * Choosing a suggestion flies the map there and drops a pin with a card: the place, what it is, the
- * railroads there, and what the screen can do with it (the planner's "Set as start", "Add as stop", …).
+ * Choosing a suggestion flies the map there and drops a pin with a card (./FoundPin.tsx). Plain DOM,
+ * no map library, so page tests draw it.
  *
  * It asks only our own server (GET /api/places/suggest, the Directory every place input uses), so
  * nothing typed here leaves the laptop.
  */
-import { useId, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
-import { Marker } from "react-map-gl/maplibre";
+import { useId, useState, type KeyboardEvent, type ReactElement } from "react";
 import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
 import { usePlaceSuggestions } from "../data/hooks.ts";
 import { RailroadChip } from "../ui/badges.tsx";
-import type { PlaceAction } from "./MapStage.tsx";
-import { useNativeClick } from "./RouteMarkFaces.tsx";
 
 export const TYPE_CHIPS: Record<PlaceSuggestion["source"], string> = { shop: "Shop", code: "Code", city: "City", yard: "Yard", junction: "Junction", node: "Node" };
 
@@ -23,7 +20,7 @@ export function moveActive(active: number, key: "ArrowDown" | "ArrowUp", count: 
   return active < 0 ? (step > 0 ? 0 : count - 1) : (active + step + count) % count;
 }
 
-function Railroads({ place }: { place: Pick<ResolvedPlace, "railroads"> }): ReactElement {
+export function Railroads({ place }: { place: Pick<ResolvedPlace, "railroads"> }): ReactElement {
   return place.railroads.length ? (
     <span className="search-rr">
       {place.railroads.map((railroad) => (
@@ -121,53 +118,5 @@ export function MapSearch(props: { chosen: PlaceSuggestion | null; problem: stri
       )}
       {props.problem && !open && <p className="map-search-problem">{props.problem}</p>}
     </div>
-  );
-}
-
-/** A button on the map whose click must not also land on the map below it (see useNativeClick). */
-function CardButton(props: { label: string; className: string; onPress: () => void; children?: ReactElement }): ReactElement {
-  const ref = useRef<HTMLButtonElement>(null);
-  useNativeClick(ref, props.onPress);
-  return (
-    <button ref={ref} type="button" className={props.className} aria-label={props.children ? props.label : undefined}>
-      {props.children ?? props.label}
-    </button>
-  );
-}
-
-/** The pin where a found place is, and its card. Must be a child of the map. */
-export function FoundPin(props: { chosen: PlaceSuggestion; place: ResolvedPlace; actions: PlaceAction[]; onClose: () => void }): ReactElement {
-  const { chosen, place } = props;
-  return (
-    <Marker longitude={place.lon} latitude={place.lat} anchor="center" className="found-pin">
-      <span className="found-dot" aria-hidden="true" />
-      <section className="map-card found-card" aria-label={`Found: ${chosen.label}`}>
-        <div className="found-head">
-          <strong>{chosen.label}</strong>
-          <span className="type-chip">{TYPE_CHIPS[chosen.source]}</span>
-          <CardButton label="Close" className="icon-btn small" onPress={props.onClose}>
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </CardButton>
-        </div>
-        <Railroads place={place} />
-        {props.actions.length > 0 && (
-          <div className="found-actions">
-            {props.actions.map((action) => (
-              <CardButton
-                key={action.label}
-                label={action.label}
-                className="btn btn--small"
-                onPress={() => {
-                  action.run(place);
-                  props.onClose();
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    </Marker>
   );
 }
