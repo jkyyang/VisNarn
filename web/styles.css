@@ -1641,7 +1641,8 @@ input.saved-name {
 .map-controls {
   position: absolute;
   z-index: 6;
-  inset: var(--inset);
+  /* Clear of a phone's status bar, notch and round corners: the page runs under them (viewport-fit=cover). */
+  inset: max(var(--inset), env(safe-area-inset-top)) max(var(--inset), env(safe-area-inset-right)) var(--inset) max(var(--inset), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1818,8 +1819,8 @@ input.saved-name {
   --credits-btn: calc(var(--ctl) - var(--space));
   position: absolute;
   z-index: 6;
-  right: var(--inset);
-  bottom: var(--inset);
+  right: max(var(--inset), env(safe-area-inset-right));
+  bottom: max(var(--inset), env(safe-area-inset-bottom));
   display: grid;
   place-items: center;
   width: var(--credits-btn);
@@ -1829,11 +1830,17 @@ input.saved-name {
   color: var(--text);
   cursor: pointer;
 }
+/* The target is a map button's size, a finger's on a phone. */
+.credits-btn::before {
+  content: "";
+  position: absolute;
+  inset: calc((var(--credits-btn) - var(--ctl)) / 2);
+}
 .credits-card {
   position: absolute;
   z-index: 7;
-  right: calc(var(--inset) + var(--ctl) - var(--space) + 8px);
-  bottom: var(--inset);
+  right: calc(max(var(--inset), env(safe-area-inset-right)) + var(--ctl) - var(--space) + 8px);
+  bottom: max(var(--inset), env(safe-area-inset-bottom));
   max-width: min(400px, calc(100% - 76px));
   padding: 9px 12px;
   border-radius: var(--radius-ctl);

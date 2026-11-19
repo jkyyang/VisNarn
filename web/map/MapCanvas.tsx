@@ -24,8 +24,8 @@ import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from ".
 import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import {
-  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX,
-  REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
+  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, MAX_PIXEL_RATIO, PAN_BOUNDS,
+  PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
 } from "./config.ts";
 import type { Found, MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
@@ -63,6 +63,8 @@ export interface MapCanvasProps {
   /** The place chosen in the panel's search: its pin and card, and the camera flies there when `fly`. */
   found: Found | null;
   onCloseFound: () => void;
+  /** The map's WebGL context is gone (a phone short of graphics memory): this canvas draws nothing more. */
+  onContextLost: () => void;
 }
 
 /** The whole network, right of `cameraLeft`: where the map opens, and where Reset view goes back to. */
@@ -75,6 +77,9 @@ const networkView = (cameraLeft: number) => ({
 });
 
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** A finger covers more of the map than a mouse pointer: a tap picks a thin line from further off. */
+const pickRadius = () => (matchMedia("(pointer: coarse)").matches ? DECK_PICK_RADIUS_PX.finger : DECK_PICK_RADIUS_PX.mouse);
 
 /** Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom. */
 const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
@@ -110,6 +115,17 @@ function FreeSpareTextures() {
     map.on("idle", free);
     return () => void map.off("idle", free);
   }, [map]);
+  return null;
+}
+
+/** Tells the stage when the map's WebGL context is lost, from the moment the map exists. Renders nothing; must be a child of the map. */
+function ContextLost({ onLost }: { onLost: () => void }) {
+  const map = useMap().current?.getMap();
+  useEffect(() => {
+    if (!map) return;
+    map.on("webglcontextlost", onLost);
+    return () => void map.off("webglcontextlost", onLost);
+  }, [map, onLost]);
   return null;
 }
 
@@ -195,13 +211,20 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         maxBounds={PAN_BOUNDS}
         mapStyle={firstStyle}
         maxTileCacheSize={TILE_CACHE_MAX_TILES}
+        pixelRatio={Math.min(devicePixelRatio, MAX_PIXEL_RATIO)}
         attributionControl={false}
         // Every click places something, so a double click must not also zoom.
         doubleClickZoom={false}
+        // North stays up: the chevrons, the pills and the fits are laid out on a north-up screen, and no button turns it back.
+        dragRotate={false}
+        touchPitch={false}
+        maxPitch={0}
         onMoveEnd={onMoveEnd}
         onDragStart={() => (dragging.current = true)}
         onDragEnd={() => (dragging.current = false)}
         onLoad={(event) => {
+          event.target.touchZoomRotate.disableRotation();
+          event.target.keyboard.disableRotation();
           setZoom(halfZoom(event.target.getZoom()));
           watchCamera(event.target);
         }}
@@ -214,7 +237,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           // crosshair while a click places something, a pointer on what a click selects, else none of its
           // own, so MapLibre's grab shows through.
           getCursor={({ isHovering }) => (dragging.current ? "grabbing" : picking ? "crosshair" : isHovering ? "pointer" : "")}
-          pickingRadius={DECK_PICK_RADIUS_PX}
+          pickingRadius={pickRadius()}
           onClick={(info) => {
             const target = sceneTarget(info);
             const current = latest.current;
@@ -233,6 +256,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
         <BasemapStyle style={style} />
         <FreeSpareTextures />
+        <ContextLost onLost={props.onContextLost} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         <SceneLabels scene={scene} colors={colors} />
