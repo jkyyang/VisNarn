@@ -1231,10 +1231,6 @@ input.saved-name {
   flex-direction: column;
   gap: 12px;
 }
-/* The form goes above the list: the panel is one column wide. */
-.shops-body.has-form .shop-form {
-  order: -1;
-}
 /* A shop's row: the owner's mark, name and code, carriers; Edit on the hovered or selected row. */
 .shop-rows {
   display: flex;
@@ -1564,15 +1560,23 @@ input.saved-name {
 .map:has(.map-handle.is-dragging) .maplibregl-canvas-container {
   cursor: grabbing;
 }
-/* Top right, one column: Layers, zoom, Reset view, Fullscreen. Over the route pills and turn-back marks (z-index 3 to 5). */
+/*
+ * Top right, one column: Layers, zoom, Reset view, Fullscreen. Over the route pills and turn-back marks (z-index 3 to 5).
+ * Its box is the map less the margin, which the Layers popover (next to its button in the page, so Tab goes from one
+ * into the other) takes its place and limits from; only the buttons and the popover take the pointer.
+ */
 .map-controls {
   position: absolute;
   z-index: 6;
-  top: var(--inset);
-  right: var(--inset);
+  inset: var(--inset);
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
+  pointer-events: none;
+}
+.map-controls > * {
+  pointer-events: auto;
 }
 /* MapLibre gives its map a font of its own; the cards on the map take the page's. */
 .map .maplibregl-map {
@@ -1595,6 +1599,7 @@ input.saved-name {
 .ctl-group {
   display: flex;
   flex-direction: column;
+  width: var(--ctl);
   overflow: hidden;
   border-radius: var(--radius-ctl);
 }
@@ -1640,15 +1645,14 @@ input.saved-name {
 /* The Layers popover: left of its button, the top edges in line. Popovers lie over every other card on the map. */
 .layers-card {
   position: absolute;
-  z-index: 7;
-  top: var(--inset);
-  right: calc(var(--inset) + var(--ctl) + 8px);
+  top: 0;
+  right: calc(var(--ctl) + 8px);
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 264px;
-  max-width: calc(100% - 80px);
-  max-height: calc(100% - 2 * var(--inset));
+  max-width: calc(100% - var(--ctl) - 8px);
+  max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px;
@@ -2106,7 +2110,7 @@ input.saved-name {
     bottom: calc(var(--inset) + var(--radius-panel));
   }
   .layers-card {
-    max-height: calc(100% - 2 * var(--inset) - var(--radius-panel));
+    max-height: calc(100% - var(--radius-panel));
   }
   /* The sheet scrolls with the page: no fold, and its body does not scroll on its own. */
   .panel.is-folded {

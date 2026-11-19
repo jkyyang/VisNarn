@@ -136,38 +136,36 @@ export function MapControls(props: MapControlsProps): ReactElement {
   const summary = `${BASEMAPS[layers.basemap]} · ${LIGHT_WORDS[props.look.phase]}${layers.tracks ? " + tracks" : ""}${layers.carrier ? ` · ${layers.carrier} only` : ""}`;
 
   return (
-    <>
-      <div className="map-controls">
-        <button
-          type="button"
-          ref={button}
-          className="glass map-btn"
-          aria-expanded={open}
-          aria-label={`Map layers: ${summary}`}
-          data-filtered={layers.carrier ? "" : undefined}
-          onClick={() => setOpen(!open)}
-        >
-          <Layers />
-          <span className="layers-badge" aria-hidden="true" />
-        </button>
-        <div className="glass ctl-group ctl-group--zoom">
-          <button type="button" className="map-btn" aria-label="Zoom in" onClick={() => props.onZoom(1)}>
-            <Plus />
-          </button>
-          <button type="button" className="map-btn" aria-label="Zoom out" onClick={() => props.onZoom(-1)}>
-            <Minus />
-          </button>
-        </div>
-        <button type="button" className="glass map-btn" aria-label="Reset view to the whole network" onClick={props.onReset}>
-          <Home />
-        </button>
-        {document.fullscreenEnabled && (
-          <button type="button" className="glass map-btn" aria-label="Fullscreen" aria-pressed={fullscreen} onClick={toggleFullscreen}>
-            <Fullscreen />
-          </button>
-        )}
-      </div>
+    <div className="map-controls">
+      <button
+        type="button"
+        ref={button}
+        className="glass map-btn"
+        aria-expanded={open}
+        aria-label={`Map layers: ${summary}`}
+        data-filtered={layers.carrier ? "" : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        <Layers />
+        <span className="layers-badge" aria-hidden="true" />
+      </button>
       {open && <LayersCard box={card} layers={layers} onLayers={props.onLayers} onPreview={props.onPreview} />}
-    </>
+      <div className="glass ctl-group ctl-group--zoom">
+        <button type="button" className="map-btn" aria-label="Zoom in" onClick={() => props.onZoom(1)}>
+          <Plus />
+        </button>
+        <button type="button" className="map-btn" aria-label="Zoom out" onClick={() => props.onZoom(-1)}>
+          <Minus />
+        </button>
+      </div>
+      <button type="button" className="glass map-btn" aria-label="Reset view to the whole network" onClick={props.onReset}>
+        <Home />
+      </button>
+      {document.fullscreenEnabled && (
+        <button type="button" className="glass map-btn" aria-label="Fullscreen" aria-pressed={fullscreen} onClick={toggleFullscreen}>
+          <Fullscreen />
+        </button>
+      )}
+    </div>
   );
 }

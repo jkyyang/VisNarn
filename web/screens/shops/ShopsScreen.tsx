@@ -213,21 +213,7 @@ export function ShopsScreen(props: {
   return (
     <div className="shops-screen">
       {header}
-      <div className={`shops-body${editing ? " has-form" : ""}`}>
-        <ImportPreview flow={flow} />
-        <ShopList
-          shops={listed}
-          total={list.length}
-          selected={props.selected}
-          editing={editing}
-          lit={flow.saved?.ready ?? NO_SHOPS}
-          onLit={flow.dismiss}
-          onSelect={(shop) => props.onSelect(shop.id)}
-          onEdit={(shop) => go({ name: "shops", edit: shop.id })}
-          onAdd={() => go({ name: "shops", edit: "new" })}
-          onImport={flow.choose}
-          importWrong={flow.preview ? null : flow.error}
-        />
+      <div className="shops-body">
         {editing && (
           <ShopForm
             key={shop?.id ?? "new"}
@@ -257,6 +243,20 @@ export function ShopsScreen(props: {
             )}
           </ShopForm>
         )}
+        <ImportPreview flow={flow} />
+        <ShopList
+          shops={listed}
+          total={list.length}
+          selected={props.selected}
+          editing={editing}
+          lit={flow.saved?.ready ?? NO_SHOPS}
+          onLit={flow.dismiss}
+          onSelect={(shop) => props.onSelect(shop.id)}
+          onEdit={(shop) => go({ name: "shops", edit: shop.id })}
+          onAdd={() => go({ name: "shops", edit: "new" })}
+          onImport={flow.choose}
+          importWrong={flow.preview ? null : flow.error}
+        />
       </div>
       <MapContent
         scene={shopsScene(list, editing && point && { shopId: shop?.id ?? null, at: pinAt ?? point, links: lines }, props.selected)}
