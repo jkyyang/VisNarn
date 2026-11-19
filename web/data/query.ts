@@ -10,7 +10,7 @@
  * - A read whose request changes keeps showing the previous answer, marked `stale`, until the new
  *   one arrives, and the superseded request is aborted (the server then drops the routing work).
  */
-import { useCallback, useRef, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
 import { urlFor, type ApiErrorBody, type ReadRoute, type Request, type RequestArgs, type Res, type Route, type WriteRoute } from "../../shared/api.ts";
 import { APP_ERROR_KINDS, AppError } from "../../shared/app.ts";
 import { createCache } from "../../shared/cache.ts";
@@ -218,7 +218,8 @@ export const clearQueryCache = () => cache.clear();
 
 /** Subscribes the component to one read. `request: null` asks nothing. */
 export function useQuery<R extends ReadRoute>(route: R, request: Request<R> | null): QueryState<Res<R>> {
-  const key = request === null ? null : cache.keyOf(route, request);
+  // Built again only for another request object: a large one (the map's track paths) costs to stringify.
+  const key = useMemo(() => (request === null ? null : cache.keyOf(route, request)), [route, request]);
   const requestRef = useRef(request);
   requestRef.current = request;
 
