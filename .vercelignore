@@ -1,5 +1,5 @@
 # Vercel builds the page and the /api function only: the Python data pipeline and its inputs stay out.
-pipeline/
-requirements.txt
-data/
-rail-map-handoff/
+/pipeline/
+/requirements.txt
+/data/
+/rail-map-handoff/
