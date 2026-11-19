@@ -17,16 +17,15 @@ const TURN_BACK: TurnBack = {
   track: "stub-end",
 };
 
-/** A phone-sized map (390 px wide): the search bar across the top, the map buttons down the right, the panel below. */
+/** A phone-sized map (390 px wide): the map buttons down the right, the panel below. */
 const RECTS: Record<string, { x: number; y: number; width: number; height: number }> = {
   frame: { x: 0, y: 0, width: 390, height: 700 },
   sheet: { x: 0, y: 682, width: 390, height: 800 },
-  search: { x: 12, y: 12, width: 310, height: 44 },
   layers: { x: 334, y: 12, width: 40, height: 40 },
-  fit: { x: 334, y: 140, width: 40, height: 40 },
-  // The popover, 240 × 40, centred on a disc at (300, 100): above it, or below it once flipped.
-  above: { x: 180, y: 52, width: 240, height: 40 },
-  below: { x: 180, y: 108, width: 240, height: 40 },
+  reset: { x: 334, y: 60, width: 40, height: 40 },
+  // The popover, 240 × 40, centred on a disc at (300, 44): above it, or below it once flipped.
+  above: { x: 180, y: -4, width: 240, height: 40 },
+  below: { x: 180, y: 52, width: 240, height: 40 },
 };
 
 afterEach(() => vi.restoreAllMocks());
@@ -39,16 +38,15 @@ function mockRects(rects: typeof RECTS) {
 }
 
 describe("the turn-back popover on a phone", () => {
-  it("opens below the search bar and to the left of the map buttons, fully in view", async () => {
+  it("opens below a disc near the map's top edge and to the left of the map buttons, fully in view", async () => {
     mockRects(RECTS);
     render(
       <div className="app">
         <main className="panel" data-rect="sheet" />
         <div className="map-canvas" data-rect="frame">
-          <div className="map-search" data-rect="search" />
           <div className="map-controls">
             <button type="button" data-rect="layers">Layers</button>
-            <button type="button" data-rect="fit">Fit whole route</button>
+            <button type="button" data-rect="reset">Reset view</button>
           </div>
           <TurnBackMark turnBack={TURN_BACK} />
         </div>
@@ -56,9 +54,9 @@ describe("the turn-back popover on a phone", () => {
     );
     await userEvent.setup().click(screen.getByRole("button", { name: "Turn-back at Chicago, IL" }));
     const pop = screen.getByRole("tooltip");
-    // Above the disc it would sit under the search bar (which ends at 56 px), so it goes below.
+    // Above the disc it would start over the map's top edge, so it goes below.
     expect(pop).toHaveClass("turn-pop--below");
-    // Below, it is level with the Fit button (left edge 334 px): its right edge (420) moves to 326.
+    // Below, it is level with the Reset view button (left edge 334 px): its right edge (420) moves to 326.
     expect(pop.style.marginLeft).toBe("-94px");
   });
 });

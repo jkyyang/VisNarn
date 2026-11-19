@@ -56,7 +56,7 @@ export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; on
   );
 }
 
-/** Air kept between the turn-back popover and the map's edge, the search box, the map buttons and the panel. */
+/** Air kept between the turn-back popover and the map's edge, the map buttons and the panel. */
 const EDGE_PX = 8;
 
 /** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. */
@@ -79,9 +79,9 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [pinned]);
-  // The details stay in the free part of the map: they go below the disc where the map's top edge or the
-  // search bar would cover them, then slide sideways to stay inside the map, clear of the map buttons on
-  // the right and of the panel on the left.
+  // The details stay in the free part of the map: they go below the disc where the map's top edge would cut
+  // them, then slide sideways to stay inside the map, clear of the map buttons on the right and of the
+  // panel on the left.
   const pop = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const details = pop.current;
@@ -91,8 +91,7 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
     const frame = canvas.getBoundingClientRect();
     const rects = (selector: string) => [...app.querySelectorAll(selector)].map((element) => element.getBoundingClientRect()).filter((rect) => rect.width && rect.height);
     let box = details.getBoundingClientRect();
-    const searchOver = rects(".map-search").filter((rect) => rect.left < box.right && rect.right > box.left);
-    if (box.top < Math.max(frame.top, ...searchOver.map((rect) => rect.bottom)) + EDGE_PX) {
+    if (box.top < frame.top + EDGE_PX) {
       details.classList.add("turn-pop--below");
       box = details.getBoundingClientRect();
     }
