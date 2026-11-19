@@ -19,7 +19,7 @@ web ──► shared ◄── engine ◄── server ◄── scripts
 | `engine/` | Node | rail network, routing | `shared/` | Node |
 | `server/` | Node | the back end | `shared/`, `engine/index.ts` | Node (no DOM) |
 | `web/` | browser | the page | `shared/` | DOM (no Node) |
-| `scripts/` | Node | the weekly network update, import-rule test | `shared/`, `engine/index.ts`, `server/` | Node |
+| `scripts/` | Node | the weekly network update, the shop sync to the site, import-rule test | `shared/`, `engine/index.ts`, `server/` | Node |
 | `tests/` | Node (vitest) | tests that cross areas | every area | DOM and Node |
 
 How the rules are enforced:
@@ -60,7 +60,7 @@ How the rules are enforced:
 | `route.ts` | `RouteStrategy`, `Leg`, `TurnBack`, `Milestone`, `RoutePath` |
 | `app.ts` | `AppError` and `APP_ERROR_KINDS` (invalid, not-found, conflict, internal) |
 | `cache.ts` | `createCache`: the bounded least-recently-used cache every cache in the app uses (by entry count, and by size where given) |
-| `api.ts` | the HTTP contract: the `Api` table, `Request`, `Res`, `Params`, `urlFor`, `routeMatcher`, the error body, the "answers are plain JSON" compile check. **Internal**: only `server/http/` and `web/data/` import it |
+| `api.ts` | the HTTP contract: the `Api` table, `CHANGES_DATA` (which routes change stored data: `ReadRoute`, `WriteRoute`), `Request`, `Res`, `Params`, `urlFor`, `routeMatcher`, the error body, the "answers are plain JSON" compile check. **Internal**: only `server/http/` and `web/data/` import it |
 | `*.test.ts` | tests |
 
 ## `engine/`: imports `shared/`
@@ -91,8 +91,8 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `selftest.ts` | `node server/main.ts --selftest`: load the network, start one routing worker, route the EXAMPLE trip (no database, no port) | `./routing/planner`, `engine/index.ts`, `shared/` |
 | `config.ts` | where things are: `DATABASE_URL` or the data folder, the port; the `LOOPBACK` constant | `engine/index.ts` (default network folder) |
 | `app.ts` | `App` (what the HTTP layer may ask for: places, shops, plans, track) and `createApp` (the composition root); on a laptop, the database in `~/.visnarn/postgres` | every server module |
-| `vercel.ts` | the Vercel function: one `App` per instance, answering with `http/serve.ts`'s `handler` | `./app`, `./config`, `./http/serve` |
-| `http/serve.ts` | the `node:http` shell: `handler` (Origin check, JSON-only bodies, `no-store`, match, decode, call, encode, errors) and `serve` on a laptop (the Host check, static files; Vite middleware in development). **Internal**: the only importer of `node:http` | `./handlers`, `./decode`, `shared/api`, `../app` (type), `../config` (`LOOPBACK`), `vite` (dev only) |
+| `vercel.ts` | the Vercel function: one `App` per instance, answering with `http/serve.ts`'s `handler`, read-only but for the owner's `VISNARN_WRITE_TOKEN` | `./app`, `./config`, `./http/serve` |
+| `http/serve.ts` | the `node:http` shell: `handler` (Origin check, on the public site the write token for a change, JSON-only bodies, `no-store`, match, decode, call, encode, errors) and `serve` on a laptop (the Host check, static files; Vite middleware in development). **Internal**: the only importer of `node:http` | `./handlers`, `./decode`, `shared/api`, `../app` (type), `../config` (`LOOPBACK`), `vite` (dev only) |
 | `http/handlers.ts` | one line per route of `Api` | `./decode`, `shared/api`, `../app` (type) |
 | `http/decode.ts` | untrusted JSON and query strings → domain values; path params → ids | `shared/` |
 | `store/store.ts` | the `Store` interface: shops, saved routes (async) | `shared/` |
@@ -119,7 +119,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `app/chrome.tsx` | `PanelHeader`: the search, the fold button, Route \| Shops with its sliding thumb | `./routes`, `../ui/*` |
 | `app/PanelSearch.tsx` | `PanelSearch`: the one search (Your shops, cities, nodes; grouped), "/" to reach it; a place it cannot find turns its edge red | `../data/hooks`, `../ui/*`, `shared/` |
 | `data/query.ts` | the transport and the query cache: `useQuery`, `read`, `write`, `callApi`. **Internal**: only `web/data/` imports it; the only `fetch` to the API | `shared/api`, `shared/app` |
-| `data/hooks.ts` | the named reads and changes the screens use | `./query`, `shared/` |
+| `data/hooks.ts` | the named reads and changes the screens use; `useReadOnly` (the public site: no control that changes stored data) | `./query`, `shared/` |
 | `data/basemap.ts` | loading the static mainline GeoJSON; `canDrawMaps` | |
 | `data/blackMarble.ts` | downloading NASA GIBS Black Marble tiles for the night side, with a bounded in-memory cache (GIBS sends `no-store`); its URL and attribution | `shared/cache` |
 | `words.ts` | the words the page says: `shortPlace`, `lineName`, `plural`, `errorText`, `clickToSet`, `pillText`, `routeName`, `placeHint`, `placeProblem`, `interchangesWord`, `turnBackMove`, `trackWords`, `linkText`, `linkJoinsThere`, `BACK_OUT`, `PLACE_SOURCE_WORDS` | `shared/` |
@@ -175,6 +175,7 @@ Two screens: Route (the planner) and Shops.
 |---|---|---|
 | `update-network.ts` | the weekly network update (`npm run data:update`, run by `launchd/`): rebuild in a temporary copy, check, then replace `public/data` | `engine/index.ts`, `server/selftest`, `server/intake/csv`, `shared/` |
 | `free-port.mjs` | frees the app's port before `npm run dev` and `npm start` | `node:` only |
+| `sync-shops.ts` | `node scripts/sync-shops.ts <site>`: the site's shops made the same as this laptop's, with the write token from the macOS Keychain | `shared/places` (types), `server/config` |
 | `architecture.test.ts` | the import rules the compiler cannot check; the ban on parameter properties and enums in Node-run code | `node:fs` |
 | `copy.test.ts` | the wording rules for UI strings, messages, docs, comments and test names: no em dash aside, no "not a ..." | `node:fs` |
 

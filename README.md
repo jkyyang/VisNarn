@@ -32,8 +32,9 @@ The server listens on 127.0.0.1 only and refuses requests addressed to any other
 Your shops and routes stay on the laptop; map tiles and fonts are fetched from public servers.
 
 ## Deploy
-Vercel (Hobby) for the page and the API, Neon (Free) for the database, open to anyone with the link:
-[docs/deploy/vercel.md](docs/deploy/vercel.md).
+Vercel (Hobby) for the page and the API, Neon (Free) for the database, open to anyone with the link and read-only:
+it plans routes and opens saved ones, and shows nothing that would change them. `node scripts/sync-shops.ts <site>`
+copies this laptop's shops there. See [docs/deploy/vercel.md](docs/deploy/vercel.md).
 
 Network files in `public/data/` are committed. To rebuild them from public sources (BTS NTAD NARN, and GeoNames
 for the town names that label places):
@@ -47,7 +48,7 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 - `server/`: database, places, routing workers, plans, shop import, HTTP, the Vercel function
 - `api/`: the Vercel function's entry (one line)
 - `web/`: screens, map, server data
-- `scripts/`: weekly network update, free-port, import rules test
+- `scripts/`: weekly network update, shop sync to the site, free-port, import rules test
 - `tests/`: the API over HTTP, the screens, the browser tests
 - `pipeline/`: Python that downloads NARN and GeoNames and writes `public/data` (graph.bin, graph_meta.json with the places, track.bin, basemap)
 

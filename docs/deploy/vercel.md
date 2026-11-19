@@ -11,6 +11,7 @@ Free tier only: Vercel **Hobby** for the page and the API, Neon **Free** for the
 | The network files | `public/data/*.bin`, `*.json` copied into the function (about 37 MB with `node_modules`) | `vercel.json` `includeFiles` |
 | The database | Neon PostgreSQL, through `DATABASE_URL`; the tables are created by the first request (`server/store/postgres.ts` migrations) | the Neon integration |
 | Who gets in | everyone with the link: no login | |
+| Who changes data | nobody but the owner: a request that changes shops or saved routes needs `VISNARN_WRITE_TOKEN` in the `x-visnarn-write-token` header, else 403; the page hides every control that would change them (`GET /api/site` says `readOnly`) | `server/vercel.ts`, `CHANGES_DATA` in `shared/api.ts` |
 
 ## Facts this setup relies on (checked 2026-11-19)
 
@@ -45,14 +46,21 @@ Run in the repo root, logged in to the Vercel CLI (`npx vercel whoami`).
    ```
    The laptop does not need it: without `DATABASE_URL` the app keeps its own database in `~/.visnarn/postgres`.
 
-3. **Deploy:**
+3. **The owner's write token.** Made once, kept in the macOS Keychain and in Vercel, never in a file:
+   ```
+   security add-generic-password -s visnarn-write-token -a visnarn -w "$(openssl rand -hex 32)"
+   security find-generic-password -s visnarn-write-token -w | tr -d '\n' | npx vercel env add VISNARN_WRITE_TOKEN production --sensitive
+   ```
+   Without it the site still runs, and no change is let in.
+
+4. **Deploy:**
    ```
    npx vercel deploy --prod
    ```
    Open the URL it prints.
    The first request creates the tables in Neon, so it takes a few seconds longer.
 
-4. **Deploy on every push to GitHub** (the private repo `jkyyang/VisNarn`):
+5. **Deploy on every push to GitHub** (the private repo `jkyyang/VisNarn`):
    ```
    npx vercel git connect
    ```
@@ -62,5 +70,9 @@ Run in the repo root, logged in to the Vercel CLI (`npx vercel whoami`).
 
 ## Later
 
-- **Shops on the site:** Neon starts empty. Add them on the Shops screen, or import a CSV there.
+- **Shops on the site:** the site shows no Add shop or Import CSV. With the laptop app running, copy its shops (with
+  their links) to the site; the site's other shops are deleted:
+  ```
+  node scripts/sync-shops.ts https://visnarn.vercel.app
+  ```
 - **Previews:** Vercel's default Standard Protection asks for a Vercel login on preview URLs; production is open.
