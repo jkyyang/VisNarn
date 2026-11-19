@@ -6,13 +6,20 @@ import { expect, expectMapCanvas, mapPoint, mapRegion, PHONE, test } from "./app
 
 test.use({ ...PHONE, deviceScaleFactor: 3 });
 
-test("Phone map: 2 device pixels per CSS pixel; a two-finger twist and spread zooms, north stays up", async ({ page }) => {
+test("Phone map: 2 device pixels per CSS pixel", async ({ page }) => {
+  await page.goto("/shops");
+  await expectMapCanvas(page);
+  const size = await mapRegion(page)
+    .locator("canvas.maplibregl-canvas")
+    .evaluate((c: HTMLCanvasElement) => ({ width: c.width, css: c.clientWidth }));
+  expect(size.width).toBe(size.css * 2);
+});
+
+test("Phone map: a two-finger twist and spread zooms, north stays up", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "The two fingers go through Chrome's DevTools protocol; WebKit has none.");
   await page.goto("/shops");
   await expectMapCanvas(page);
   const canvas = mapRegion(page).locator("canvas.maplibregl-canvas");
-  const size = await canvas.evaluate((c: HTMLCanvasElement) => ({ width: c.width, css: c.clientWidth }));
-  expect(size.width).toBe(size.css * 2);
-
   const box = await canvas.boundingBox();
   if (!box) throw new Error("The map canvas is not on the page.");
   const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
