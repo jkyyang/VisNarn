@@ -1164,6 +1164,15 @@ input[aria-invalid="true"] {
 .saved-row.is-current {
   background: var(--surface-2);
 }
+/* The row Save route just wrote: an accent edge that fades. */
+.saved-row.is-lit {
+  animation: saved-lit 1200ms var(--ease);
+}
+@keyframes saved-lit {
+  from {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+}
 .saved-row .confirm {
   flex: 1;
   margin: 6px 0;

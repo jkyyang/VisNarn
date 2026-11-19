@@ -323,9 +323,10 @@ describe("Route planner", () => {
     expect(fake.state.savedRoutes[0].name).toBe("Temple → North Little Rock");
     await waitFor(async () => expect(await menu("Saved")).toBeDisabled());
     await user.keyboard("{Escape}");
-    // The open route is renamed in the saved list.
-    await user.click(screen.getByRole("button", { name: /^Saved routes/ }));
+    // Saved routes opens on its row, lit once; the open route is renamed there.
+    expect(screen.getByRole("button", { name: /^Saved routes/ })).toHaveAttribute("aria-expanded", "true");
     const name = screen.getByRole("textbox", { name: "Route name" });
+    expect(name.closest(".saved-row")).toHaveClass("is-lit");
     expect(name).toHaveValue("Temple → North Little Rock");
     await user.clear(name);
     await user.type(name, "Temple run{Enter}");

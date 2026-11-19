@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MapStage, MapStageProvider } from "./MapStage.tsx";
@@ -16,6 +16,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 async function openMap(now: Date) {
@@ -76,5 +77,20 @@ describe("day and night on the map", () => {
     await user.click(screen.getByRole("radio", { name: "Day" }));
     expect(map).toHaveAttribute("data-look", "day");
     expect(layersButton).toHaveAccessibleName("Map layers: Map · Day");
+  });
+
+  it("this browser keeps the basemap and the time of day; the carrier shown alone starts over", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const first = await openMap(KANSAS_NOON);
+    await user.click(first.layersButton);
+    await user.click(screen.getByRole("radio", { name: "Satellite" }));
+    await user.click(screen.getByRole("radio", { name: "Night" }));
+    await user.click(screen.getByRole("button", { name: /^BNSF/ }));
+    expect(first.layersButton).toHaveAccessibleName("Map layers: Satellite · Night · BNSF only");
+    cleanup();
+
+    const again = await openMap(KANSAS_NOON);
+    expect(again.map).toHaveAttribute("data-look", "night");
+    expect(again.layersButton).toHaveAccessibleName("Map layers: Satellite · Night");
   });
 });

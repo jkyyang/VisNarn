@@ -4,7 +4,7 @@
  * <MapContent> anywhere in its tree.
  *
  * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night, the carrier shown
- * alone) are view state owned here. The day or night look is set on the map section, and the whole
+ * alone) are view state owned here; this browser keeps the basemap and the time of day. The day or night look is set on the map section, and the whole
  * page takes it from there (web/styles.css).
  */
 import {
@@ -26,8 +26,10 @@ import type { TrackIncluded } from "../../shared/railroads.ts";
 import type { RouteStrategy } from "../../shared/route.ts";
 import { canDrawMaps, type Mainline } from "../data/basemap.ts";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
+import { storedChoice } from "../ui/stored.ts";
+import type { BasemapKind } from "./basemaps.ts";
 import { NETWORK_CENTRE } from "./config.ts";
-import { mapLook, sunPosition } from "./daylight.ts";
+import { mapLook, sunPosition, type LightMode } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapHandle } from "./MapHandles.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
@@ -150,6 +152,9 @@ function useNow(running: boolean): number {
 
 const nothing = () => null;
 
+const useBasemap = storedChoice<BasemapKind>("visnarn.basemap", ["map", "satellite"], () => "map");
+const useLight = storedChoice<LightMode>("visnarn.time-of-day", ["auto", "day", "night"], () => "auto");
+
 /**
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
  * `cameraLeft`: how many px of the map every camera move keeps clear on the left, for the panel.
@@ -158,7 +163,15 @@ export function MapStage(props: { cameraLeft: number; found: Found | null; onClo
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
-  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto", carrier: null });
+  const [basemap, setBasemap] = useBasemap();
+  const [light, setLight] = useLight();
+  const [overlays, setOverlays] = useState<Omit<MapLayerChoice, "basemap" | "light">>({ network: true, tracks: false, carrier: null });
+  const layers: MapLayerChoice = { basemap, light, ...overlays };
+  const setLayers = ({ basemap, light, ...next }: MapLayerChoice) => {
+    setBasemap(basemap);
+    setLight(light);
+    setOverlays(next);
+  };
   const [drawable] = useState(canDrawMaps);
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
   const now = useNow(layers.light === "auto");

@@ -479,14 +479,19 @@ function RouteName(props: { name: string; onRename: (name: string) => Promise<vo
   );
 }
 
-/** Saved routes: folded to how many; open, a row each to open it (the open one renamed in place), with a delete on the hovered row. */
+/**
+ * Saved routes: folded to how many; open, a row each to open it (the open one renamed in place), with a delete on the hovered row.
+ * `justSaved`: opens unfolded, with the open route's row in view and lit once.
+ */
 function SavedList(props: {
   saved: SavedRoute[];
   current: SavedRouteId | null;
   unfolded: boolean;
+  justSaved: boolean;
   onRename: (name: string) => Promise<void>;
   onRemove: (id: SavedRouteId) => Promise<void>;
 }): ReactElement {
+  const [lit, setLit] = useState(props.justSaved);
   const [confirming, setConfirming] = useState<SavedRouteId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const remove = (id: SavedRouteId) =>
@@ -495,10 +500,15 @@ function SavedList(props: {
       (e: unknown) => setError(errorText(e, "Could not delete the route.")),
     );
   return (
-    <Accordion title="Saved routes" summary={`${props.saved.length} saved`} initiallyOpen={props.unfolded}>
+    <Accordion title="Saved routes" summary={`${props.saved.length} saved`} initiallyOpen={props.unfolded || props.justSaved}>
       <ul className="saved-list" aria-label="Saved routes">
         {props.saved.map((route) => (
-          <li key={route.id} className={`saved-row${route.id === props.current ? " is-current" : ""}`}>
+          <li
+            key={route.id}
+            className={`saved-row${route.id === props.current ? ` is-current${lit ? " is-lit" : ""}` : ""}`}
+            ref={lit && route.id === props.current ? (row) => row?.scrollIntoView?.({ block: "nearest" }) : undefined}
+            onAnimationEnd={() => setLit(false)}
+          >
             {confirming === route.id ? (
               <ConfirmDelete question="Delete this route?" label={`Delete ${route.name}`} onConfirm={() => void remove(route.id)} onKeep={() => setConfirming(null)} />
             ) : (
@@ -558,10 +568,15 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
 
   const name = open?.name ?? (result ? routeName(result.places) : "");
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Each Save route counts up, so Saved routes opens afresh on the row saved.
+  const [saves, setSaves] = useState(0);
   const save = (as: string) => (string ? props.onSave(as, compactRouteString(string)) : Promise.resolve());
   const saveNow = () => {
     setSaveError(null);
-    save(name).catch((e: unknown) => setSaveError(errorText(e, "Could not save the route.")));
+    save(name).then(
+      () => setSaves((n) => n + 1),
+      (e: unknown) => setSaveError(errorText(e, "Could not save the route.")),
+    );
   };
   const placesSet = plan.places.filter(Boolean).length;
   const dirty = !!routes && !!string && !!full && changed(name);
@@ -619,7 +634,9 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
       )}
       {routes && chosen && routes.length > 1 && <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />}
 
-      {props.saved.length > 0 && <SavedList saved={props.saved} current={open?.id ?? null} unfolded={empty} onRename={save} onRemove={props.onRemoveSaved} />}
+      {props.saved.length > 0 && (
+        <SavedList key={saves} saved={props.saved} current={open?.id ?? null} unfolded={empty} justSaved={saves > 0} onRename={save} onRemove={props.onRemoveSaved} />
+      )}
     </div>
   );
 }
