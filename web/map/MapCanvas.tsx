@@ -24,8 +24,8 @@ import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from ".
 import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import {
-  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX,
-  REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
+  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, MAX_PIXEL_RATIO, PAN_BOUNDS,
+  PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
 } from "./config.ts";
 import type { Found, MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
@@ -75,6 +75,9 @@ const networkView = (cameraLeft: number) => ({
 });
 
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** A finger covers more of the map than a mouse pointer: a tap picks a thin line from further off. */
+const pickRadius = () => (matchMedia("(pointer: coarse)").matches ? DECK_PICK_RADIUS_PX.finger : DECK_PICK_RADIUS_PX.mouse);
 
 /** Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom. */
 const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
@@ -195,6 +198,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         maxBounds={PAN_BOUNDS}
         mapStyle={firstStyle}
         maxTileCacheSize={TILE_CACHE_MAX_TILES}
+        pixelRatio={Math.min(devicePixelRatio, MAX_PIXEL_RATIO)}
         attributionControl={false}
         // Every click places something, so a double click must not also zoom.
         doubleClickZoom={false}
@@ -214,7 +218,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           // crosshair while a click places something, a pointer on what a click selects, else none of its
           // own, so MapLibre's grab shows through.
           getCursor={({ isHovering }) => (dragging.current ? "grabbing" : picking ? "crosshair" : isHovering ? "pointer" : "")}
-          pickingRadius={DECK_PICK_RADIUS_PX}
+          pickingRadius={pickRadius()}
           onClick={(info) => {
             const target = sceneTarget(info);
             const current = latest.current;
