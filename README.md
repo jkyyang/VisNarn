@@ -24,11 +24,16 @@ In development Vite runs inside the Node server (middleware mode), so the page, 
 share one origin. The server restarts by itself when a file in `server/`, `engine/` or `shared/` changes.
 
 Settings (environment variables): `VISNARN_PORT` (default 5173), `VISNARN_DATA_DIR` (default
-`~/.visnarn`), `VISNARN_ROUTE_WORKERS` (default 2).
+`~/.visnarn`), `VISNARN_ROUTE_WORKERS` (default 2), `DATABASE_URL` (a PostgreSQL server in place of the data folder).
 
-The database is `~/.visnarn/visnarn.db`. The server listens on 127.0.0.1 only and refuses requests
-addressed to any other host name or sent from another web page. Your shops and routes never leave the laptop;
-map tiles and fonts are fetched from public servers.
+On a laptop the database is PostgreSQL inside the server process (PGlite), in `~/.visnarn/postgres`. Its first start
+copies in the shops, shop links and saved routes of an older `~/.visnarn/visnarn.db` (SQLite) and leaves that file as it was.
+The server listens on 127.0.0.1 only and refuses requests addressed to any other host name or sent from another web page.
+Your shops and routes stay on the laptop; map tiles and fonts are fetched from public servers.
+
+## Deploy
+Vercel (Hobby) for the page and the API, Neon (Free) for the database, one password for everyone you let in:
+[docs/deploy/vercel.md](docs/deploy/vercel.md).
 
 Network files in `public/data/` are committed. To rebuild them from public sources (BTS NTAD NARN, and GeoNames
 for the town names that label places):
@@ -39,7 +44,8 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 ## Layout
 - `shared/`: places, plans, routes and the HTTP contract (`api.ts`)
 - `engine/`: rail network and router, used through `engine/index.ts`
-- `server/`: database, places, routing workers, plans, shop import, HTTP
+- `server/`: database, places, routing workers, plans, shop import, HTTP, the Vercel function and its gate
+- `api/`: the Vercel function's entry (one line)
 - `web/`: screens, map, server data
 - `scripts/`: weekly network update, free-port, import rules test
 - `tests/`: the API over HTTP, the screens, the browser tests

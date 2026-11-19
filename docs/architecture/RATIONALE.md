@@ -13,7 +13,7 @@ network has between them, and your own shops. This page says why the code has th
  │ web/map      one map       │ ────────► │ server/plans   route a plan · saved routes       │
  │ web/data     hooks, cache  │           │ server/places  Directory · shops                 │
  │ web/ui       shared kit    │           │ server/intake  shop CSV                          │
- └────────────┬───────────────┘           │ server/store   node:sqlite  (~/.visnarn)         │
+ └────────────┬───────────────┘           │ server/store   PostgreSQL (PGlite | Neon)        │
               │ types only                │ server/routing planner ──► worker thread(s)      │
               ▼                           │                              └ engine: router    │
         shared/  ◄─────────────────────── └──────────────┬──────────────────────────────────┘
@@ -25,7 +25,7 @@ network has between them, and your own shops. This page says why the code has th
 
 | What | Where |
 |---|---|
-| Shops and saved routes | SQLite, through `server/store`, at `~/.visnarn/visnarn.db` |
+| Shops and saved routes | PostgreSQL, through `server/store`: `DATABASE_URL` (Neon, on Vercel), else PGlite in `~/.visnarn/postgres` |
 | Routes | Nowhere: derived on request from the plan, the stored shops and the network version, cached in memory by the planner |
 | Which screen, saved route and alternative | The URL (`web/app/routes.ts`) |
 | The plan being edited, its undo history, which row's ⌖ is on | `usePlanSession` in the browser's memory (`web/screens/route/session.ts`) |
@@ -40,7 +40,7 @@ network has between them, and your own shops. This page says why the code has th
    last the destination, the rest stops; an empty row is null. The same list runs end to end: on the
    wire, in storage, in the answer (`PlanPlaces`, same order), in the engine (`Trip.points`) and as one
    row component in the panel. Reorder, reverse, insert and remove are list operations, and a problem,
-   a pin number and a row share one index. Routes saved before the list are read as one (`sqlite.ts`).
+   a pin number and a row share one index.
 2. **One resolver, on the server** (`server/places/directory.ts`). Free text goes through lists in an
    order fixed per role; a bare number is never an FRA id. A second resolver in the browser would be a
    second copy of this policy.
@@ -54,6 +54,10 @@ network has between them, and your own shops. This page says why the code has th
    `<MapContent scene=… />`.
 7. **Node runs the sources.** Every relative import carries `.ts`; the architecture test rejects
    parameter properties and enums in the areas Node runs.
+8. **One server, two hosts, one database dialect.** A laptop runs `serve()` (loopback only, PGlite in a
+   folder); Vercel runs the same `handler` as one Node function (`server/vercel.ts`, Neon through
+   `DATABASE_URL`) behind a password asked on every request, page and API alike (`server/http/gate.ts`).
+   `server/store/postgres.ts` has one SQL text and one list of migrations for both.
 
 ## Invariants encoded in types
 
@@ -63,7 +67,8 @@ network has between them, and your own shops. This page says why the code has th
 | A saved route has no empty row | `FullPlan.places: PlaceRef[]`; the decoder refuses null there |
 | A routed answer always has a route to show | `routes: [RoutePath, ...RoutePath[]]` |
 | Every route has a handler and a decoder | `Handlers` and `decodeBody` are mapped types over `Api` |
-| The server is not reachable from the network | `LOOPBACK` is a constant; `serve()` has no host option |
+| A laptop's server is not reachable from the network | `LOOPBACK` is a constant; `serve()` has no host option |
+| Nothing on Vercel answers without the password | `vercel.json` `proxy` runs `gate.ts` before every file and the function; no `VISNARN_PASSWORD`, no entry |
 | Links cannot drift from routes | links are built from `Screen` values with `hrefFor` |
 
 **Validation** lives at three edges: `server/http/decode.ts` (JSON to domain), `server/intake` (CSV records
