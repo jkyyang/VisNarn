@@ -202,10 +202,16 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         attributionControl={false}
         // Every click places something, so a double click must not also zoom.
         doubleClickZoom={false}
+        // North stays up: the chevrons, the pills and the fits are laid out on a north-up screen, and no button turns it back.
+        dragRotate={false}
+        touchPitch={false}
+        maxPitch={0}
         onMoveEnd={onMoveEnd}
         onDragStart={() => (dragging.current = true)}
         onDragEnd={() => (dragging.current = false)}
         onLoad={(event) => {
+          event.target.touchZoomRotate.disableRotation();
+          event.target.keyboard.disableRotation();
           setZoom(halfZoom(event.target.getZoom()));
           watchCamera(event.target);
         }}
