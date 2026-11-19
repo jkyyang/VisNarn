@@ -4,9 +4,10 @@
  * again.
  */
 import type { Locator, Page } from "@playwright/test";
+import type { NetworkNode } from "../../shared/places.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE, RAILROADS } from "../../shared/railroads.ts";
-import { clickMapCentre, expect, expectMapCanvases, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
+import { clickMapCentre, expect, expectMapCanvas, freeMapCentre, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
 
 const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).getByRole("button");
 /** Every place is a row: start, stops, destination. */
@@ -33,7 +34,7 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
     await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toBeVisible();
-    await expectMapCanvases(page);
+    await expectMapCanvas(page);
 
     const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     expect(planned.outcome).toBe("routed");
@@ -43,6 +44,40 @@ test.describe("Route planner", () => {
     await expect(legend(page)).toHaveText(RAILROADS.filter((railroad) => railroads.includes(railroad)));
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor");
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("North Little Rock");
+  });
+
+  test("a click on a grey route puts the stop on that route", async ({ page }) => {
+    await page.goto("/route");
+    const planned = await planRoute(page, "Temple, TX", "North Little Rock, AR");
+    if (planned.outcome !== "routed" || planned.routes.length < 2) throw new Error("Temple to North Little Rock should have two routes.");
+    const [selected, grey] = planned.routes;
+    const km = ([lon1, lat1]: number[], [lon2, lat2]: number[]) => Math.hypot((lon2 - lon1) * 111 * Math.cos((lat1 * Math.PI) / 180), (lat2 - lat1) * 111);
+    const nearest = (point: number[], route: typeof grey) => Math.min(...route.legs.flatMap((leg) => leg.path.map((other) => km(point, other))));
+    // The point of the grey route farthest from the selected one: only the grey route is drawn there.
+    const points = grey.legs.flatMap((leg) => leg.path);
+    const [lon, lat] = points.reduce((best, point) => (nearest(point, selected) > nearest(best, selected) ? point : best));
+
+    // The search box centres the map on that point's node.
+    const node = (await (await page.request.get(`/api/places/nearest?lon=${lon}&lat=${lat}&withinKm=0.1`)).json()) as NetworkNode | null;
+    if (!node) throw new Error("The grey route's point is no node.");
+    await page.getByRole("combobox", { name: "Search the map" }).fill(`FRA ${node.fraId}`);
+    await page.getByRole("option", { name: new RegExp(`FRA node ${node.fraId}`) }).click();
+    await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
+    const answer = nextRoute(page);
+    await clickMapCentre(page);
+    const withStop = await answer;
+    expect(withStop.places).toHaveLength(3);
+    const stop = withStop.places[1];
+    if (!stop?.ok) throw new Error("The stop did not resolve.");
+    expect(nearest([stop.place.lon, stop.place.lat], grey)).toBeLessThan(0.05);
+  });
+
+  test("while a click places something the cursor is a crosshair", async ({ page }) => {
+    await page.goto("/route");
+    await expectMapCanvas(page);
+    const centre = await freeMapCentre(page);
+    await page.mouse.move(centre.x, centre.y);
+    await expect(mapRegion(page).locator("canvas.maplibregl-canvas")).toHaveCSS("cursor", "crosshair");
   });
 
   test("a click at Temple adds a stop that Undo takes back", async ({ page }) => {

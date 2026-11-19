@@ -318,7 +318,7 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
       snapping.current = true;
       try {
         const vertex = route ? routeNodeNear(route, { lon, lat }, (toleranceKm * ON_ROUTE_PX) / PICK_RADIUS_PX) : null;
-        const node = (vertex && (await snapToNetwork(vertex[0], vertex[1], VERTEX_KM, "track"))) ?? (await snapToNetwork(lon, lat, toleranceKm, "track"));
+        const node = (vertex && (await snapToNetwork(vertex[0], vertex[1], VERTEX_KM))) ?? (await snapToNetwork(lon, lat, toleranceKm));
         if (!node) dispatch({ type: "missed" });
         else place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
       } finally {

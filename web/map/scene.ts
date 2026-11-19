@@ -14,7 +14,7 @@ export type PinKind = "start" | "stop" | "destination" | "shop";
 
 export interface ScenePin {
   kind: PinKind;
-  /** Drawn inside the pin: the stop number, or "+" for the place being edited on Shops. */
+  /** Drawn inside the pin: the stop number. */
   glyph: string;
   label: string;
   position: LngLat;
@@ -59,21 +59,27 @@ export type MapScene =
   | {
       kind: "shops";
       pins: ScenePin[];
-      /** The edited shop's own track: a straight piece from the shop to each node it joins; a suggestion is drawn faint. */
+      /** The edited shop's own track to each node it joins. */
       links: SceneLink[];
       bounds: Bounds;
     };
 
+/**
+ * A shop's link as drawn, shop first: straight to its yard (dashed), then along the track to the node it joins (solid).
+ * "offered": the suggestion a shop with no links may take; "ghost": where a drag would set it; "refused": where a drop
+ * would set nothing, straight to the pointer.
+ */
 export interface SceneLink {
-  path: [LngLat, LngLat];
-  suggested: boolean;
+  path: LngLat[];
+  look: "set" | "offered" | "ghost" | "refused";
 }
 
-/** The shop being edited on Shops: where it is, and the nodes its links join. */
+/** The shop being edited on Shops, and its links. Its pin and its links' rings are handles on the map (./MapHandles.tsx), so the scene leaves them out. */
 export interface EditedShop {
-  label: string;
+  /** Null for a new shop. */
+  shopId: ShopId | null;
   at: LngLat;
-  links: { at: LngLat; suggested: boolean }[];
+  links: SceneLink[];
 }
 
 /** Something in the scene the user clicked: a route to select, or a place to put in the plan. */
@@ -135,17 +141,29 @@ function routesOf(scene: MapScene): SceneRoute[] {
   return [...routes].sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
 }
 
-/** Every leg's path, route by route in a fixed order: selecting another route asks for the same paths again. */
+/** A link of the shop or its suggestion, with track to follow: its foot in the yard and at least the node it joins. */
+const onTrack = (link: SceneLink) => (link.look === "set" || link.look === "offered") && link.path.length > 2;
+
+/**
+ * What runs on track, in a fixed order: every leg's path, route by route (selecting another route asks for the same
+ * paths again); on Shops, the piece of each link from its foot to the node it joins.
+ */
 export function routePaths(scene: MapScene): LngLat[][] {
+  if (scene.kind === "shops") return scene.links.filter(onTrack).map((link) => link.path.slice(1));
   return routesOf(scene).flatMap((route) => route.legs.map((leg) => leg.path));
 }
 
 /**
  * The scene with its legs drawn along `paths`, given in routePaths order (the same legs on the real
- * track), and the chevrons placed along them again. Paths that do not fit leave the scene as it was.
+ * track), and the chevrons placed along them again; on Shops, each link's piece on track. Paths that do
+ * not fit leave the scene as it was.
  */
 export function withRoutePaths(scene: MapScene, paths: LngLat[][]): MapScene {
-  if (scene.kind !== "route" || paths.length !== routePaths(scene).length) return scene;
+  if (paths.length !== routePaths(scene).length) return scene;
+  if (scene.kind === "shops") {
+    let next = 0;
+    return { ...scene, links: scene.links.map((link) => (onTrack(link) ? { ...link, path: [link.path[0], ...paths[next++]] } : link)) };
+  }
   let next = 0;
   const redrawn = new Map(
     routesOf(scene).map((route) => {
@@ -302,17 +320,17 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   };
 }
 
-/** Shops: every shop that is on the network, and the one being edited with its links, numbered as in the form. */
+/** Shops: every other shop that is on the network, and the links of the one being edited. */
 export function shopsScene(shops: ShopView[], editing: EditedShop | null): MapScene {
   const pins: ScenePin[] = [];
   for (const shop of shops) {
-    if (!shop.place.ok) continue;
+    if (!shop.place.ok || shop.id === editing?.shopId) continue;
     pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id });
   }
-  const links = (editing?.links ?? []).map((link): SceneLink => ({ path: [editing!.at, link.at], suggested: link.suggested }));
-  editing?.links.forEach((link, i) => pins.push({ kind: "stop", glyph: String(i + 1), label: `Link ${i + 1}`, position: link.at, shopId: null }));
-  if (editing) pins.push({ kind: "stop", glyph: "+", label: editing.label, position: editing.at, shopId: null });
+  const links = editing?.links ?? [];
   const bounds = new BoundsBuilder();
   bounds.addAll(pins.map((pin) => pin.position));
+  if (editing) bounds.add(editing.at);
+  for (const link of links) bounds.addAll(link.path);
   return { kind: "shops", pins, links, bounds: bounds.done() };
 }

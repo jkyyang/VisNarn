@@ -19,6 +19,8 @@ export interface ThemeColors {
   alternative: RGBA;
   /** The white edge under a route line and around rings. */
   casing: RGBA;
+  /** What will not work: a shop link the drop would refuse. */
+  risk: RGBA;
   /** The selected route is drawn in its lines' colours, the network in its classes' colours. */
   rail: Record<MapLine, RGBA>;
 }
@@ -47,6 +49,7 @@ function read(scope?: Element | null): ThemeColors {
     route: hex("--route"),
     alternative: hex("--alt-route"),
     casing: hex("--casing"),
+    risk: hex("--risk"),
     rail: Object.fromEntries(MAP_LINES.map((line) => [line, hex(lineToken(line))])) as Record<MapLine, RGBA>,
   };
 }

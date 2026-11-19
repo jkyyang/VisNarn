@@ -6,7 +6,7 @@
  * empty map asks the server for the nearest place at the clicked longitude and latitude.
  */
 import type { Page } from "@playwright/test";
-import { expect, expectMapCanvases, mapRegion, test } from "./app.ts";
+import { expect, expectMapCanvas, mapRegion, test } from "./app.ts";
 import { PAN_BOUNDS } from "../../web/map/config.ts";
 
 const [[WEST, SOUTH], [EAST, NORTH]] = PAN_BOUNDS;
@@ -43,7 +43,7 @@ const SLACK_DEG = 0.5;
 
 test("the map pans a margin past North America and no further, and stops zooming out there", async ({ page }) => {
   await page.goto("/route");
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
 
   // Pulled towards the South Atlantic: the bottom edge stops at 5° N, the right edge at 20° W.
   await zoomOutAndDrag(page, -3000, -3000);
@@ -57,7 +57,7 @@ test("the map pans a margin past North America and no further, and stops zooming
 
   // Pulled towards Siberia: the left edge stops at PAN_BOUNDS' west, the top edge at 83° N.
   await page.reload();
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   await zoomOutAndDrag(page, 3000, 3000);
   // The corner itself: the panel sits over the map from 12 px in, and a click on it never reaches the map.
   const northWest = await placeAt(page, 0.004, 0.004);

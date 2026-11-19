@@ -15,8 +15,8 @@ import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, ty
 import { APP_ERROR_KINDS, AppError } from "../../shared/app.ts";
 import { createCache } from "../../shared/cache.ts";
 
-/** Routes that change nothing on the server. Three of them are POSTs because their input is a document. */
-export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/track">;
+/** Routes that change nothing on the server. Four of them are POSTs because their input is a document. */
+export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/places/links" | "POST /api/track">;
 export type WriteRoute = Exclude<Route, ReadRoute>;
 
 export type QueryState<T> =

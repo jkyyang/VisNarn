@@ -20,7 +20,6 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import type { LngLat } from "../../shared/geo.ts";
 import type { ResolvedPlace } from "../../shared/places.ts";
 import type { TrackIncluded } from "../../shared/railroads.ts";
@@ -30,6 +29,7 @@ import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { NETWORK_CENTRE } from "./config.ts";
 import { mapLook, sunPosition } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
+import type { MapHandle } from "./MapHandles.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
@@ -43,12 +43,19 @@ export interface MapContentProps {
   /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here, with the grey route it landed on. */
   onPick?: (lon: number, lat: number, toleranceKm: number, line: RouteStrategy | null) => void;
   onSelect?: (target: SceneTarget) => void;
-  /** Undo / redo of route changes, shown with the map controls when given. */
-  history?: { undo: (() => void) | null; redo: (() => void) | null };
+  /** Things on the map a person drags or taps: on Shops, the edited shop's pin and its links' rings. */
+  handles?: MapHandle[];
+  /** Undo / redo, shown with the map controls when given. */
+  history?: MapHistory;
   /** What a place found with the map's search box can become here: "Start", "Add stop". */
   placeActions?: PlaceAction[];
-  /** Cards laid over the map (the pick prompt on Shops). */
-  children?: ReactNode;
+}
+
+/** Undo and redo of the screen's changes; `what` names them on the buttons ("Undo route change"). */
+export interface MapHistory {
+  what: string;
+  undo: (() => void) | null;
+  redo: (() => void) | null;
 }
 
 export interface PlaceAction {
@@ -60,18 +67,14 @@ export interface PlaceAction {
 interface Stage {
   subscribe(listener: () => void): () => void;
   content(): MapContentProps | null;
-  active(): string | null;
-  host(): HTMLElement | null;
   publish(id: string, props: MapContentProps): void;
   remove(id: string): void;
-  setHost(element: HTMLElement | null): void;
 }
 
 function createStage(): Stage {
   const listeners = new Set<() => void>();
   const published = new Map<string, MapContentProps>();
   const order: string[] = [];
-  let host: HTMLElement | null = null;
   let current: MapContentProps | null = null;
   const notify = () => listeners.forEach((listener) => listener());
   const refresh = () => {
@@ -85,8 +88,6 @@ function createStage(): Stage {
       return () => listeners.delete(listener);
     },
     content: () => current,
-    active: () => order[order.length - 1] ?? null,
-    host: () => host,
     publish(id, props) {
       if (!published.has(id)) order.push(id);
       published.set(id, props);
@@ -97,11 +98,6 @@ function createStage(): Stage {
       const at = order.indexOf(id);
       if (at >= 0) order.splice(at, 1);
       refresh();
-    },
-    setHost(element) {
-      if (host === element) return;
-      host = element;
-      notify();
     },
   };
 }
@@ -182,16 +178,12 @@ export function MapStage(props: { coveredLeft: number }): ReactElement {
       ) : (
         <NoMap />
       )}
-      <div className="map-overlay" ref={(element) => stage?.setHost(element)} />
     </section>
   );
 }
 
-/**
- * Declares what the stage shows while this component is mounted, and portals its children into the
- * map's overlay area. One at a time: the most recently mounted wins.
- */
-export function MapContent(props: MapContentProps): ReactElement | null {
+/** Declares what the stage shows while this component is mounted. One at a time: the most recently mounted wins. */
+export function MapContent(props: MapContentProps): null {
   const stage = useContext(StageContext);
   const id = useId();
   // Every render: the props carry fresh callbacks. Only the stage re-renders, never this component's owner.
@@ -199,8 +191,5 @@ export function MapContent(props: MapContentProps): ReactElement | null {
     stage?.publish(id, props);
   });
   useLayoutEffect(() => () => stage?.remove(id), [stage, id]);
-  const host = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.host ?? nothing, nothing);
-  const active = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.active ?? nothing, nothing);
-  if (!stage) return props.children ? <div className="map-overlay map-overlay--inline">{props.children}</div> : null;
-  return host && active === id && props.children ? createPortal(props.children, host) : null;
+  return null;
 }

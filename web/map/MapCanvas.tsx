@@ -20,6 +20,7 @@ import { FitBounds } from "./FitBounds.tsx";
 import { FoundPin } from "./FoundPin.tsx";
 import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
+import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
 import {
@@ -191,8 +192,9 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     watchCamera(event.target);
   };
   const darkStreets = look.base === "night" && (layers.light === "night" || zoom >= AUTO_DARK_ZOOM);
-  // The first style; every later one is put on by <BasemapStyle>.
-  const [firstStyle] = useState(() => basemapStyle(layers.basemap, darkStreets));
+  // The same object for the same look (./basemaps.ts): the first one goes to MapLibre, every later one to <BasemapStyle>.
+  const style = basemapStyle(layers.basemap, { ground: darkStreets ? "night" : "day", fromSpace: layers.light === "auto" });
+  const [firstStyle] = useState(style);
 
   return (
     <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"} data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}>
@@ -202,7 +204,6 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         mapStyle={firstStyle}
         maxTileCacheSize={TILE_CACHE_MAX_TILES}
         attributionControl={false}
-        cursor={picking ? "crosshair" : undefined}
         // Every click places something, so a double click must not also zoom.
         doubleClickZoom={false}
         onMoveEnd={onMoveEnd}
@@ -215,6 +216,9 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <DeckOverlay
           layers={deckLayers}
           getTooltip={sceneTooltip}
+          // deck.gl sets the cursor of the map's canvas on every frame: a crosshair while a click places
+          // something, else none of its own, so MapLibre's grab and grabbing show through.
+          getCursor={() => (picking ? "crosshair" : "")}
           pickingRadius={DECK_PICK_RADIUS_PX}
           onClick={(info) => {
             const target = sceneTarget(info);
@@ -230,7 +234,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           }}
         />
         {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
-        <BasemapStyle style={basemapStyle(layers.basemap, darkStreets)} />
+        <BasemapStyle style={style} />
         <FreeSpareTextures />
         <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
         <CornerLegend {...legendFor(scene, networkClasses)} />
@@ -242,6 +246,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
+        {content?.handles && <MapHandles handles={content.handles} />}
         {chosen && found?.ok && <FoundPin chosen={chosen} place={found.place} actions={content?.placeActions ?? []} onClose={() => setChosen(null)} />}
       </MapGL>
       <MapSearch chosen={chosen} problem={found && !found.ok ? found.problem.message : null} onChoose={setChosen} />

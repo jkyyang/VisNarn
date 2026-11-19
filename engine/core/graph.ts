@@ -240,32 +240,77 @@ export class RailGraph {
     return hits.filter((h) => h.km <= nearest + SERVE_SLACK_KM);
   }
 
+  /** Whether a segment of the `mask` lines that is a line's own track (yard track is the rest) touches `node`. */
+  ownTrack(node: number, mask: number): boolean {
+    for (let j = this.adjOffset[node]; j < this.adjOffset[node + 1]; j++) {
+      const e = this.adj[j];
+      if (this.edgeMask[e] & mask && !this.edgeYard[e]) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The yard track around `from`, nearest first: each node reached over yard segments of the `mask` lines within
+   * `maxKm`, how far along, and the node it was reached from (-1 for `from`). A node on a line's own track ends the
+   * walk where it is: it is reached, and the walk goes on past it only when it is `from`.
+   */
+  *yardWalk(from: number, mask: number, maxKm: number): Generator<{ node: number; km: number; before: number }> {
+    const km = new Map([[from, 0]]);
+    const before = new Map([[from, -1]]);
+    const done = new Set<number>();
+    const open = [from];
+    while (open.length) {
+      open.sort((x, y) => km.get(y)! - km.get(x)!);
+      const node = open.pop()!;
+      if (done.has(node)) continue;
+      done.add(node);
+      yield { node, km: km.get(node)!, before: before.get(node)! };
+      if (node !== from && this.ownTrack(node, mask)) continue;
+      for (let j = this.adjOffset[node]; j < this.adjOffset[node + 1]; j++) {
+        const e = this.adj[j];
+        if (!(this.edgeMask[e] & mask) || !this.edgeYard[e]) continue;
+        const next = this.other(e, node), d = km.get(node)! + this.edgeKm[e];
+        if (d <= maxKm && d < (km.get(next) ?? Infinity)) {
+          km.set(next, d);
+          before.set(next, node);
+          open.push(next);
+        }
+      }
+    }
+  }
+
   /**
    * Out of a yard along its own track: the nearest node, over yard segments of the `mask` lines within `maxKm`, that
    * also touches a line's own track (a plant's lead where it meets the main line). A node on such track is its own exit.
    */
   yardExit(from: number, mask: number, maxKm: number): number | null {
-    const km = new Map([[from, 0]]);
-    const open = [from];
-    while (open.length) {
-      open.sort((x, y) => km.get(y)! - km.get(x)!);
-      const node = open.pop()!;
-      const yard: number[] = [];
-      for (let j = this.adjOffset[node]; j < this.adjOffset[node + 1]; j++) {
-        const e = this.adj[j];
-        if (!(this.edgeMask[e] & mask)) continue;
-        if (!this.edgeYard[e]) return node;
-        yard.push(e);
-      }
-      for (const e of yard) {
-        const next = this.other(e, node), d = km.get(node)! + this.edgeKm[e];
-        if (d <= maxKm && d < (km.get(next) ?? Infinity)) {
-          km.set(next, d);
-          open.push(next);
-        }
+    for (const { node } of this.yardWalk(from, mask, maxKm)) if (this.ownTrack(node, mask)) return node;
+    return null;
+  }
+
+  /**
+   * A shop's own track from the point (lon, lat) to `join`, as nodes from its foot to the join: straight from the shop
+   * to the foot, then back along the yard walk from the join. The foot is the node of that walk nearest the shop with
+   * the straight piece and the yard track together within `maxKm`, the one less far along on a tie; with none, the
+   * join itself. Another line's own track is never part of it. `km` is the straight piece plus the yard track.
+   */
+  lead(lon: number, lat: number, join: number, mask: number, maxKm: number): { nodes: number[]; km: number } {
+    const walked = new Map<number, number>();
+    let foot = { node: join, straight: haversineKm(lon, lat, this.lon[join], this.lat[join]), km: 0 };
+    let found = false;
+    for (const { node, km, before } of this.yardWalk(join, mask, maxKm)) {
+      walked.set(node, before);
+      if (node !== join && this.ownTrack(node, mask)) continue;
+      const straight = haversineKm(lon, lat, this.lon[node], this.lat[node]);
+      // The walk comes nearest first, so on a tie the foot already found is the one less far along.
+      if (straight + km <= maxKm && (!found || straight < foot.straight)) {
+        foot = { node, straight, km };
+        found = true;
       }
     }
-    return null;
+    const nodes = [foot.node];
+    while (nodes[nodes.length - 1] !== join) nodes.push(walked.get(nodes[nodes.length - 1])!);
+    return { nodes, km: foot.straight + foot.km };
   }
 
   /**

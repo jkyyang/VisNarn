@@ -48,15 +48,16 @@
   --shop: #c5221f;
   /* A turn-back: amber, with a shape (the ↩ disc) so colour is never the only cue. */
   --turn: #b06000;
-  --rr-BNSF: #d0661f;
-  --rr-UP: #b8920f;
-  --rr-CSXT: #2b6cb0;
-  --rr-NS: #6b55b0;
-  --rr-CN: #c0392b;
-  --rr-CPKC: #23866a;
-  --rr-regional: #5f6368;
-  --rr-short-line: #8d6e63;
-  --rr-passenger: #a8708f;
+  /* The railroads: told apart by people with any common colour vision, by day and by night (tests/map-look.test.ts). */
+  --rr-BNSF: #c65000;
+  --rr-UP: #bc9400;
+  --rr-CSXT: #2a86e0;
+  --rr-NS: #4e2a94;
+  --rr-CN: #a80f38;
+  --rr-CPKC: #12805c;
+  --rr-regional: #4a5560;
+  --rr-short-line: #849490;
+  --rr-passenger: #d13aa8;
   --shadow-float: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-lift: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 10px 30px rgba(0, 0, 0, 0.18);
   color-scheme: light;
@@ -83,15 +84,15 @@
   --pin-a: #a0a6ad;
   --shop: #f28b82;
   --turn: #e8890c;
-  --rr-BNSF: #f08a45;
-  --rr-UP: #e3bd3a;
-  --rr-CSXT: #6ea8ec;
-  --rr-NS: #a594e8;
-  --rr-CN: #ee7a6d;
-  --rr-CPKC: #4cc49e;
-  --rr-regional: #bdc1c6;
-  --rr-short-line: #9c7a5b;
-  --rr-passenger: #d9a7c4;
+  --rr-BNSF: #ff9a2e;
+  --rr-UP: #f5dc45;
+  --rr-CSXT: #a3d8ff;
+  --rr-NS: #a585ff;
+  --rr-CN: #ff6577;
+  --rr-CPKC: #45dbbb;
+  --rr-regional: #e6e8ee;
+  --rr-short-line: #8f99a6;
+  --rr-passenger: #ff8ad0;
   --shadow-float: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 4px 16px rgba(0, 0, 0, 0.4);
   --shadow-lift: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 10px 30px rgba(0, 0, 0, 0.55);
   color-scheme: dark;
@@ -996,6 +997,38 @@ input[aria-invalid="true"] {
   font-size: var(--text-sm);
   color: var(--muted);
 }
+/* A pressed ring: the next tap on the map sets that link. Filled, as the ring on the map. */
+.ring-btn[aria-pressed="true"],
+.add-link[aria-pressed="true"] {
+  background: var(--route-soft);
+}
+.ring-btn[aria-pressed="true"] circle,
+.map-handle[aria-pressed="true"] circle {
+  fill: var(--route);
+}
+.ring-btn[aria-pressed="true"] text,
+.map-handle[aria-pressed="true"] text {
+  fill: var(--on-fill);
+}
+/* ＋ for the next link: a faint row, its ring in line with the rings above. */
+.add-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--row);
+  padding: 0 0 0 calc((var(--icon-btn) - 18px) / 2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.add-link:not([aria-pressed="true"]) svg {
+  opacity: 0.6;
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -1057,20 +1090,82 @@ input[aria-invalid="true"] {
   text-align: center;
   color: var(--muted);
 }
-.map-overlay {
-  position: absolute;
-  inset: 0;
+/*
+ * Handles (web/map/MapHandles.tsx): the edited shop's pin, its links' rings and the ＋ for the next link, which a person
+ * drags or taps. A target the size of an icon button for a mouse, of a map button for a finger; the face inside it.
+ */
+.map-handle-mark {
+  --handle: var(--icon-btn);
   z-index: 3;
+}
+@media (pointer: coarse) {
+  .map-handle-mark {
+    --handle: var(--ctl);
+  }
+}
+.map-handle-mark:has(.is-dragging) {
+  z-index: 4;
+}
+.map-handle {
+  display: grid;
+  place-items: center;
+  width: var(--handle);
+  height: var(--handle);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.map-handle-face {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  transition:
+    box-shadow var(--fade-ms) var(--ease-out),
+    transform var(--press-ms) var(--ease-out);
+}
+.map-handle-face svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-handle--shop .map-handle-face {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+/* The ＋ sits on the pin's top-right edge, just clear of the pin's own target; a drop counts at its middle. */
+.map-handle--add {
+  transform: translate(calc(var(--handle) * 0.7), calc(var(--handle) * -0.7));
+}
+.map-handle--add .map-handle-face {
+  width: 16px;
+  height: 16px;
+}
+.map-handle.is-still .map-handle-face {
+  box-shadow: 0 0 0 6px var(--route-soft);
+}
+@media (hover: hover) {
+  .map-handle:hover .map-handle-face {
+    box-shadow: 0 0 0 6px var(--route-soft);
+  }
+}
+.map-handle.is-dragging .map-handle-face {
+  box-shadow: var(--shadow-lift);
+  transform: scale(1.15);
+}
+.map-handle.is-faint {
+  opacity: 0.6;
+}
+/* Where a dragged link would join: a mark only. */
+.map-handle.is-still {
   pointer-events: none;
 }
-.map-overlay > * {
-  pointer-events: auto;
-}
-.map-overlay--inline {
-  position: static;
-}
-.map[data-picking="true"] .maplibregl-canvas {
-  cursor: crosshair;
+.map:has(.map-handle.is-dragging) .maplibregl-canvas-container {
+  cursor: grabbing;
 }
 /* Above the route pills and turn-back marks (z-index 3 to 5): an open layers card covers them. */
 .map-controls {
@@ -1176,18 +1271,6 @@ input[aria-invalid="true"] {
 }
 .map-card {
   position: absolute;
-}
-/* Bottom right, above the map attribution. */
-.pick-prompt {
-  right: var(--inset);
-  bottom: 36px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  max-width: var(--free-w);
-  padding: 8px 8px 8px 14px;
-  border-radius: var(--radius);
-  text-wrap: balance;
 }
 /* The search box: top left of the free map, clear of the panel, the map buttons and the legend. */
 .map-search {
@@ -1521,13 +1604,6 @@ input[aria-invalid="true"] {
   }
   .map-search-box {
     height: var(--ctl);
-  }
-  /* Under the search box. */
-  .pick-prompt {
-    top: calc(2 * var(--inset) + var(--ctl));
-    bottom: auto;
-    left: var(--inset);
-    right: calc(var(--ctl) + 2 * var(--inset));
   }
   /* The map is short here: a card open over it takes the legend's room. */
   .map:has(.layers-card, .found-card) .legend {

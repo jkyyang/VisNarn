@@ -4,9 +4,9 @@
  * The EXAMPLE shops are left as they were added (./app.ts), for the other screens' tests.
  */
 import type { Page } from "@playwright/test";
-import type { ShopView } from "../../shared/places.ts";
+import type { FraId, ShopDraft, ShopLink, ShopView } from "../../shared/places.ts";
 import { SHOP_ZOOM } from "../../web/map/config.ts";
-import { expectMapCanvases, freeMapCentre, keepScreenshot, planRoute, test, expect } from "./app.ts";
+import { expectMapCanvas, freeMapCentre, keepScreenshot, mapRegion, PHONE, planRoute, test, expect } from "./app.ts";
 import { EXAMPLE_SHOPS } from "../fixtures.ts";
 
 const EXAMPLES = EXAMPLE_SHOPS.length;
@@ -22,7 +22,7 @@ test.describe("Shops", () => {
     const nlr = table.getByRole("row").filter({ hasText: "EX-NLR-01" });
     await expect(nlr).toContainText("North Little Rock, AR");
     await expect(nlr).toContainText("BNSF, UP");
-    await expectMapCanvases(page);
+    await expectMapCanvas(page);
     await keepScreenshot(page, "shops");
 
     await page.getByRole("button", { name: "Add shop" }).click();
@@ -37,7 +37,9 @@ test.describe("Shops", () => {
     await expect(save).toBeDisabled();
     await location.fill("-97.34, 31.10");
     await expect(form).toContainText("On the network");
-    await expect(form.getByRole("group", { name: "Track links" })).toContainText("One link: cars leave the way they came in.");
+    // Linked at once to where its track most likely joins the network, and said in a row: no sentence about it.
+    await expect(form.getByRole("group", { name: "Track links" })).toContainText(/Temple · FRA \d+/);
+    await expect(form.getByRole("group", { name: "Track links" })).not.toContainText(/cars|Suggested/);
     await expect(save).toBeEnabled();
     await save.click();
     await expect(page).toHaveURL(/\/shops$/);
@@ -103,44 +105,168 @@ test.describe("Shops", () => {
     await expect(table.locator(".shop-name")).toHaveCount(before);
   });
 
-  test("a shop wired to its own track: Sarnia's suggestion follows the plant's lead to the main line, a route arrives over it, a second link makes it through", async ({ page }) => {
+  test("Sarnia's suggestion follows the plant's lead to the main line, and a route arrives over it", async ({ page }) => {
     // Procor's Sarnia plant: its yard fans out north of the CN main line and joins it at the east end (FRA 628925).
     const at = { lon: -82.3376, lat: 42.9596 };
-    const made = await page.request.post("/api/shops", { data: { name: "Sarnia test plant", code: "TEST-SAR", location: { kind: "coord", ...at }, links: [] } });
-    const shop = (await made.json()) as ShopView;
+    const shop = await makeShop(page, { name: "Sarnia test plant", code: "TEST-SAR", location: { kind: "coord", ...at }, links: [] });
     await page.goto(`/shops/${shop.id}`);
     const links = page.getByRole("group", { name: "Track links" });
+    // 0.34 km from the pin to the plant's yard, then along it: 1.3 km of the plant's own track.
     await expect(links).toContainText("Sarnia · FRA 628925");
-    await expect(links).toContainText("0.5 km");
+    await expect(links).toContainText("1.3 km");
     await expect(links).toContainText("Suggested");
-    await expect(links).toContainText("No links: joins the nearest mainline.");
+    await expect(page.locator('.map-handle[aria-label="Suggested link 1"]')).toBeVisible();
     await links.getByRole("button", { name: "Use" }).click();
-    await expect(links).toContainText("One link: cars leave the way they came in.");
+    await expect(links).not.toContainText("Suggested");
     await page.getByRole("region", { name: "Edit shop" }).getByRole("button", { name: "Save shop" }).click();
     await expect(page).toHaveURL(/\/shops$/);
 
     await page.getByRole("navigation", { name: "Mode" }).getByRole("link", { name: "Route" }).click();
     const planned = await planRoute(page, "-79.7195, 43.4169", "TEST-SAR");
     expect(planned.outcome).toBe("routed");
-    const end = planned.outcome === "routed" ? planned.routes[0].legs.at(-1)!.path.slice(-2) : [];
-    expect(end).toEqual([[-82.33578, 42.95513], [at.lon, at.lat]]);
+    if (planned.outcome !== "routed") return;
+    // The route's last km are the link's 1.29 km of own track.
+    expect(planned.routes[0].km).toBeCloseTo(237.79, 1);
+    expect(planned.routes[0].legs.at(-1)!.path.slice(-2)).toEqual([[-82.33578, 42.95513], [at.lon, at.lat]]);
+    expect((await page.request.delete(`/api/shops/${shop.id}`)).ok()).toBe(true);
+  });
 
-    // The west link: track also runs off the plant's west side. A click beside it there takes the main line's node, FRA 628886.
+  test("Oakville, linked as the user had it: links are dragged on the map, refined to the track, drawn along it, undone, saved, and routed to", async ({ page }) => {
+    const shop = await makeShop(page, { name: "Oakville test plant", code: "TEST-OAK", location: { kind: "coord", ...OAKVILLE }, links: [633676 as FraId] });
     await page.goto(`/shops/${shop.id}`);
-    await links.getByRole("button", { name: "Add link" }).click();
-    const west = await mapPoint(page, at, { lon: -82.3445, lat: 42.9562 });
-    await page.mouse.click(west.x, west.y);
-    await expect(links).toContainText("Two links: cars can pass through.");
-    await expect(links).toContainText("Sarnia · FRA 628886");
-    await expect(links).toContainText("0.8 km");
-    await keepScreenshot(page, "shop-links");
-    await page.getByRole("region", { name: "Edit shop" }).getByRole("button", { name: "Save shop" }).click();
+    const form = page.getByRole("region", { name: "Edit shop" });
+    const links = form.getByRole("group", { name: "Track links" });
+    await expect(links).toContainText("Hamilton · FRA 633676");
+    // No ⌖, no Add link button, no sentence: a row per link, a ring to press and × to remove.
+    await expect(form.locator(".pick-btn")).toHaveCount(0);
+    await expect(form).not.toContainText(/Pick on map|cars/);
+    await expect(handle(page, "Move link 1")).toBeVisible();
+    await keepScreenshot(page, "shop-links-oakville");
+
+    // Dropped roughly in the plant's fan, link 1 is refined to where the plant's lead meets the main line, and drawn along the lead.
+    const ghost = page.waitForRequest((r) => isLinks(r.url()) && "lon" in (r.postDataJSON() as LinksBody).ends[0]);
+    const drawn = waitForLinks(page, [{ fraId: 633683 }]);
+    await drag(page, "Move link 1", PLANT_FAN, { beforeRelease: () => ghost });
+    await expect(links).toContainText("Hamilton · FRA 633683");
+    expect((await drawn)[0]!.path.length).toBeGreaterThan(2);
+
+    // The ＋ on the pin's edge, dropped on the main line west of the plant 100 m short of a node, adds link 2 at that node.
+    // Undo takes it away, Redo brings it back.
+    await drag(page, "Add link", { lon: -79.7256, lat: 43.41345 });
+    await expect(links).toContainText("Hamilton · FRA 633604");
+    await page.getByRole("button", { name: "Undo link change" }).click();
+    await expect(links).not.toContainText("FRA 633604");
+    await page.getByRole("button", { name: "Redo link change" }).click();
+    await expect(links).toContainText("Hamilton · FRA 633604");
+
+    // Dropped in the plant, where link 1 already joins, link 2 springs back and the panel says why.
+    const before = await handle(page, "Move link 2").boundingBox();
+    await drag(page, "Move link 2", PLANT_FAN);
+    await expect(links).toContainText("Link 1 joins there");
+    await expect(links).toContainText("Hamilton · FRA 633604");
+    await expect.poll(async () => (await handle(page, "Move link 2").boundingBox())?.x).toBeCloseTo(before!.x, 0);
+
+    // Esc in the middle of a drag changes nothing.
+    await drag(page, "Move link 2", PLANT_FAN, { beforeRelease: () => page.keyboard.press("Escape") });
+    await expect(links).toContainText("Hamilton · FRA 633683");
+    await expect(links).toContainText("Hamilton · FRA 633604");
+
+    // With Real tracks on, link 1's piece on track follows the surveyed lead.
+    const onTrack = page.waitForResponse((r) => r.url().endsWith("/api/track"));
+    await page.getByRole("button", { name: /^Map layers/ }).click();
+    await page.getByText("Real tracks").click();
+    await page.getByRole("button", { name: /^Map layers/ }).click();
+    const sent = (await (await onTrack).request().postDataJSON()) as { paths: [number, number][][] };
+    const followed = (await (await onTrack).json()) as [number, number][][];
+    expect(sent.paths).toHaveLength(1);
+    expect(followed[0].length).toBeGreaterThan(sent.paths[0].length);
+    expect(followed[0].at(-1)).toEqual(sent.paths[0].at(-1));
+    await keepScreenshot(page, "shop-links-oakville-tracks");
+
+    // The shop's own pin is dragged too: the location follows it and the links are drawn again from there.
+    const location = form.getByRole("combobox", { name: "Location" });
+    const redrawn = page.waitForResponse((r) => isLinks(r.url()) && (r.request().postDataJSON() as LinksBody).lon !== OAKVILLE.lon);
+    await drag(page, "Oakville test plant", { lon: -79.7198, lat: 43.4177 });
+    await expect(location).not.toHaveValue(`${OAKVILLE.lon}, ${OAKVILLE.lat}`);
+    await expect(location).toHaveValue(/^-79\.719\d*, 43\.41\d*$/);
+    await redrawn;
+    await expect(links).toContainText("Hamilton · FRA 633683");
+
+    await form.getByRole("button", { name: "Save shop" }).click();
     await expect(page).toHaveURL(/\/shops$/);
     const saved = ((await (await page.request.get("/api/shops")).json()) as ShopView[]).find((s) => s.id === shop.id)!;
-    expect(saved.links).toEqual([628925, 628886]);
+    expect(saved.links).toEqual([633683, 633604]);
+    await page.goto(`/shops/${shop.id}`);
+    await expect(page.getByRole("group", { name: "Track links" })).toContainText("FRA 633683");
+    await expect(page.getByRole("group", { name: "Track links" })).toContainText("FRA 633604");
+
+    await page.getByRole("navigation", { name: "Mode" }).getByRole("link", { name: "Route" }).click();
+    const planned = await planRoute(page, "London, ON", "TEST-OAK");
+    expect(planned.outcome).toBe("routed");
+    const place = saved.place.ok ? saved.place.place : null;
+    if (planned.outcome === "routed") expect(planned.routes[0].legs.at(-1)!.path.at(-1)).toEqual([place?.lon, place?.lat]);
     expect((await page.request.delete(`/api/shops/${shop.id}`)).ok()).toBe(true);
   });
 });
+
+test.describe("Shops on a phone", () => {
+  test.use(PHONE);
+
+  test("a tap on a link's ring, then a tap in the plant: the link is refined to where the plant's lead meets the main line", async ({ page }) => {
+    const shop = await makeShop(page, { name: "Oakville phone plant", code: "TEST-OAK-P", location: { kind: "coord", ...OAKVILLE }, links: [633676 as FraId] });
+    await page.goto(`/shops/${shop.id}`);
+    const links = page.getByRole("group", { name: "Track links" });
+    await expect(links).toContainText("Hamilton · FRA 633676");
+    const ring = links.getByRole("button", { name: "Move link 1", exact: true });
+    await ring.tap();
+    await expect(ring).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("section.map")).toHaveAttribute("data-picking", "true");
+    const fan = await mapPoint(page, OAKVILLE, PLANT_FAN);
+    await page.touchscreen.tap(fan.x, fan.y);
+    await expect(links).toContainText("Hamilton · FRA 633683");
+    await expect(ring).toHaveAttribute("aria-pressed", "false");
+    await keepScreenshot(page, "shop-links-phone");
+    expect((await page.request.delete(`/api/shops/${shop.id}`)).ok()).toBe(true);
+  });
+});
+
+/** Procor's Oakville plant as the user had it: the pin in the plant, and a point in its fan of tracks. */
+const OAKVILLE = { lon: -79.72024, lat: 43.41766 };
+const PLANT_FAN = { lon: -79.7193, lat: 43.4186 };
+
+type LinksBody = { lon: number; lat: number; ends: ({ fraId: number } | { lon: number; lat: number })[] };
+const isLinks = (url: string) => url.endsWith("/api/places/links");
+
+async function makeShop(page: Page, draft: ShopDraft): Promise<ShopView> {
+  const made = await page.request.post("/api/shops", { data: draft });
+  expect(made.ok()).toBe(true);
+  return (await made.json()) as ShopView;
+}
+
+/** The map's handle with this name: the shop's pin, a link's ring, the ＋. */
+const handle = (page: Page, name: string) => page.locator(`.map-handle[aria-label="${name}"]`);
+
+/** The links answer for exactly these ends. */
+async function waitForLinks(page: Page, ends: LinksBody["ends"]): Promise<(ShopLink | null)[]> {
+  const response = await page.waitForResponse((r) => isLinks(r.url()) && JSON.stringify((r.request().postDataJSON() as LinksBody).ends) === JSON.stringify(ends));
+  return (await response.json()) as (ShopLink | null)[];
+}
+
+/** Drags a handle by mouse to a point of the map, in steps, while the camera holds the Oakville shop in the middle. */
+async function drag(page: Page, name: string, to: { lon: number; lat: number }, options: { beforeRelease?: () => Promise<unknown> } = {}): Promise<void> {
+  // A screenshot just before makes the window taller for a moment: the handles are back in place once the map has the window's size again.
+  const canvas = mapRegion(page).locator("canvas.maplibregl-canvas");
+  await expect.poll(async () => (await canvas.boundingBox())?.height).toBe((await mapRegion(page).boundingBox())?.height);
+  const box = await handle(page, name).boundingBox();
+  if (!box) throw new Error(`No handle ${name} on the map.`);
+  const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const end = await mapPoint(page, OAKVILLE, to);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 12 });
+  await options.beforeRelease?.();
+  await page.mouse.up();
+}
 
 /** Where a point is on screen while the shop at `centre` is being edited: the camera holds it in the free map's middle at SHOP_ZOOM. */
 async function mapPoint(page: Page, centre: { lon: number; lat: number }, point: { lon: number; lat: number }): Promise<{ x: number; y: number }> {

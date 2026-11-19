@@ -3,12 +3,12 @@
  * hands the place to the planner. Only our own server is asked.
  */
 import type { Page } from "@playwright/test";
-import { expect, expectMapCanvases, expectNoSideScroll, freeMapCentre, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
+import { expect, expectMapCanvas, expectNoSideScroll, freeMapCentre, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
 
 /** Types into the search box and picks the city of that name (Your shops may list a shop with it too). */
 async function findCity(page: Page, name: string) {
   await page.goto("/route");
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   const box = page.getByRole("combobox", { name: "Search the map" });
   await box.fill(name);
   const city = page.getByRole("option", { name: new RegExp(`^${name}, \\w\\w\\s*City`) });

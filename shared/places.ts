@@ -6,7 +6,7 @@
  *   coordinates, or a name the user owns (a shop). Never a position in graph.bin.
  * - A name says which list it belongs to.
  */
-import { round5 } from "./geo.ts";
+import { round5, type LngLat } from "./geo.ts";
 import type { Railroad } from "./railroads.ts";
 
 /** The public NARN node id. Branded so that a graph index (also a number) cannot be passed as one. */
@@ -91,12 +91,17 @@ export interface NetworkNode {
   near: string;
   railroads: Railroad[];
   yard: boolean;
-  /** Distance from the clicked point, or from the shop it is a link of. */
+  /** Distance from the clicked point, or along its own track from the shop it is a link of. */
   km: number;
 }
 
-/** Which nodes a map click may snap to: any with track, or only those on a railroad's mainline, where a shop's link joins. */
-export type NodesOn = "track" | "mainline";
+/** Where a shop's link is to join: that node, or a rough spot on the map, refined to the way in nearest it. */
+export type LinkEnd = { fraId: FraId } | { lon: number; lat: number };
+
+/** A shop's link as drawn: the node it joins, and its own track there, shop first (straight to its yard, then node by node). `km` is that track's length. */
+export interface ShopLink extends NetworkNode {
+  path: LngLat[];
+}
 
 /** Where a saved thing sits on the network. Only stable keys. */
 export type NodeLocation = { fraId: FraId; railroad: Railroad | null } | { lon: number; lat: number };
@@ -116,7 +121,7 @@ export function locationOf(place: ResolvedPlace): NodeLocation {
 /** A shop has at most this many links: one is a stub the car backs out of, two make the shop a through track. */
 export const SHOP_LINKS_MAX = 2;
 
-/** A shop's own track reaches the network within this distance: the longest link, how far the suggestion looks, and how far from a click a link's node may be. */
+/** A shop's own track reaches the network within this distance: the longest link, how far the suggestion looks, and how far from a drop or a tap on the map a link's node may be. */
 export const SHOP_LINK_MAX_KM = 5;
 
 /** A destination the user defined. Nothing about any shop is built in. */
@@ -128,7 +133,7 @@ export interface Shop {
   location: NodeLocation;
   /**
    * The nodes the shop's own track joins the network at, wired by a person like a resistor's leads, in order.
-   * Each link runs straight from the location to its node. Empty: the location snaps as any place does.
+   * Each link runs from the location straight to the shop's yard, then along it to its node (ShopLink). Empty: the location snaps as any place does.
    */
   links: FraId[];
 }

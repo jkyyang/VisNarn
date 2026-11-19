@@ -2,7 +2,7 @@
  * Phone: the route planner in a 390 × 844 window with touch, as on an iPhone 14. The map sits on top,
  * the same rows follow in one column, and nothing is cut off at the sides.
  */
-import { expect, expectMapCanvases, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, planRoute, test } from "./app.ts";
+import { expect, expectMapCanvas, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, planRoute, test } from "./app.ts";
 
 test.use(PHONE);
 
@@ -10,7 +10,7 @@ test("Phone: map on top, then the places, the routes and the sections in one col
   await page.goto("/route");
 
   const map = mapRegion(page);
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   const mapBox = await map.boundingBox();
   expect(mapBox?.y ?? -1).toBeLessThan(10);
   expect(mapBox?.width ?? 0).toBeGreaterThan(380);
@@ -44,7 +44,7 @@ test("Phone: map on top, then the places, the routes and the sections in one col
 test("Phone: Shops fits the width; a shop's form comes into view when Edit is tapped", async ({ page }) => {
   for (const path of ["/route", "/shops"]) {
     await page.goto(path);
-    await expectMapCanvases(page);
+    await expectMapCanvas(page);
     await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
     await expectNoSideScroll(page, path);
   }

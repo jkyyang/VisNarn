@@ -89,16 +89,22 @@ describe("decodeBody", () => {
     expect(refusal(() => decodeBody["POST /api/shops"](shop))).toMatch(/^invalid links: /);
   });
 
-  it("reads the way-in query: a longitude and a latitude", () => {
-    expect(decodeQuery["GET /api/places/way-in"](new URLSearchParams("lon=-82.3376&lat=42.9596"))).toEqual({ lon: -82.3376, lat: 42.9596 });
-    expect(refusal(() => decodeQuery["GET /api/places/way-in"](new URLSearchParams("lon=-82.3376")))).toMatch(/^invalid lat: /);
+  it("reads a shop's link ends: each a node or a spot, at most two", () => {
+    const links = decodeBody["POST /api/places/links"];
+    const node = { fraId: 628925 }, spot = { lon: -82.3445, lat: 42.9562 };
+    expect(links({ lon: -82.3376, lat: 42.9596, ends: [node, { ...spot, extra: 1 }] })).toEqual({ lon: -82.3376, lat: 42.9596, ends: [node, spot] });
+    expect(links({ lon: -82.3376, lat: 42.9596, ends: [] }).ends).toEqual([]);
+    expect(refusal(() => links({ lon: -82.3376, lat: 42.9596, ends: [node, spot, node] }))).toMatch(/^invalid ends: ends has more than 2 items/);
+    expect(refusal(() => links({ lon: -82.3376, lat: 42.9596, ends: [{ fraId: -1 }] }))).toMatch(/^invalid ends\[0\]\.fraId: /);
+    expect(refusal(() => links({ lon: -82.3376, lat: 42.9596, ends: [{ lon: -82.3 }] }))).toMatch(/^invalid ends\[0\]\.lat: /);
+    expect(refusal(() => links({ lon: -82.3376, lat: 42.9596, ends: ["FRA 628925"] }))).toMatch(/^invalid ends\[0\]: /);
+    expect(refusal(() => links({ lat: 42.9596, ends: [node] }))).toMatch(/^invalid lon: /);
   });
 });
 
 describe("decodeQuery and path params", () => {
   it("reads numbers and roles from the query string, naming a missing or bad one", () => {
-    expect(decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2&on=mainline"))).toEqual({ lon: -97.34, lat: 31.1, withinKm: 2, on: "mainline" });
-    expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2")))).toMatch(/^invalid on: /);
+    expect(decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&lat=31.1&withinKm=2"))).toEqual({ lon: -97.34, lat: 31.1, withinKm: 2 });
     expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=-97.34&withinKm=2")))).toMatch(/^invalid lat: /);
     expect(refusal(() => decodeQuery["GET /api/places/nearest"](new URLSearchParams("lon=abc&lat=1&withinKm=2")))).toMatch(/^invalid lon: /);
     expect(decodeQuery["GET /api/places/suggest"](new URLSearchParams("q=temp&role=shop"))).toEqual({ q: "temp", role: "shop" });

@@ -6,7 +6,7 @@ const EVERY_ROUTE: Record<Route, true> = {
   "GET /api/places/suggest": true,
   "POST /api/places/resolve": true,
   "GET /api/places/nearest": true,
-  "GET /api/places/way-in": true,
+  "POST /api/places/links": true,
   "GET /api/shops": true,
   "POST /api/shops": true,
   "PUT /api/shops/:shopId": true,
@@ -31,7 +31,7 @@ describe("urlFor / routeMatcher", () => {
       method: "PUT",
       url: "/api/shops/EX%2FNLR%2001",
     });
-    expect(urlFor("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.1, withinKm: 2.5, on: "track" } }).url).toBe("/api/places/nearest?lon=-97.34&lat=31.1&withinKm=2.5&on=track");
+    expect(urlFor("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.1, withinKm: 2.5 } }).url).toBe("/api/places/nearest?lon=-97.34&lat=31.1&withinKm=2.5");
     expect(urlFor("GET /api/places/suggest", { query: { q: "Temple, TX & co", role: "shop" } }).url).toBe("/api/places/suggest?q=Temple%2C+TX+%26+co&role=shop");
     expect(urlFor("DELETE /api/saved-routes/:routeId", { params: { routeId: "r1" } }).url).toBe("/api/saved-routes/r1");
   });

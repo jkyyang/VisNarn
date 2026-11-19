@@ -11,7 +11,7 @@
 import type { AppErrorKind } from "./app.ts";
 import type { LngLat } from "./geo.ts";
 import type {
-  ImportReport, ImportRequest, NetworkNode, NodesOn, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopView,
+  ImportReport, ImportRequest, LinkEnd, NetworkNode, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, ShopDraft, ShopLink, ShopView,
 } from "./places.ts";
 import type { Plan, PlannedRoute, SavedRoute, SavedRouteDraft } from "./plans.ts";
 
@@ -22,10 +22,13 @@ export interface Api {
   "GET /api/places/suggest": Endpoint<PlaceSuggestion[], undefined, { q: string; role: PlaceRole }>;
   /** What one place means on the network: "Found on the network · served by BNSF and UP". */
   "POST /api/places/resolve": Endpoint<PlaceResolution, { ref: PlaceRef; role: PlaceRole }>;
-  /** The node a map click snaps to (`on` "mainline": only where a railroad's mainline runs), or null when none is within `withinKm`. */
-  "GET /api/places/nearest": Endpoint<NetworkNode | null, undefined, { lon: number; lat: number; withinKm: number; on: NodesOn }>;
-  /** Where a shop at this point most likely joins the network (its own track followed to the main line), or null. */
-  "GET /api/places/way-in": Endpoint<NetworkNode | null, undefined, { lon: number; lat: number }>;
+  /** The node a map click snaps to, or null when none is within `withinKm`. */
+  "GET /api/places/nearest": Endpoint<NetworkNode | null, undefined, { lon: number; lat: number; withinKm: number }>;
+  /**
+   * A shop at (lon, lat) linked at each end, in the order sent: a node, or a rough spot refined to the way in there.
+   * Null for an end with no such node, no track within SHOP_LINK_MAX_KM of its spot, or a link longer than that.
+   */
+  "POST /api/places/links": Endpoint<(ShopLink | null)[], { lon: number; lat: number; ends: LinkEnd[] }>;
 
   "GET /api/shops": Endpoint<ShopView[]>;
   "POST /api/shops": Endpoint<ShopView, ShopDraft>;

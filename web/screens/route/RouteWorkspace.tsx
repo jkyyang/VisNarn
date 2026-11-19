@@ -99,6 +99,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
           { label: "Destination", run: (found) => dispatch(placeAtEnd(plan, "destination", found.ref)) },
         ]}
         history={{
+          what: "route change",
           undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,
           redo: session.plan.future.length ? () => dispatch({ type: "redo" }) : null,
         }}

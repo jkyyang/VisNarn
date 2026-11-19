@@ -35,7 +35,7 @@ export function TurnBadge({ count = 1 }: { count?: number }): ReactElement {
 }
 
 /** A place's mark, the same in the rows, the sections and on the map: a ring, a numbered stop, a drop. */
-export function PlacePin({ kind, n }: { kind: PlaceKind; n: number }): ReactElement {
+export function PlacePin({ kind, n }: { kind: PlaceKind; n: number | string }): ReactElement {
   switch (kind) {
     case "start":
       return (

@@ -36,12 +36,8 @@ export const NO_TRACK_NEAR = "No track near there";
 /** "Sarnia · FRA 628925": the node a shop's link joins. */
 export const linkText = (node: NetworkNode) => `${shortPlace(node.near)} · FRA ${node.fraId}`;
 
-/** Under a shop's links: how a car uses the shop, wired as it is. */
-export function linksReadout(links: number, atNode: boolean): string {
-  if (links === 1) return "One link: cars leave the way they came in.";
-  if (links > 1) return "Two links: cars can pass through.";
-  return atNode ? "No links: on the network at its node." : "No links: joins the nearest mainline.";
-}
+/** A drop or a tap for one link of a shop that lands where its other link already joins. */
+export const linkJoinsThere = (link: number) => `Link ${link} joins there`;
 
 /** A step of a route: out of a shop's own track the way the car went in. */
 export const BACK_OUT = "Backs out of the spur";

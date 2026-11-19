@@ -6,8 +6,8 @@
  */
 import { haversineKm, pathKm, round5, roundLngLat, type LngLat } from "../../shared/geo.ts";
 import {
-  SHOP_LINK_MAX_KM, type ImportReport, type NetworkNode, type PlaceRef, type PlaceResolution, type PlaceRole, type PlaceSuggestion, type ResolvedPlace, type RowIssue,
-  type ShopDraft, type ShopId, type ShopView,
+  SHOP_LINK_MAX_KM, type ImportReport, type LinkEnd, type NetworkNode, type PlaceRef, type PlaceResolution, type PlaceRole, type PlaceSuggestion, type ResolvedPlace,
+  type RowIssue, type ShopDraft, type ShopId, type ShopLink, type ShopView,
 } from "../../shared/places.ts";
 import { placeKind, type Plan, type PlannedRoute, type PlanPlaces, type SavedRoute, type SavedRouteDraft, type SavedRouteId } from "../../shared/plans.ts";
 import type { Railroad } from "../../shared/railroads.ts";
@@ -51,6 +51,16 @@ function nearestNode(lon: number, lat: number, withinKm: number): NetworkNode | 
     if (km <= withinKm && (!best || km < best.km)) best = { ...n, km: Math.round(km * 10) / 10 };
   }
   return best;
+}
+
+/** A shop's links as the server finds them, made simple: each straight from the shop to a node, a spot taking the nearest node within a link's reach. */
+function links(body: { lon: number; lat: number; ends: LinkEnd[] }): (ShopLink | null)[] {
+  const shop = roundLngLat(body.lon, body.lat);
+  return body.ends.map((end) => {
+    const node = "fraId" in end ? NODES.find((n) => n.fraId === end.fraId) : nearestNode(end.lon, end.lat, SHOP_LINK_MAX_KM);
+    const km = node ? haversineKm(shop[0], shop[1], node.lon, node.lat) : Infinity;
+    return node && km <= SHOP_LINK_MAX_KM ? { ...node, km, path: [shop, [node.lon, node.lat]] } : null;
+  });
 }
 
 const servedAt = (lon: number, lat: number): Railroad[] => nearestCity(lon, lat, 80)?.railroads ?? ["BNSF"];
@@ -277,7 +287,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
   if (route === "GET /api/places/suggest") return suggest(state, q.get("q") ?? "", (q.get("role") ?? "position") as PlaceRole);
   if (route === "POST /api/places/resolve") return resolve(state, anyBody.ref as PlaceRef, anyBody.role as PlaceRole);
   if (route === "GET /api/places/nearest") return nearestNode(Number(q.get("lon")), Number(q.get("lat")), Number(q.get("withinKm")));
-  if (route === "GET /api/places/way-in") return nearestNode(Number(q.get("lon")), Number(q.get("lat")), SHOP_LINK_MAX_KM);
+  if (route === "POST /api/places/links") return links(anyBody as { lon: number; lat: number; ends: LinkEnd[] });
 
   if (route === "GET /api/shops") return state.shops;
   if (route === "POST /api/shops/import") {

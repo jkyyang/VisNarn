@@ -1,36 +1,49 @@
 /** The Shops screen: Your shops, the form for one with its track links, and the shop list import. */
 import { useEffect, useState, type ReactElement } from "react";
-import { haversineKm, round5, type LngLat } from "../../../shared/geo.ts";
-import { resolvedOf, SHOP_LINK_MAX_KM, type NetworkNode, type ResolvedPlace } from "../../../shared/places.ts";
+import { roundLngLat, type LngLat } from "../../../shared/geo.ts";
+import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopLink } from "../../../shared/places.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
-import { fresh, importShops, removeShop, saveShop, snapToNetwork, useShops, useWayIn } from "../../data/hooks.ts";
+import { fresh, importShops, removeShop, saveShop, shopLinkAt, useShopLinks, useShops } from "../../data/hooks.ts";
 import { SHOP_ZOOM } from "../../map/config.ts";
+import type { MapHandle } from "../../map/MapHandles.tsx";
 import { MapContent } from "../../map/MapStage.tsx";
-import { shopsScene } from "../../map/scene.ts";
+import { shopsScene, type SceneLink } from "../../map/scene.ts";
 import { useDistanceUnit } from "../../units.ts";
-import { PickPrompt, ShopForm, ShopImportCard, ShopLinks, ShopTable } from "./ShopsPage.tsx";
+import { linkJoinsThere, NO_TRACK_NEAR } from "../../words.ts";
+import type { History } from "../route/session.ts";
+import { ShopForm, ShopImportCard, ShopLinks, ShopTable } from "./ShopsPage.tsx";
 
-/** What the map is being clicked for: the shop's own spot, or link `n` (0-based). */
-type PickTarget = "shop" | number;
+/** A link being dragged: which (0-based, the next free one for a new link), and where its ring is. */
+type Drag = { slot: number; at: LngLat };
+
+/** Links nobody has changed here: the shop's saved ones. */
+const UNCHANGED: History<FraId[] | null> = { past: [], present: null, future: [] };
 
 export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops" }> }): ReactElement {
   const shops = useShops();
   const [unit] = useDistanceUnit();
-  // View state of this screen, for the form it was made in: what the map is clicked for, the spot picked,
-  // the form's place, and the links once a person has set them here.
-  const [picking, setPicking] = useState<PickTarget | null>(null);
-  const [missed, setMissed] = useState(false);
-  const [picked, setPicked] = useState<LngLat | null>(null);
+  // View state of this screen, for the form it was made in: the links with their undo history (null: the saved ones),
+  // the link whose ring is pressed (the next map tap sets it), a link being dragged, where the shop's pin is while it
+  // is dragged and until its place resolves, why the last drop or tap set no link, the spot the pin was put on
+  // (and whether by a drag), the form's place, and where the camera went.
+  const [links, setLinks] = useState(UNCHANGED);
+  const [pressed, setPressed] = useState<number | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [pinAt, setPinAt] = useState<LngLat | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
+  const [picked, setPicked] = useState<{ at: LngLat; dragged: boolean } | null>(null);
   const [placed, setPlaced] = useState<ResolvedPlace | null>(null);
-  const [wired, setWired] = useState<NetworkNode[] | null>(null);
+  const [camera, setCamera] = useState<LngLat | null>(null);
 
   useEffect(() => {
-    setPicking(null);
-    setMissed(false);
+    setLinks(UNCHANGED);
+    setPressed(null);
+    setDrag(null);
+    setPinAt(null);
+    setRefused(null);
     setPicked(null);
     setPlaced(null);
-    setWired(null);
   }, [screen.edit]);
 
   // A link to a shop that is gone (deleted, or never there) opens the list, and the address says so.
@@ -40,7 +53,7 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     if (unknownShop) go({ name: "shops", edit: null }, { replace: true });
   }, [unknownShop]);
 
-  useEscape(picking !== null, () => setPicking(null));
+  useEscape(pressed !== null, () => setPressed(null));
 
   const list = shops.status === "ready" ? shops.data : [];
   const editing = screen.edit === "new" ? "new" : (list.find((shop) => shop.id === screen.edit) ?? null);
@@ -49,14 +62,29 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
   const place = placed ?? saved;
   const point: LngLat | null = place ? [place.lon, place.lat] : null;
   const atNode = place?.fraId != null;
-  // The links: those a person set here, else the saved ones. With none, the suggestion is link 1 of a shop
-  // just placed (new, or moved), and an offer to a saved shop where it is, so saving that one again never wires it.
-  const set = wired ?? saved?.links ?? [];
-  const suggestion = fresh(useWayIn(set.length || atNode ? null : point)) ?? null;
-  const justPlaced = !wired && !!place && (place.lon !== saved?.lon || place.lat !== saved?.lat);
-  const fromShop = (node: NetworkNode): NetworkNode => (point ? { ...node, km: haversineKm(point[0], point[1], node.lon, node.lat) } : node);
-  const links = (justPlaced && suggestion ? [suggestion] : set).map(fromShop);
-  const offer = links.length ? null : suggestion;
+  // The camera goes to the shop as it opens or is given a place; a pin dragged somewhere stays where it was let go.
+  const draggedHere = picked?.dragged && point?.join() === picked.at.join();
+  if (!draggedHere && camera?.join() !== point?.join()) setCamera(point);
+
+  // The links: those set here, else the saved ones. With none, the suggestion is link 1 of a shop just placed (new, or
+  // moved) and an offer to a saved shop where it is, so saving that one again never wires it. A shop at a node has none.
+  const set = links.present ?? saved?.links?.map((link) => link.fraId) ?? [];
+  const offering = !set.length && !atNode;
+  const ends: LinkEnd[] = offering ? (point ? [{ lon: point[0], lat: point[1] }] : []) : set.map((fraId) => ({ fraId }));
+  const answer = useShopLinks(point, ends);
+  const suggestion = offering ? (fresh(answer)?.[0] ?? null) : null;
+  const justPlaced = links.present === null && !!place && (place.lon !== saved?.lon || place.lat !== saved?.lat);
+  const current = justPlaced && suggestion ? [suggestion.fraId] : set;
+  const offer = current.length ? null : suggestion;
+  // While a newer answer is on its way the last one still draws the links it has.
+  const shown = answer.status === "ready" ? answer.data : [];
+  const linkOf = (fraId: FraId): ShopLink | null => shown.find((link) => link?.fraId === fraId) ?? null;
+  /** The other link that already joins this one's node, or -1. */
+  const takenBy = (link: ShopLink, slot: number) => current.findIndex((fraId, i) => i !== slot && fraId === link.fraId);
+
+  const preview = useShopLinks(point, drag && [{ lon: drag.at[0], lat: drag.at[1] }]);
+  const target = drag && preview.status === "ready" ? preview.data[0] : undefined;
+  const aimed = target && drag && takenBy(target, drag.slot) < 0 ? target : null;
 
   const header = <h1 className="visually-hidden">Your shops</h1>;
 
@@ -82,25 +110,87 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
   }
 
   const close = () => go({ name: "shops", edit: null }, { replace: true });
-  const onPick = async (lon: number, lat: number) => {
-    if (picking === "shop") {
-      // The shop sits where it was clicked; its own track is what joins it to the network.
-      setPicked([round5(lon), round5(lat)]);
-      setPicking(null);
-      return;
+  const change = (next: FraId[]) => {
+    setRefused(null);
+    if (next.join() !== current.join()) setLinks((history) => ({ past: [...history.past, history.present], present: next, future: [] }));
+  };
+  const travel = (step: "undo" | "redo") => {
+    setRefused(null);
+    setPressed(null);
+    setLinks(({ past, present, future }) =>
+      step === "undo" ? { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] } : { past: [...past, present], present: future[0], future: future.slice(1) },
+    );
+  };
+  /** A drop or a tap at `at` for link `slot`: refined to the way in nearest it, refused with no track in reach or at the other link's node. */
+  const setLink = async (slot: number, at: LngLat) => {
+    if (!point) return;
+    const link = await shopLinkAt(point, { lon: at[0], lat: at[1] }).catch(() => null);
+    const other = link ? takenBy(link, slot) : -1;
+    setDrag(null);
+    if (!link || other >= 0) return setRefused(link ? linkJoinsThere(other + 1) : NO_TRACK_NEAR);
+    setPressed(null);
+    change(current.toSpliced(slot, 1, link.fraId));
+  };
+  const press = (slot: number) => {
+    setRefused(null);
+    setPressed(pressed === slot ? null : slot);
+    // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be tapped.
+    if (pressed !== slot) window.scrollTo({ top: 0 });
+  };
+  /** What a link's ring (or the ＋, for the next free link) does on the map: dragged, it shows where it would join; tapped, it is pressed. */
+  const gestures = (slot: number): Pick<MapHandle, "onDrag" | "onDrop" | "onPress"> => ({
+    onPress: () => press(slot),
+    onDrag: (at) => {
+      setRefused(null);
+      setDrag({ slot, at });
+    },
+    onDrop: (at) => (at ? void setLink(slot, at) : setDrag(null)),
+  });
+  const onPick = (lon: number, lat: number) => {
+    if (!point) setPicked({ at: roundLngLat(lon, lat), dragged: false });
+    else if (pressed !== null) void setLink(pressed, [lon, lat]);
+  };
+
+  // The map: the shop's pin, each link's ring and line, the ＋ for the next one; while a link is dragged, where it would join.
+  const handles: MapHandle[] = [];
+  const lines: SceneLink[] = [];
+  if (editing && point) {
+    const shopAt = pinAt ?? point;
+    // While the pin moves, a link runs straight to its node; then along its own track again, from wherever the shop is now.
+    const pathOf = (link: ShopLink): LngLat[] => (pinAt ? [pinAt, [link.lon, link.lat]] : [point, ...link.path.slice(1)]);
+    handles.push({
+      id: "shop",
+      at: shopAt,
+      face: "shop",
+      glyph: "",
+      label: shop?.name ?? "New shop",
+      onDrag: (at) => setPinAt(at),
+      onDrop: (at) => {
+        setPinAt(at);
+        if (at) setPicked({ at: roundLngLat(...at), dragged: true });
+      },
+    });
+    current.forEach((fraId, slot) => {
+      const link = linkOf(fraId);
+      if (!link) return;
+      const dragged = drag?.slot === slot;
+      if (!dragged) lines.push({ path: pathOf(link), look: "set" });
+      handles.push({ id: `link-${slot}`, at: dragged ? drag.at : [link.lon, link.lat], face: "link", glyph: String(slot + 1), label: `Move link ${slot + 1}`, pressed: pressed === slot, ...gestures(slot) });
+    });
+    if (offer) {
+      const dragged = drag?.slot === 0;
+      if (!dragged) lines.push({ path: pathOf(offer), look: "offered" });
+      handles.push({ id: "offer", at: dragged ? drag.at : [offer.lon, offer.lat], face: "link", glyph: "1", label: "Suggested link 1", faint: true, ...gestures(0), onPress: () => change([offer.fraId]) });
+    } else if (current.length < SHOP_LINKS_MAX) {
+      handles.push({ id: "add", at: shopAt, face: "add", glyph: "+", label: "Add link", pressed: pressed === current.length, ...gestures(current.length) });
     }
-    // A link joins a line's own track: the nearest such node to the click, as far as a link reaches.
-    const node = await snapToNetwork(lon, lat, SHOP_LINK_MAX_KM, "mainline");
-    setMissed(!node);
-    if (!node || picking === null) return;
-    setWired(links.toSpliced(picking, 1, node));
-    setPicking(null);
-  };
-  const togglePick = (target: PickTarget) => {
-    setMissed(false);
-    setPicking((on) => (on === target ? null : target));
-  };
-  const linkEnds = [...links, ...(offer ? [offer] : [])].map((node) => ({ at: [node.lon, node.lat] as LngLat, suggested: node === offer }));
+    if (drag && target !== undefined) {
+      lines.push(aimed ? { path: aimed.path, look: "ghost" } : { path: [point, drag.at], look: "refused" });
+      if (aimed) handles.push({ id: "aim", at: [aimed.lon, aimed.lat], face: "link", glyph: String(drag.slot + 1), label: `Link ${drag.slot + 1} here` });
+    }
+  }
+
+  const picking = !!editing && (!point || pressed !== null);
 
   return (
     <div className="shops-screen">
@@ -112,25 +202,26 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
             key={shop?.id ?? "new"}
             shop={shop}
             unit={unit}
-            picked={picked}
-            picking={picking === "shop"}
-            linked={links.length > 0}
-            onTogglePick={() => togglePick("shop")}
-            onPlace={setPlaced}
-            onSave={(draft) => saveShop({ ...draft, links: links.map((node) => node.fraId) }, shop?.id ?? null).then(close)}
+            picked={picked?.at ?? null}
+            linked={current.length > 0}
+            onPlace={(next) => {
+              setPlaced(next);
+              setPinAt(null);
+            }}
+            onSave={(draft) => saveShop({ ...draft, links: current }, shop?.id ?? null).then(close)}
             onDelete={shop ? () => removeShop(shop.id).then(close) : null}
             onCancel={close}
           >
             {point && (
               <ShopLinks
-                links={links}
+                links={current.map((fraId) => linkOf(fraId) ?? fraId)}
                 offer={offer}
-                atNode={atNode}
                 unit={unit}
-                picking={typeof picking === "number" ? picking : null}
-                onPick={togglePick}
-                onUse={() => setWired([offer!])}
-                onRemove={(at) => setWired(links.toSpliced(at, 1))}
+                pressed={pressed}
+                refused={refused}
+                onPress={press}
+                onUse={() => offer && change([offer.fraId])}
+                onRemove={(at) => change(current.toSpliced(at, 1))}
               />
             )}
           </ShopForm>
@@ -138,13 +229,13 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
       </div>
       <ShopImportCard run={importShops} />
       <MapContent
-        scene={shopsScene(list, point && { label: shop?.name ?? "New shop", at: point, links: linkEnds })}
-        focus={point ? { kind: "place", lon: point[0], lat: point[1], zoom: SHOP_ZOOM } : { kind: "fit" }}
-        onPick={picking !== null ? (lon, lat) => void onPick(lon, lat) : undefined}
-        onSelect={picking === null ? (target) => target.kind === "place" && target.ref.kind === "shop" && go({ name: "shops", edit: target.ref.shopId }) : undefined}
-      >
-        {picking !== null && <PickPrompt what={picking === "shop" ? "the shop" : `link ${picking + 1}`} missed={missed} onCancel={() => setPicking(null)} />}
-      </MapContent>
+        scene={shopsScene(list, editing && point && { shopId: shop?.id ?? null, at: pinAt ?? point, links: lines })}
+        focus={camera ? { kind: "place", lon: camera[0], lat: camera[1], zoom: SHOP_ZOOM } : { kind: "fit" }}
+        onPick={picking ? onPick : undefined}
+        onSelect={picking ? undefined : (target) => target.kind === "place" && target.ref.kind === "shop" && go({ name: "shops", edit: target.ref.shopId })}
+        handles={handles}
+        history={editing && point ? { what: "link change", undo: links.past.length ? () => travel("undo") : null, redo: links.future.length ? () => travel("redo") : null } : undefined}
+      />
     </div>
   );
 }

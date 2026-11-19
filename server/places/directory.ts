@@ -19,9 +19,10 @@
  */
 import type { City, RailNetwork } from "../../engine/index.ts";
 import { createCache } from "../../shared/cache.ts";
-import { haversineKm, isLngLat, plainMinus, round5 } from "../../shared/geo.ts";
-import type {
-  FraId, NetworkNode, NodeLocation, NodesOn, PlaceMatch, PlaceProblem, PlaceRef, PlaceResolution, PlaceRole, PlaceSuggestion, Shop,
+import { isLngLat, plainMinus, round5 } from "../../shared/geo.ts";
+import {
+  SHOP_LINK_MAX_KM, type FraId, type LinkEnd, type NetworkNode, type NodeLocation, type PlaceMatch, type PlaceProblem, type PlaceRef, type PlaceResolution,
+  type PlaceRole, type PlaceSuggestion, type Shop, type ShopLink,
 } from "../../shared/places.ts";
 import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
 import type { Store } from "../store/store.ts";
@@ -31,9 +32,12 @@ export interface Directory {
   /** Autocomplete. Every suggestion carries a typed ref, so picking one leaves nothing to guess later. */
   suggest(text: string, role: PlaceRole, limit: number): PlaceSuggestion[];
   /** The node a map click snaps to. */
-  nearest(lon: number, lat: number, withinKm: number, on: NodesOn): NetworkNode | null;
-  /** Where a shop at this point most likely joins the network: its own track followed to the main line. */
-  wayIn(lon: number, lat: number): NetworkNode | null;
+  nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
+  /**
+   * A shop at (lon, lat) linked at each end: that node, or the way in nearest a rough spot (its own track followed to
+   * the main line), each with the track drawn shop first. Null for an end that cannot be one of its links.
+   */
+  links(lon: number, lat: number, ends: LinkEnd[]): (ShopLink | null)[];
   /** A shop as a place: where `ref` (the shop itself, or its saved location) leads. */
   shopPlace(shop: Shop, ref: PlaceRef): PlaceResolution;
 }
@@ -111,15 +115,16 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   // ---- the user's lists ----
 
-  /** A shop wired to the track sits at its location and joins the network only at its links, each a straight piece of its own track. */
+  /** A shop wired to the track sits at its location and joins the network only at its links, each over its own track (network.lead). */
   const atLinks = (ref: PlaceRef, shop: Shop): PlaceResolution => {
     const at = "fraId" in shop.location ? network.node(shop.location.fraId) : shop.location;
     if (!at) return problem("removed", `The shop ${shop.name}: no track found for its node.`);
     const links: NetworkNode[] = [];
     for (const [i, fraId] of shop.links.entries()) {
       const node = network.node(fraId);
-      if (!node) return problem("removed", `The shop ${shop.name}: link ${i + 1} is gone from this network.`);
-      links.push({ ...node, km: haversineKm(at.lon, at.lat, node.lon, node.lat) });
+      const lead = network.lead(at.lon, at.lat, fraId);
+      if (!node || !lead) return problem("removed", `The shop ${shop.name}: link ${i + 1} is gone from this network.`);
+      links.push({ ...node, km: lead.km });
     }
     const served = new Set(links.flatMap((link) => link.railroads));
     return {
@@ -261,8 +266,13 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
   return {
     resolve,
     suggest,
-    nearest: (lon, lat, withinKm, on) => network.nearest(lon, lat, withinKm, on),
-    wayIn: (lon, lat) => network.wayIn(lon, lat),
+    nearest: (lon, lat, withinKm) => network.nearest(lon, lat, withinKm),
+    links: (lon, lat, ends) =>
+      ends.map((end) => {
+        const node = "fraId" in end ? network.node(end.fraId) : network.wayIn(end.lon, end.lat);
+        const lead = node && network.lead(lon, lat, node.fraId);
+        return node && lead && lead.km <= SHOP_LINK_MAX_KM ? { ...node, km: lead.km, path: lead.path } : null;
+      }),
     // Keyed by the shop's content as well: an import preview shows shops that are not saved.
     shopPlace: (shop, ref) => memoized(`shop\u0000${JSON.stringify([ref, shop])}`, () => atShop(ref, shop)),
   };

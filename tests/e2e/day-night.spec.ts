@@ -5,7 +5,7 @@
  * and the route stays drawn on top throughout.
  */
 import type { Page } from "@playwright/test";
-import { expectMapCanvases, keepScreenshot, mapRegion, planRoute, test, expect } from "./app.ts";
+import { expectMapCanvas, keepScreenshot, mapLayerOrder, mapRegion, planRoute, test, expect } from "./app.ts";
 
 /** NASA's tiles are downloaded once and kept by the page, so the first download is the one to wait for. */
 const nasaTiles = (page: Page) =>
@@ -17,7 +17,7 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
   const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
   await expect(selectedRow).toBeVisible();
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   const map = mapRegion(page);
 
   const layers = page.getByRole("button", { name: /^Map layers/ });
@@ -32,7 +32,7 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   await expect(map.locator(".maplibregl-ctrl-attrib")).toContainText("NASA");
   await layers.click();
 
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   await expect(selectedRow).toBeVisible();
   await lights;
   await keepScreenshot(page, "night");
@@ -42,7 +42,7 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   await expect(map).toHaveAttribute("data-look", "day");
   await expect(layers).toHaveAccessibleName("Map layers: Map · Day");
   await layers.click();
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   await keepScreenshot(page, "day");
 });
 
@@ -54,7 +54,7 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
   const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
   await expect(selectedRow).toBeVisible();
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   const map = mapRegion(page);
 
   const layers = page.getByRole("button", { name: /^Map layers/ });
@@ -70,6 +70,44 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   await expect(map.locator(".maplibregl-ctrl-attrib")).toContainText("NASA");
   await expect(selectedRow).toBeVisible();
   await lights;
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   await keepScreenshot(page, "earth-dusk");
+});
+
+test("every switch of map and time keeps the night tiles under the network, the network under the place names, and MapLibre quiet", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    // A tile the network failed to fetch is the network's business; anything else MapLibre logs is ours.
+    if (message.type() === "error" && !/Failed to load resource|net::ERR_/.test(message.text())) errors.push(message.text());
+  });
+  await page.goto("/route");
+  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+  await expectMapCanvas(page);
+  const map = mapRegion(page);
+  const layers = page.getByRole("button", { name: /^Map layers/ });
+  const choose = async (name: string) => {
+    await layers.click();
+    await page.getByRole("radio", { name, exact: true }).click();
+    await layers.click();
+  };
+  const expectInOrder = async (look: string) => {
+    await expect
+      .poll(async () => {
+        const order = await mapLayerOrder(page);
+        const network = order.filter((id) => id.startsWith("network-")).map((id) => order.indexOf(id));
+        return network.length > 0 && order.indexOf("night-lights") < Math.min(...network) && Math.max(...network) < order.indexOf("labels");
+      }, look)
+      .toBe(true);
+  };
+
+  for (const [name, look] of [["Satellite", "satellite"], ["Map", "map"], ["Night", "night"], ["Auto", "auto"], ["Day", "day"], ["Night", "night again"]] as const) {
+    await choose(name);
+    await expectInOrder(look);
+  }
+  await choose("Satellite");
+  await expect(map).toHaveAttribute("data-look", "night");
+  await expectInOrder("satellite at night");
+  await choose("Map");
+  await expectInOrder("map at night");
+  expect(errors).toEqual([]);
 });

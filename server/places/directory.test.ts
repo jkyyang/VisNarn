@@ -137,10 +137,41 @@ describe("Directory.suggest / nearest", () => {
 
   it("nearest returns the node within the tolerance with its railroads, else null", () => {
     const { directory } = setup();
-    const hit = directory.nearest(-97.34, 31.09, 5, "track");
+    const hit = directory.nearest(-97.34, 31.09, 5);
     expect(hit).toMatchObject({ fraId: TEMPLE, near: "Temple, TX", railroads: ["BNSF", "UP"] });
     expect(hit!.km).toBeLessThan(1);
-    expect(directory.nearest(-90, 25, 5, "track")).toBeNull();
+    expect(directory.nearest(-90, 25, 5)).toBeNull();
+  });
+});
+
+describe("Directory.links", () => {
+  // Procor's Oakville plant as the user had it: its yard fans out north-east to the CN line at 633683.
+  const OAKVILLE = { lon: -79.72024, lat: 43.41766 };
+  const at = (lon: number, lat: number) => ({ lon, lat });
+
+  it("refines a rough spot in the plant to where its lead meets the main line, and draws the link along the yard", () => {
+    const { directory } = setup();
+    const [fan, lead] = directory.links(OAKVILLE.lon, OAKVILLE.lat, [at(-79.7193, 43.4186), at(-79.7183, 43.4203)]);
+    expect(fan).toMatchObject({ fraId: 633683, railroads: ["CN"], km: expect.closeTo(0.609, 2) });
+    expect(fan!.path.length).toBeGreaterThan(2);
+    expect(fan!.path[0]).toEqual([OAKVILLE.lon, OAKVILLE.lat]);
+    expect(fan!.path.at(-1)).toEqual([fan!.lon, fan!.lat]);
+    expect(lead).toEqual(fan);
+  });
+
+  it("takes a node as it is: on the main line with no yard between, the link is the straight line", () => {
+    const { directory } = setup();
+    const [main, joined] = directory.links(OAKVILLE.lon, OAKVILLE.lat, [{ fraId: 633676 as FraId }, { fraId: 633683 as FraId }]);
+    expect(main).toMatchObject({ fraId: 633676, km: expect.closeTo(0.445, 2) });
+    expect(main!.path).toHaveLength(2);
+    expect(joined).toMatchObject({ fraId: 633683, km: expect.closeTo(0.609, 2) });
+  });
+
+  it("is null for a spot with no track within 5 km, a node this network lacks, or a link over 5 km", () => {
+    const { directory } = setup();
+    const atSea = at(-60, 40);
+    expect(directory.links(-82.3376, 42.9596, [atSea, { fraId: 1 as FraId }, { fraId: 633683 as FraId }])).toEqual([null, null, null]);
+    expect(directory.links(-82.3376, 42.9596, [])).toEqual([]);
   });
 });
 
@@ -219,7 +250,7 @@ describe("Shops", () => {
   const EAST = 628925 as FraId, WEST = 628886 as FraId;
   const sarnia = (links: FraId[] = [EAST]) => ({ name: "EXAMPLE Sarnia", code: "EX-SAR", location: SARNIA, links });
 
-  it("a linked shop stays at its location and joins the network at its links, each a straight piece away, with their railroads", () => {
+  it("a linked shop stays at its location and joins the network at its links, each over its own track, with their railroads", () => {
     const { store, directory } = setup();
     const shops = createShops(store, directory);
     const saved = shops.save(sarnia([EAST, WEST]), null);
@@ -227,7 +258,8 @@ describe("Shops", () => {
     const place = placeOf(saved.place);
     expect(place).toMatchObject({ label: "EXAMPLE Sarnia", lon: SARNIA.lon, lat: SARNIA.lat, fraId: null, railroad: null, railroads: ["CN", "CPKC"] });
     expect(place.links).toEqual([
-      expect.objectContaining({ fraId: EAST, km: expect.closeTo(0.519, 2), railroads: ["CN", "CPKC"], near: "Sarnia, ON" }),
+      // East: 0.34 km to the plant's yard, then along it to the main line. West: on the main line, the straight line.
+      expect.objectContaining({ fraId: EAST, km: expect.closeTo(1.294, 2), railroads: ["CN", "CPKC"], near: "Sarnia, ON" }),
       expect.objectContaining({ fraId: WEST, km: expect.closeTo(0.766, 2) }),
     ]);
     expect(placeOf(directory.resolve({ kind: "shop", shopId: saved.id }, "shop")).links).toEqual(place.links);

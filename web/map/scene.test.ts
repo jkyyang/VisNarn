@@ -7,9 +7,10 @@ import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
+import { LABELS } from "./basemaps.ts";
 import { LAYER, lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { legendFor } from "./Legend.tsx";
-import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneRoute } from "./scene.ts";
+import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneLink, type SceneRoute } from "./scene.ts";
 
 const grey: RGBA = [90, 100, 110, 255];
 const colors: ThemeColors = {
@@ -19,6 +20,7 @@ const colors: ThemeColors = {
   route: [26, 115, 232, 255],
   alternative: [154, 160, 166, 255],
   casing: [255, 255, 255, 255],
+  risk: [215, 0, 21, 255],
   rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255], passenger: [9, 0, 0, 255] },
 };
 
@@ -179,22 +181,50 @@ describe("shopsScene", () => {
     expect(scene.kind === "shops" && scene.links).toEqual([]);
   });
 
-  it("draws the edited shop's links only, numbered as in the form, a suggestion faint", () => {
-    const at: LngLat = [-82.3376, 42.9596];
-    const east: LngLat = [-82.33578, 42.95513], west: LngLat = [-82.3456, 42.9612];
-    const scene = shopsScene(shops, { label: "Sarnia", at, links: [{ at: east, suggested: false }, { at: west, suggested: true }] });
+  // Sarnia: link 1 along the plant's yard (shop, foot, two more nodes), link 2 straight to the main line, a drag's preview, a refused drop.
+  const at: LngLat = [-82.3376, 42.9596];
+  const along: SceneLink = { path: [at, [-82.3405, 42.9568], [-82.3398, 42.9562], [-82.33578, 42.95513]], look: "set" };
+  const straight: SceneLink = { path: [at, [-82.34541, 42.95575]], look: "set" };
+  const offered: SceneLink = { ...along, look: "offered" };
+  const ghost: SceneLink = { ...along, look: "ghost" };
+  const refused: SceneLink = { path: [at, [-82.35, 42.99]], look: "refused" };
+  const edited = (links: SceneLink[]) => {
+    const scene = shopsScene(shops, { shopId: shops[0].id, at, links });
     if (scene.kind !== "shops") throw new Error(`a ${scene.kind} scene`);
-    expect(scene.links).toEqual([
-      { path: [at, east], suggested: false },
-      { path: [at, west], suggested: true },
-    ]);
-    expect(scene.pins.filter((pin) => pin.kind === "stop").map((pin) => [pin.glyph, pin.position])).toEqual([
-      ["1", east],
-      ["2", west],
-      ["+", at],
-    ]);
-    const layer = sceneLayers(scene, colors, 15).find((l) => l && typeof l === "object" && "id" in l && l.id === LAYER.links);
-    expect(layer).toBeDefined();
+    return scene;
+  };
+
+  it("draws the edited shop's links as given, and no pin of its own: its pin and rings are handles on the map", () => {
+    const scene = edited([along, straight, ghost, refused]);
+    expect(scene.links).toEqual([along, straight, ghost, refused]);
+    expect(scene.pins.map((pin) => pin.label)).toEqual(shops.slice(1).map((shop) => shop.name));
+    expect(scene.pins.every((pin) => pin.kind === "shop")).toBe(true);
+  });
+
+  it("asks for the real track under each link's piece on track, of the shop's links and the suggestion only, and draws them along it", () => {
+    const scene = edited([along, straight, offered, ghost, refused]);
+    expect(routePaths(scene)).toEqual([along.path.slice(1), offered.path.slice(1)]);
+    const curved = routePaths(scene).map((path) => [path[0], [-82.3401, 42.9565] as LngLat, ...path.slice(1)]);
+    const drawn = withRoutePaths(scene, curved);
+    if (drawn.kind !== "shops") throw new Error(`a ${drawn.kind} scene`);
+    expect(drawn.links.map((link) => link.path)).toEqual([[at, ...curved[0]], straight.path, [at, ...curved[1]], ghost.path, refused.path]);
+    expect(withRoutePaths(scene, curved.slice(1))).toBe(scene);
+  });
+
+  it("draws a link's first step dashed and the rest solid over a casing: a straight link all dashed; a suggestion and a preview faint, a refused drop in the risk colour", () => {
+    const layers = sceneLayers(edited([along, straight, offered, refused]), colors, 15) as Layer[];
+    const layer = (id: string) => layers.find((l) => l.id === id)!;
+    const paths = (id: string) => (layer(id).props.data as { path: LngLat[] }[]).map((piece) => piece.path);
+    expect(layers.map((l) => l.id).slice(0, 3)).toEqual([LAYER.linksCasing, LAYER.links, LAYER.linksOffTrack]);
+    expect(paths(LAYER.linksOffTrack)).toEqual([along.path.slice(0, 2), straight.path, offered.path.slice(0, 2), refused.path]);
+    expect(paths(LAYER.links)).toEqual([along.path.slice(1), offered.path.slice(1)]);
+    expect(paths(LAYER.linksCasing)).toEqual(paths(LAYER.links));
+    expect(layer(LAYER.linksOffTrack).props.extensions).toHaveLength(1);
+    const colorOf = (layer(LAYER.links).props as unknown as { getColor: (piece: SceneLink) => RGBA }).getColor;
+    expect(colorOf(along)).toEqual(colors.route);
+    expect(colorOf(offered)[3]).toBeLessThan(255);
+    expect(colorOf(ghost)).toEqual(colorOf(offered));
+    expect(colorOf(refused)).toEqual(colors.risk);
   });
 });
 
@@ -276,7 +306,8 @@ describe("layers", () => {
     expect(drawnClasses({ regional: true, shortLine: true, passenger: true })).toEqual(NETWORK_CLASSES);
   });
 
-  it("gives each class its own layer, mounted while hidden, Class I coloured by owner and the rest in their route colour", () => {
+
+  it("gives each class its own layer, mounted while hidden, Class I coloured by owner and the rest in their route colour, under the place names", () => {
     const network = Object.fromEntries(NETWORK_CLASSES.map((c) => [c, []])) as unknown as Parameters<typeof networkLayers>[0];
     const byClass = (drawn: NetworkClass[], dimmed = false) => Object.fromEntries((networkLayers(network, drawn, dimmed, colors) as Layer[]).map((l) => [l.id, l.props]));
     const lineColor = (props: unknown, owner: string) => (props as { getLineColor: (f: { properties: { owner: string } }) => RGBA }).getLineColor({ properties: { owner } });
@@ -296,8 +327,10 @@ describe("layers", () => {
     expect(lineColor(shown["network-passenger"], "AMTK")).toBe(colors.rail.passenger);
     expect(shown["network-short_line"].opacity).toBeLessThan(shown["network-class_i"].opacity as number);
     expect(byClass([], true)["network-class_i"]).toMatchObject({ visible: false, opacity: 0.35 });
+    expect(shown["network-class_i"]).toMatchObject({ beforeId: LABELS });
   });
 });
+
 
 /** One of the EXAMPLE shops, resolved as the server resolves a shop given as the destination. */
 function shopPlace(name: string) {

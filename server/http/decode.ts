@@ -11,7 +11,8 @@ import type { Api, Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { LngLat } from "../../shared/geo.ts";
 import {
-  NEAREST_MAX_KM, SHOP_LINKS_MAX, SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId, type UploadSource,
+  NEAREST_MAX_KM, SHOP_LINKS_MAX, SHOP_TEXT_MAX, UNSEEN, type FraId, type ImportRequest, type LinkEnd, type PlaceRef, type PlaceRole, type ShopDraft, type ShopId,
+  type UploadSource,
 } from "../../shared/places.ts";
 import type { FullPlan, Plan, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { RAILROADS, type Railroad, type TrackIncluded } from "../../shared/railroads.ts";
@@ -172,6 +173,10 @@ const shopDraft: Decoder<ShopDraft> = (value, path) => ({
   links: field(value, path, "links", list(wholeNumber, SHOP_LINKS_MAX)) as FraId[],
 });
 
+/** A node by its FRA id, else a spot on the map. */
+const linkEnd: Decoder<LinkEnd> = (value, path) =>
+  "fraId" in object(value, path) ? { fraId: field(value, path, "fraId", wholeNumber) as FraId } : { lon: field(value, path, "lon", lon), lat: field(value, path, "lat", lat) };
+
 /** CSV text can be large; the HTTP layer already caps the whole body. */
 const uploadSource: Decoder<UploadSource> = (value, path) => {
   field(value, path, "kind", oneOf(["csv"] as const));
@@ -197,6 +202,7 @@ const MAX_PATH_POINTS = 50_000;
 /** One decoder per route that has a body: a route added to `Api` without one does not compile. */
 export const decodeBody: { [R in RoutesWith<"body">]: (json: unknown) => Api[R]["body"] } = {
   "POST /api/places/resolve": (json) => ({ ref: field(json, "", "ref", placeRef), role: field(json, "", "role", role) }),
+  "POST /api/places/links": (json) => ({ lon: field(json, "", "lon", lon), lat: field(json, "", "lat", lat), ends: field(json, "", "ends", list(linkEnd, SHOP_LINKS_MAX)) }),
   "POST /api/shops": (json) => shopDraft(json, ""),
   "PUT /api/shops/:shopId": (json) => shopDraft(json, ""),
   "POST /api/shops/import": (json) => importRequest(json, ""),
@@ -218,9 +224,7 @@ export const decodeQuery: { [R in RoutesWith<"query">]: (query: URLSearchParams)
     lon: queryNumber(query, "lon", -180, 180),
     lat: queryNumber(query, "lat", -90, 90),
     withinKm: queryNumber(query, "withinKm", 0, NEAREST_MAX_KM),
-    on: oneOf(["track", "mainline"] as const)(query.get("on"), "on"),
   }),
-  "GET /api/places/way-in": (query) => ({ lon: queryNumber(query, "lon", -180, 180), lat: queryNumber(query, "lat", -90, 90) }),
 };
 
 // Path parameters arrive as text. These turn them into the ids and numbers handlers work with.

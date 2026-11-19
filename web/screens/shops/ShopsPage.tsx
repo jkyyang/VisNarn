@@ -2,7 +2,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import type { LngLat } from "../../../shared/geo.ts";
 import {
-  SHOP_LINKS_MAX, type ImportReport, type ImportRequest, type NetworkNode, type PlaceRef, type PlaceSuggestion, type ResolvedPlace, type RowIssue, type ShopDraft,
+  SHOP_LINKS_MAX, type FraId, type ImportReport, type ImportRequest, type PlaceRef, type PlaceSuggestion, type ResolvedPlace, type RowIssue, type ShopDraft, type ShopLink,
   type ShopView,
 } from "../../../shared/places.ts";
 import { fresh, usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
@@ -11,11 +11,11 @@ import { PlacePin, RailroadChips } from "../../ui/badges.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { readFileText } from "../../ui/files.ts";
 import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
-import { Cross, Crosshair, Search } from "../../ui/icons.tsx";
+import { Cross, Search } from "../../ui/icons.tsx";
 import { lineColor } from "../../theme.ts";
 import { PHONE_QUERY } from "../../map/config.ts";
 import type { DistanceUnit } from "../../units.ts";
-import { clickToSet, errorText, linksReadout, linkText, NO_TRACK_NEAR, placeHint, plural } from "../../words.ts";
+import { clickToSet, errorText, linkText, placeHint, plural } from "../../words.ts";
 
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
@@ -119,8 +119,8 @@ function locationInput(shop: ShopView | null): { text: string; ref: PlaceRef | n
 }
 
 /**
- * Name · Shop code · Location ("lon, lat", a city or an FRA node, or "Pick on map") with the live
- * hint ("On the network · BNSF, UP") · the track links (`children`) · Cancel / Save shop / Delete.
+ * Name · Shop code · Location ("lon, lat", a city or an FRA node, or where the pin is put on the map) with
+ * the live hint ("On the network · BNSF, UP") · the track links (`children`) · Cancel / Save shop / Delete.
  *
  * A self-contained input widget: it keeps its own draft and asks the server what the typed
  * location means as the person types (usePlace), and says where that is (`onPlace`). Save is off
@@ -131,10 +131,8 @@ export function ShopForm(props: {
   unit: DistanceUnit;
   /** A spot just picked on the map, to take over as the location. */
   picked: LngLat | null;
-  picking: boolean;
   /** The shop joins the network at its links: they name their railroads, so the location's hint does not. */
   linked: boolean;
-  onTogglePick: () => void;
   /** Where the location resolves, each time it does. */
   onPlace: (place: ResolvedPlace | null) => void;
   onSave: (draft: Omit<ShopDraft, "links">) => Promise<unknown>;
@@ -265,7 +263,7 @@ export function ShopForm(props: {
               }}
               onKeyDown={onLocKeyDown}
               onBlur={closeList}
-              placeholder="e.g. Kansas City, MO or -92.27, 34.77"
+              placeholder="e.g. Kansas City, MO, or click the map"
             />
             {listOpen && <SuggestionList id={`${ids}-loc-list`} label="Suggestions for Location" list={list} active={active} onChoose={choose} />}
           </div>
@@ -274,10 +272,6 @@ export function ShopForm(props: {
               {hint.text}
             </span>
           )}
-          <button type="button" className="btn" aria-pressed={props.picking} onClick={props.onTogglePick}>
-            <Crosshair />
-            {props.picking ? "Click the map…" : "Pick on map"}
-          </button>
         </div>
         {props.children}
         {error && (
@@ -445,96 +439,88 @@ export function ShopImportCard(props: { run: (request: ImportRequest) => Promise
 }
 
 /**
- * Track links: a row per link (its number as on the map, the node it joins, how far, the railroads there,
- * ⌖ to move it, × to remove it), the suggestion offered to a shop with none, what the wiring means for a
- * car, and Add link.
+ * Track links, numbered as their rings on the map: a row per link (its ring, the node it joins, how far along its own
+ * track, the railroads there, ×), the suggestion offered to a shop with none (Use), else ＋ for the next link. Pressing a
+ * ring (or ＋) makes the next tap on the map set that link, and a line says so; Delete on a ring removes it.
  */
 export function ShopLinks(props: {
-  /** The nodes the shop joins, each `km` from it. */
-  links: NetworkNode[];
+  /** Each link: what the server says of it, or only its node until it has. */
+  links: (ShopLink | FraId)[];
   /** The suggestion for a shop with no links, shown faint: Use makes it link 1. */
-  offer: NetworkNode | null;
-  atNode: boolean;
+  offer: ShopLink | null;
   unit: DistanceUnit;
-  /** The link being set on the map. */
-  picking: number | null;
-  onPick: (link: number) => void;
+  /** The link whose ring is pressed (the number of links: ＋). */
+  pressed: number | null;
+  /** Why the last drop or tap on the map set no link. */
+  refused: string | null;
+  onPress: (link: number) => void;
   onUse: () => void;
   onRemove: (link: number) => void;
 }): ReactElement {
   const id = useId();
-  const row = (node: NetworkNode, n: number, buttons: ReactNode, offered = false) => (
-    <li key={n} className={`link-row${offered ? " is-offer" : ""}`}>
-      <PlacePin kind="stop" n={n} />
+  const text = (link: ShopLink | FraId) =>
+    typeof link === "number" ? (
+      <span className="link-text">FRA {link}</span>
+    ) : (
       <span className="link-text">
-        {linkText(node)}
+        {linkText(link)}
         <span className="link-sub">
-          {fmtDistance(node.km, props.unit, 1)}
-          <RailroadChips railroads={node.railroads} />
+          {fmtDistance(link.km, props.unit, 1)}
+          <RailroadChips railroads={link.railroads} />
         </span>
       </span>
-      {buttons}
-    </li>
-  );
+    );
+  const next = props.links.length;
   return (
     <div className="field" role="group" aria-labelledby={id}>
       <span id={id} className="field-label">
         Track links
       </span>
-      {(props.links.length > 0 || props.offer) && (
-        <ul className="link-rows">
-          {props.links.map((node, i) =>
-            row(
-              node,
-              i + 1,
-              <>
-                <button type="button" className="icon-btn pick-btn" aria-label={`Move link ${i + 1}`} aria-pressed={props.picking === i} onClick={() => props.onPick(i)}>
-                  <Crosshair />
-                </button>
-                <button type="button" className="icon-btn" aria-label={`Remove link ${i + 1}`} onClick={() => props.onRemove(i)}>
-                  <Cross />
-                </button>
-              </>,
-            ),
-          )}
-          {props.offer &&
-            row(
-              props.offer,
-              1,
-              <>
-                <span className="link-tag">Suggested</span>
-                <button type="button" className="link-btn" onClick={props.onUse}>
-                  Use
-                </button>
-              </>,
-              true,
-            )}
-        </ul>
+      <ul className="link-rows">
+        {props.links.map((link, i) => (
+          <li key={i} className="link-row">
+            <button
+              type="button"
+              className="icon-btn ring-btn"
+              aria-label={`Move link ${i + 1}`}
+              aria-pressed={props.pressed === i}
+              onClick={() => props.onPress(i)}
+              onKeyDown={(event) => {
+                if (event.key === "Delete" || event.key === "Backspace") props.onRemove(i);
+              }}
+            >
+              <PlacePin kind="stop" n={i + 1} />
+            </button>
+            {text(link)}
+            <button type="button" className="icon-btn" aria-label={`Remove link ${i + 1}`} onClick={() => props.onRemove(i)}>
+              <Cross />
+            </button>
+          </li>
+        ))}
+        {props.offer && (
+          <li className="link-row is-offer">
+            <PlacePin kind="stop" n={1} />
+            {text(props.offer)}
+            <span className="link-tag">Suggested</span>
+            <button type="button" className="link-btn" onClick={props.onUse}>
+              Use
+            </button>
+          </li>
+        )}
+        {next < SHOP_LINKS_MAX && !props.offer && (
+          <li className="link-row is-add">
+            <button type="button" className="add-link" aria-pressed={props.pressed === next} onClick={() => props.onPress(next)}>
+              <PlacePin kind="stop" n="+" />
+              Add link
+            </button>
+          </li>
+        )}
+      </ul>
+      {props.refused ? (
+        <span className="hint hint--bad">{props.refused}</span>
+      ) : (
+        props.pressed !== null && <span className="hint-line">{clickToSet(`link ${props.pressed + 1}`)}</span>
       )}
-      <span className="hint">{linksReadout(props.links.length, props.atNode)}</span>
-      {props.links.length < SHOP_LINKS_MAX && (
-        <button type="button" className="btn" aria-pressed={props.picking === props.links.length} onClick={() => props.onPick(props.links.length)}>
-          <Crosshair />
-          {props.picking === props.links.length ? "Click the map…" : "Add link"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** Over the map while picking: "Click the map to set the shop" or "… link 2", or "No track near there", and Cancel (Esc does the same). */
-export function PickPrompt(props: { what: string; missed: boolean; onCancel: () => void }): ReactElement {
-  // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be clicked.
-  useEffect(() => {
-    window.scrollTo({ top: 0 });
-  }, []);
-  return (
-    <div className="glass map-card pick-prompt" role="status">
-      <Crosshair />
-      <span>{props.missed ? NO_TRACK_NEAR : clickToSet(props.what)}</span>
-      <button type="button" className="link-btn" onClick={props.onCancel}>
-        Cancel
-      </button>
     </div>
   );
 }

@@ -57,6 +57,9 @@ export const REAL_TRACKS_MIN_ZOOM = 8;
 /** A click snaps to a track node if one is within this many screen pixels; the tolerance in km follows the zoom. */
 export const PICK_RADIUS_PX = 36;
 
+/** A shop link's piece off the track, from the shop to its yard: a dash and a gap, in line widths. */
+export const LINK_DASH: [dash: number, gap: number] = [2, 1.6];
+
 /** A click this close to a drawn route or pin picks it. */
 export const DECK_PICK_RADIUS_PX = 8;
 

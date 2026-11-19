@@ -3,7 +3,7 @@
  * the OpenStreetMap lines replace the network layers; unticked, both are node to node again.
  */
 import type { Page } from "@playwright/test";
-import { expect, expectMapCanvases, planRoute, test } from "./app.ts";
+import { expect, expectMapCanvas, planRoute, test } from "./app.ts";
 
 async function setRealTracks(page: Page, on: boolean): Promise<void> {
   const layers = page.getByRole("button", { name: /^Map layers/ });
@@ -16,7 +16,7 @@ async function setRealTracks(page: Page, on: boolean): Promise<void> {
 
 test("Real tracks draws the routes on the surveyed track and, zoomed in, shows the real lines instead of the network", async ({ page }) => {
   await page.goto("/route");
-  await expectMapCanvases(page);
+  await expectMapCanvas(page);
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
   const network = page.locator(".map-canvas");
   await expect(network).toHaveAttribute("data-network", "shown");

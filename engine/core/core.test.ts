@@ -35,6 +35,58 @@ describe("RailGraph", () => {
   });
 });
 
+describe("the yard walk", () => {
+  // Procor's Sarnia plant: its yard fans out north of the CN main line and joins it at the east end (FRA 628925).
+  const inSarniaYard = () => graph.nearestNode(-82.3405, 42.9568, ALL_RAILROADS_MASK, 5, graph.atMask)!.node;
+  const walk = (from: number, maxKm: number) => [...graph.yardWalk(from, ALL_RAILROADS_MASK, maxKm)];
+
+  it("comes nearest first, from where it starts, each node reached over one yard segment from one before it", () => {
+    const from = inSarniaYard();
+    const steps = walk(from, 5);
+    expect(steps[0]).toEqual({ node: from, km: 0, before: -1 });
+    expect(steps.length).toBeGreaterThan(10);
+    const seen = new Map(steps.map((step) => [step.node, step]));
+    for (const [i, step] of steps.entries()) {
+      if (i > 0) expect(step.km).toBeGreaterThanOrEqual(steps[i - 1].km);
+      if (step.before < 0) continue;
+      const edge = graph.edgeBetween(step.before, step.node);
+      expect(graph.edgeYard[edge]).toBe(1);
+      expect(step.km).toBeCloseTo(seen.get(step.before)!.km + graph.edgeKm[edge], 6);
+    }
+  });
+
+  it("goes no further than it is told, and never on past a node on a line's own track", () => {
+    const from = inSarniaYard();
+    const near = walk(from, 0.3);
+    expect(near.every((step) => step.km <= 0.3)).toBe(true);
+    expect(near.length).toBeLessThan(walk(from, 5).length);
+    const steps = walk(from, 5);
+    const own = new Set(steps.filter((step) => step.node !== from && graph.ownTrack(step.node, ALL_RAILROADS_MASK)).map((step) => step.node));
+    expect(own.size).toBeGreaterThan(0);
+    expect(steps.filter((step) => own.has(step.before))).toEqual([]);
+  });
+
+  it("yardExit is the walk's first node on a line's own track: as before, the plant's lead to the main line, or the node itself", () => {
+    const from = inSarniaYard();
+    expect(graph.fraId(graph.yardExit(from, ALL_RAILROADS_MASK, 5)!)).toBe(628925);
+    const exit = walk(from, 5).find((step) => graph.ownTrack(step.node, ALL_RAILROADS_MASK))!.node;
+    expect(graph.yardExit(from, ALL_RAILROADS_MASK, 5)).toBe(exit);
+    const main = graph.indexOf(628912 as never);
+    expect(graph.yardExit(main, ALL_RAILROADS_MASK, 5)).toBe(main);
+    expect(graph.yardExit(from, ALL_RAILROADS_MASK, 0.01)).toBeNull();
+  });
+
+  it("a lead runs from its foot over yard track to the join, through no other node on a line's own track", () => {
+    const join = graph.indexOf(628925 as never);
+    const { nodes, km } = graph.lead(-82.3376, 42.9596, join, ALL_RAILROADS_MASK, 5);
+    expect(nodes.length).toBeGreaterThan(2);
+    expect(nodes.at(-1)).toBe(join);
+    for (let i = 1; i < nodes.length; i++) expect(graph.edgeYard[graph.edgeBetween(nodes[i - 1], nodes[i])]).toBe(1);
+    expect(nodes.slice(0, -1).filter((node) => graph.ownTrack(node, ALL_RAILROADS_MASK))).toEqual([]);
+    expect(km).toBeLessThanOrEqual(5);
+  });
+});
+
 describe("Router", () => {
   it("routes Austin → Chicago single-line on UP", () => {
     const r = router.route([at("Austin, TX"), at("Chicago, IL")], opt);

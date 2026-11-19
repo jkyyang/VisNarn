@@ -65,7 +65,8 @@ describe("Shops screen", () => {
     await user.clear(location);
     await user.type(location, "-97.34, 31.10");
     // A location just given is wired at once to where its track most likely joins the network.
-    expect(await within(form).findByText("One link: cars leave the way they came in.")).toBeInTheDocument();
+    expect(await within(form).findByText("Temple · FRA 600001")).toBeInTheDocument();
+    expect(within(form).queryByText("Suggested")).not.toBeInTheDocument();
     expect(within(form).getByText("On the network")).toBeInTheDocument();
     await waitFor(() => expect(save).toBeEnabled());
     await user.click(save);
@@ -134,28 +135,44 @@ describe("Shops screen", () => {
     expect(fake.state.shops).toHaveLength(5);
   });
 
-  it("picks a shop's location on the map; Esc cancels picking", async () => {
+  it("a new shop is placed by a click on the map, and linked to the track there", async () => {
     const user = userEvent.setup();
     openPage("/shops/new");
     const form = await screen.findByRole("region", { name: "Add shop" });
-    await user.click(within(form).getByRole("button", { name: "Pick on map" }));
-    expect(screen.getByText(/Click the map to set the shop/)).toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByText(/Click the map to set the shop/)).not.toBeInTheDocument();
-
-    await user.click(within(form).getByRole("button", { name: "Pick on map" }));
+    expect(within(form).getByRole("combobox", { name: "Location" })).toHaveAttribute("placeholder", "e.g. Kansas City, MO, or click the map");
+    expect(screen.queryByRole("button", { name: /Pick on map/ })).not.toBeInTheDocument();
     setNextMapClick(-97.362, 31.121);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    // The shop sits where it was clicked, and its track is linked to the nearest node.
     expect(await within(form).findByDisplayValue("-97.362, 31.121")).toBeInTheDocument();
     expect(await within(form).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
     expect(screen.getByText("Map: 6 shops, link 1")).toBeInTheDocument();
+    expect(screen.getByText("Handles: New shop, Move link 1, Add link")).toBeInTheDocument();
     expect(screen.getByTestId("map")).toHaveAttribute("data-focus", "place");
+    // Placed, the shop's pin moves by dragging it; a click on the map places nothing more.
+    expect(screen.queryByRole("button", { name: "Click the map" })).not.toBeInTheDocument();
   });
 
   describe("track links", () => {
     const links = () => screen.getByRole("group", { name: "Track links" });
     const lastSent = () => fake.calls.filter((call) => call.method === "PUT").at(-1)?.body as { links: unknown[] } | undefined;
+    const rows = () => within(links()).queryAllByRole("button", { name: /^Remove link/ }).length;
+    const tapMap = async (user: ReturnType<typeof userEvent.setup>, lon: number, lat: number) => {
+      setNextMapClick(lon, lat);
+      await user.click(screen.getByRole("button", { name: "Click the map" }));
+    };
+    const dragOnMap = async (user: ReturnType<typeof userEvent.setup>, handle: string, lon: number, lat: number) => {
+      setNextMapClick(lon, lat);
+      await user.click(screen.getByRole("button", { name: `Drag ${handle}` }));
+    };
+
+    it("say only what each link is: no Pick on map, no ⌖, no sentence about cars", async () => {
+      openPage("/shops/shop-ex-1");
+      const form = await screen.findByRole("region", { name: "Edit shop" });
+      await within(links()).findByText("North Little Rock · FRA 600002");
+      expect(within(form).queryByRole("button", { name: /Pick on map|Click the map/ })).not.toBeInTheDocument();
+      expect(form.querySelector(".pick-btn")).toBeNull();
+      expect(form).not.toHaveTextContent(/cars|No links/);
+    });
 
     it("an unlinked shop offers the suggestion faint; Save keeps the shop as it was, Use then Save wires it", async () => {
       const user = userEvent.setup();
@@ -163,66 +180,104 @@ describe("Shops screen", () => {
       const form = await screen.findByRole("region", { name: "Edit shop" });
       expect(await within(links()).findByText("North Little Rock · FRA 600002")).toBeInTheDocument();
       expect(within(links()).getByText("Suggested")).toBeInTheDocument();
-      expect(within(links()).getByText("No links: joins the nearest mainline.")).toBeInTheDocument();
-      expect(screen.getByText("Map: 6 shops, link 1 suggested")).toBeInTheDocument();
+      // The edited shop is its pin, a handle: the map's squares are the other five.
+      expect(screen.getByText("Map: 5 shops, link 1 offered")).toBeInTheDocument();
+      expect(screen.getByText("Handles: North Little Rock, AR, Suggested link 1")).toBeInTheDocument();
       await user.click(within(form).getByRole("button", { name: "Save shop" }));
       await waitFor(() => expect(lastSent()).toMatchObject({ links: [] }));
 
       await user.click(await screen.findByRole("button", { name: "Edit North Little Rock, AR" }));
       await user.click(await within(links()).findByRole("button", { name: "Use" }));
-      expect(within(links()).getByText("One link: cars leave the way they came in.")).toBeInTheDocument();
       expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
+      expect(await within(links()).findByText("North Little Rock · FRA 600002")).toBeInTheDocument();
+      expect(rows()).toBe(1);
       await user.click(within(screen.getByRole("region", { name: "Edit shop" })).getByRole("button", { name: "Save shop" }));
       await waitFor(() => expect(lastSent()).toMatchObject({ links: [600002] }));
       expect(fake.state.shops[0].links).toEqual([600002]);
     });
 
-    it("a shop moved on the map takes the suggestion there as link 1 while it has none, and keeps a link a person set", async () => {
+    it("a shop dragged on the map takes the suggestion there as link 1 while it has none, and keeps a link a person set", async () => {
       const user = userEvent.setup();
       openPage("/shops/shop-ex-1");
       const form = await screen.findByRole("region", { name: "Edit shop" });
-      const pickAt = async (button: string, lon: number, lat: number) => {
-        await user.click(within(form).getByRole("button", { name: button }));
-        setNextMapClick(lon, lat);
-        await user.click(screen.getByRole("button", { name: "Click the map" }));
-      };
-      await pickAt("Pick on map", -97.362, 31.121);
+      await within(links()).findByText("Suggested");
+      await dragOnMap(user, "North Little Rock, AR", -97.362, 31.121);
+      expect(await within(form).findByDisplayValue("-97.362, 31.121")).toBeInTheDocument();
       expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
       expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
 
-      await pickAt("Move link 1", -92.27, 34.77);
-      expect(await within(links()).findByText("North Little Rock · FRA 600002")).toBeInTheDocument();
-      await pickAt("Pick on map", -97.15, 31.55);
-      expect(await within(form).findByDisplayValue("-97.15, 31.55")).toBeInTheDocument();
-      expect(within(links()).getByText("North Little Rock · FRA 600002")).toBeInTheDocument();
-      expect(within(links()).getAllByRole("listitem")).toHaveLength(1);
+      await user.click(within(links()).getByRole("button", { name: "Move link 1" }));
+      await tapMap(user, -97.346, 31.095);
+      expect(await within(links()).findByText("Temple · FRA 357961")).toBeInTheDocument();
+      await dragOnMap(user, "North Little Rock, AR", -97.35, 31.1);
+      expect(await within(form).findByDisplayValue("-97.35, 31.1")).toBeInTheDocument();
+      expect(within(links()).getByText("Temple · FRA 357961")).toBeInTheDocument();
+      expect(rows()).toBe(1);
     });
 
-    it("Add link, ⌖ to move one, × to remove one; Esc ends a pick", async () => {
+    it("a pressed ring sets its link where the map is tapped next; a tap far from track is refused and changes nothing; Esc lets go", async () => {
       const user = userEvent.setup();
       openPage("/shops/shop-ex-1");
       await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
-      await user.click(within(links()).getByRole("button", { name: "Add link" }));
-      expect(screen.getByText(/Click the map to set link 2/)).toBeInTheDocument();
+      const ring = await within(links()).findByRole("button", { name: "Move link 1" });
+      expect(screen.queryByRole("button", { name: "Click the map" })).not.toBeInTheDocument();
+
+      await user.click(ring);
+      expect(ring).toHaveAttribute("aria-pressed", "true");
+      expect(within(links()).getByText("Click the map to set link 1")).toBeInTheDocument();
+      await tapMap(user, -140, 10);
+      expect(await within(links()).findByText("No track near there")).toBeInTheDocument();
+      expect(within(links()).getByText("North Little Rock · FRA 600002")).toBeInTheDocument();
+      expect(ring).toHaveAttribute("aria-pressed", "true");
+
+      await tapMap(user, -92.3, 34.8);
+      // The fake's way in is the nearest node: here the same one, so nothing changes and the ring lets go.
+      await waitFor(() => expect(ring).toHaveAttribute("aria-pressed", "false"));
+      expect(within(links()).queryByText("No track near there")).not.toBeInTheDocument();
+
+      await user.click(ring);
+      expect(screen.getByRole("button", { name: "Click the map" })).toBeInTheDocument();
       await user.keyboard("{Escape}");
-      expect(screen.queryByText(/Click the map to set link 2/)).not.toBeInTheDocument();
+      expect(ring).toHaveAttribute("aria-pressed", "false");
+      expect(screen.queryByRole("button", { name: "Click the map" })).not.toBeInTheDocument();
+    });
 
-      await user.click(within(links()).getByRole("button", { name: "Add link" }));
-      setNextMapClick(-92.3, 34.8);
-      await user.click(screen.getByRole("button", { name: "Click the map" }));
-      expect(await within(links()).findByText("Two links: cars can pass through.")).toBeInTheDocument();
-      expect(within(links()).getAllByRole("listitem")).toHaveLength(2);
+    it("the ＋ adds link 2 where it is dropped, not at link 1's node; × and Delete remove links; Undo and Redo walk the changes; Save sends them in order", async () => {
+      const user = userEvent.setup();
+      const shop = fake.state.shops[0];
+      fake.state.shops[0] = { ...shop, location: { lon: -97.35, lat: 31.1 }, place: { ok: true, place: { ...resolvedOf(shop.place)!, lon: -97.35, lat: 31.1 } } };
+      openPage("/shops/shop-ex-1");
+      await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
+      expect(await within(links()).findByText("Temple · FRA 357961")).toBeInTheDocument();
+
+      // Dropped where link 1 joins: refused.
+      await dragOnMap(user, "Add link", -97.346, 31.095);
+      expect(await within(links()).findByText("Link 1 joins there")).toBeInTheDocument();
+      expect(rows()).toBe(1);
+      await dragOnMap(user, "Add link", -97.362, 31.121);
+      expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
+      expect(rows()).toBe(2);
       expect(within(links()).queryByRole("button", { name: "Add link" })).not.toBeInTheDocument();
-      expect(screen.getByText("Map: 6 shops, link 1, link 2")).toBeInTheDocument();
+      expect(screen.getByText("Map: 5 shops, link 1, link 2")).toBeInTheDocument();
 
-      await user.click(within(links()).getByRole("button", { name: "Move link 1" }));
-      setNextMapClick(-97.362, 31.121);
-      await user.click(screen.getByRole("button", { name: "Click the map" }));
+      await user.click(screen.getByRole("button", { name: "Undo link change" }));
+      await waitFor(() => expect(rows()).toBe(1));
+      await user.click(screen.getByRole("button", { name: "Redo link change" }));
       expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
 
-      await user.click(within(links()).getByRole("button", { name: "Remove link 2" }));
-      expect(within(links()).getAllByRole("listitem")).toHaveLength(1);
-      expect(within(links()).getByText("One link: cars leave the way they came in.")).toBeInTheDocument();
+      await user.click(within(links()).getByRole("button", { name: "Remove link 1" }));
+      expect(rows()).toBe(1);
+      expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Undo link change" }));
+      await waitFor(() => expect(rows()).toBe(2));
+      within(links()).getByRole("button", { name: "Move link 2" }).focus();
+      await user.keyboard("{Delete}");
+      expect(rows()).toBe(1);
+      await user.click(screen.getByRole("button", { name: "Undo link change" }));
+      await waitFor(() => expect(rows()).toBe(2));
+
+      await user.click(within(screen.getByRole("region", { name: "Edit shop" })).getByRole("button", { name: "Save shop" }));
+      await waitFor(() => expect(lastSent()).toMatchObject({ links: [357961, 358070] }));
     });
 
     it("a shop at a network node gets no suggestion", async () => {
@@ -231,9 +286,9 @@ describe("Shops screen", () => {
       fake.state.shops[0] = { ...shop, location: { fraId, railroad: null }, place: { ok: true, place: { ...resolvedOf(shop.place)!, fraId } } };
       openPage("/shops/shop-ex-1");
       await screen.findByRole("region", { name: "Edit shop" });
-      expect(await within(links()).findByText("No links: on the network at its node.")).toBeInTheDocument();
+      expect(await within(links()).findByRole("button", { name: "Add link" })).toBeInTheDocument();
       expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
-      expect(fake.calls.some((call) => call.path.startsWith("/api/places/way-in"))).toBe(false);
+      expect(fake.calls.some((call) => call.path.startsWith("/api/places/links"))).toBe(false);
     });
 
     it("a click on a shop square opens that shop", async () => {
@@ -243,18 +298,23 @@ describe("Shops screen", () => {
       await user.click(screen.getByRole("button", { name: "Shop square Kansas City, MO" }));
       expect(currentPath()).toBe("/shops/shop-ex-2");
     });
-  });
 
-  it("Pick on map scrolls the page to the top, as on a phone the panel may have slid up over the map", async () => {
-    const user = userEvent.setup();
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    openPage("/shops/new");
-    const form = await screen.findByRole("region", { name: "Add shop" });
-    scrollTo.mockClear();
-    await user.click(within(form).getByRole("button", { name: "Pick on map" }));
-    expect(screen.getByText(/Click the map to set the shop/)).toBeInTheDocument();
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
-    scrollTo.mockRestore();
+    it("pressing a ring scrolls the page to the top, as on a phone the panel may have slid up over the map", async () => {
+      const user = userEvent.setup();
+      const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+      const original = window.matchMedia;
+      pretendPhone(true);
+      try {
+        openPage("/shops/shop-ex-1");
+        await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
+        scrollTo.mockClear();
+        await user.click(await within(links()).findByRole("button", { name: "Add link" }));
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+      } finally {
+        scrollTo.mockRestore();
+        window.matchMedia = original;
+      }
+    });
   });
 
   it("Edit on a phone scrolls the form's top into view, as 'nearest' left its heading cut off", async () => {

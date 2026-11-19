@@ -1,7 +1,8 @@
 /**
  * The map as page tests see it: no WebGL, only what the map was asked to show, and buttons that do
- * what a click on the map would do (a click on empty map, on a grey route, on a shop square). The real
- * pills, turn-back marks, legend and map controls are drawn, so those are the real ones.
+ * what a click on the map would do (a click on empty map, on a grey route, on a shop square) or a drag
+ * of a handle to the next click's spot. The real pills, turn-back marks, legend and map controls are
+ * drawn, so those are the real ones.
  */
 import type { ReactElement } from "react";
 import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
@@ -25,7 +26,7 @@ function describe(scene: MapScene | null | undefined): string {
     const places = scene.pins.filter((pin) => pin.kind !== "shop").length;
     return `Map: route ${scene.selected?.id ?? "none"}, ${scene.alternatives.length} grey, ${places} pins, ${scene.pills.length} pills`;
   }
-  const links = scene.links.map((link, i) => `link ${i + 1}${link.suggested ? " suggested" : ""}`);
+  const links = scene.links.map((link, i) => `link ${i + 1}${link.look === "set" ? "" : ` ${link.look}`}`);
   return `Map: ${scene.pins.filter((pin) => pin.kind === "shop").length} shops${links.length ? `, ${links.join(", ")}` : ""}`;
 }
 
@@ -54,6 +55,22 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
             </button>
           ) : null,
         )}
+      {content?.handles?.length ? <p>Handles: {content.handles.map((handle) => handle.label).join(", ")}</p> : null}
+      {content?.handles?.map(
+        (handle) =>
+          handle.onDrop && (
+            <button
+              key={handle.id}
+              type="button"
+              onClick={() => {
+                handle.onDrag?.([nextClick.lon, nextClick.lat]);
+                handle.onDrop?.([nextClick.lon, nextClick.lat]);
+              }}
+            >
+              Drag {handle.label}
+            </button>
+          ),
+      )}
       {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} corner={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
       {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => <TurnBackMark key={i} turnBack={turnBack.turnBack} />)}
       <MapControls layers={layers} onLayers={onLayers} look={look} onZoom={() => {}} onFit={() => {}} history={content?.history ?? null} />

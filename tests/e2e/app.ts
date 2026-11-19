@@ -45,16 +45,30 @@ export const test = base.extend<{ problems: string[] }, { exampleShops: void }>(
 /** The app's map section. MapLibre also labels its own canvas "Map", so the name alone matches two. */
 export const mapRegion = (page: Page): Locator => page.locator("section.map");
 
-/** MapLibre's basemap canvas and, over it, the canvas deck.gl draws the routes and pins on. */
-export async function expectMapCanvases(page: Page): Promise<void> {
-  const map = mapRegion(page);
-  await expect(map.locator("canvas.maplibregl-canvas")).toBeVisible();
-  await expect.poll(async () => map.locator("canvas").count()).toBeGreaterThanOrEqual(2);
-  for (const canvas of await map.locator("canvas").all()) {
-    const box = await canvas.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(100);
-    expect(box?.height ?? 0).toBeGreaterThan(100);
-  }
+/** MapLibre's canvas, which deck.gl draws the network, the routes and the pins into, at a real size. */
+export async function expectMapCanvas(page: Page): Promise<void> {
+  const canvas = mapRegion(page).locator("canvas.maplibregl-canvas");
+  await expect(canvas).toBeVisible();
+  const box = await canvas.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(100);
+  expect(box?.height ?? 0).toBeGreaterThan(100);
+}
+
+/** The map style's layers, bottom to top, the deck.gl ones among them: read from react-map-gl's map in the page. */
+export async function mapLayerOrder(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    type Hook = { memoizedState?: { current?: { map?: { getMap?: () => { getLayersOrder: () => string[] } } } }; next?: Hook };
+    type Fiber = { memoizedState?: Hook; return?: Fiber };
+    const container = document.querySelector(".maplibregl-map") as (Element & Record<string, Fiber>) | null;
+    const key = container && Object.keys(container).find((name) => name.startsWith("__reactFiber"));
+    for (let fiber = key ? container[key] : undefined; fiber; fiber = fiber.return) {
+      for (let hook = fiber.memoizedState; hook && typeof hook === "object" && "next" in hook; hook = hook.next) {
+        const map = hook.memoizedState?.current?.map?.getMap?.();
+        if (map) return map.getLayersOrder();
+      }
+    }
+    throw new Error("No map on the page.");
+  });
 }
 
 /**

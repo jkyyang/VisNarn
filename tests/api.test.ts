@@ -102,8 +102,8 @@ describe("server", () => {
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
         "GET /api/places/suggest": () => s.api("GET /api/places/suggest", { query: { q: "temple", role: "position" } }),
         "POST /api/places/resolve": () => s.api("POST /api/places/resolve", { body: { ref: text("Temple, TX"), role: "position" } }),
-        "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5, on: "track" } }),
-        "GET /api/places/way-in": () => s.api("GET /api/places/way-in", { query: { lon: -97.34, lat: 31.09 } }),
+        "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } }),
+        "POST /api/places/links": () => s.api("POST /api/places/links", { body: { lon: -97.34, lat: 31.09, ends: [{ lon: -97.34, lat: 31.09 }] } }),
         "GET /api/shops": () => s.api("GET /api/shops"),
         "POST /api/shops": async () => {
           const shop = await s.api("POST /api/shops", { body: { name: "EXAMPLE smoke", code: "EX-SMOKE", location: text("Temple, TX"), links: [] } });
@@ -188,9 +188,9 @@ describe("Route screen: plan a route", () => {
     const fra = await t.api("POST /api/places/resolve", { body: { ref: text("FRA 358070"), role: "position" } });
     expect(fra).toMatchObject({ ok: true, place: { fraId: 358070, label: "Temple, TX" } });
 
-    expect(await t.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5, on: "track" } })).toMatchObject({ fraId: 358070, near: "Temple, TX", railroads: ["BNSF", "UP"] });
-    expect(await t.api("GET /api/places/nearest", { query: { lon: -90, lat: 25, withinKm: 5, on: "track" } })).toBeNull();
-    await expect(t.api("GET /api/places/nearest", { query: { lon: -90, lat: 95, withinKm: 5, on: "track" } })).rejects.toMatchObject({ kind: "invalid", field: "lat" });
+    expect(await t.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } })).toMatchObject({ fraId: 358070, near: "Temple, TX", railroads: ["BNSF", "UP"] });
+    expect(await t.api("GET /api/places/nearest", { query: { lon: -90, lat: 25, withinKm: 5 } })).toBeNull();
+    await expect(t.api("GET /api/places/nearest", { query: { lon: -90, lat: 95, withinKm: 5 } })).rejects.toMatchObject({ kind: "invalid", field: "lat" });
   });
 });
 
@@ -279,23 +279,27 @@ describe("Shops screen: a shop wired to the track", () => {
     await s.close();
   });
 
-  it("way-in names where the plant's track meets the main line; a route to the shop arrives over its link, and moves with it", async () => {
+  it("links name where the plant's track meets the main line, along the yard; a route to the shop arrives over its link, and moves with it", async () => {
     const sarnia = { kind: "coord", lon: -82.3376, lat: 42.9596 } as const;
-    expect(await s.api("GET /api/places/way-in", { query: { lon: sarnia.lon, lat: sarnia.lat } })).toMatchObject({ fraId: 628925, railroads: ["CN", "CPKC"] });
-    // A click beside the yard picks the main line's own node there for a link, where a plain click takes the yard track's.
-    const click = { lon: -82.3452, lat: 42.9556, withinKm: 5 };
-    expect(await s.api("GET /api/places/nearest", { query: { ...click, on: "mainline" } })).toMatchObject({ fraId: 628886, railroads: ["CN", "CPKC"] });
-    expect(await s.api("GET /api/places/nearest", { query: { ...click, on: "track" } })).toMatchObject({ fraId: 628887, yard: true });
+    const [suggested, west] = await s.api("POST /api/places/links", {
+      body: { lon: sarnia.lon, lat: sarnia.lat, ends: [{ lon: sarnia.lon, lat: sarnia.lat }, { fraId: 628886 as FraId }] },
+    });
+    expect(suggested).toMatchObject({ fraId: 628925, railroads: ["CN", "CPKC"], km: expect.closeTo(1.294, 2) });
+    expect(suggested!.path.length).toBeGreaterThan(2);
+    // The west end has no yard of the plant's between: the link there is the straight line.
+    expect(west).toMatchObject({ fraId: 628886, railroads: ["CN", "CPKC"], km: expect.closeTo(0.766, 2) });
+    expect(west!.path).toHaveLength(2);
     const body = { name: "EXAMPLE Sarnia plant", code: "EX-SAR", location: sarnia, links: [628925 as FraId] };
     const shop = await s.api("POST /api/shops", { body });
     const toShop = plan({ kind: "coord", lon: -79.7195, lat: 43.4169 }, { kind: "shop", shopId: shop.id });
     const east = routed(await s.api("POST /api/route", { body: toShop })).routes[0];
-    expect(east.km).toBeCloseTo(237.02, 1);
+    // The link is 1.29 km of the plant's own track (0.52 km as the crow flies).
+    expect(east.km).toBeCloseTo(237.79, 1);
     expect(east.legs.at(-1)!.path.slice(-2)).toEqual([[-82.33578, 42.95513], [sarnia.lon, sarnia.lat]]);
     await s.api("PUT /api/shops/:shopId", { params: { shopId: shop.id }, body: { ...body, links: [628886 as FraId] } });
-    const west = routed(await s.api("POST /api/route", { body: toShop })).routes[0];
-    expect(west.km).not.toBeCloseTo(east.km, 1);
-    expect(west.legs.at(-1)!.path.at(-1)).toEqual([sarnia.lon, sarnia.lat]);
+    const viaWest = routed(await s.api("POST /api/route", { body: toShop })).routes[0];
+    expect(viaWest.km).not.toBeCloseTo(east.km, 1);
+    expect(viaWest.legs.at(-1)!.path.at(-1)).toEqual([sarnia.lon, sarnia.lat]);
   });
 });
 

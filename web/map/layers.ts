@@ -1,9 +1,13 @@
 /** deck.gl layers for a scene: the rail network underneath, the scene on top. The only file that knows deck.gl layer classes. */
+import { PathStyleExtension, type PathStyleExtensionProps } from "@deck.gl/extensions";
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
+import type { LngLat } from "../../shared/geo.ts";
 import { isClassI, NETWORK_CLASSES, type NetworkClass } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { CLASS_LINES, type RGBA, type ThemeColors } from "../theme.ts";
 import { lineName } from "../words.ts";
+import { LABELS } from "./basemaps.ts";
+import { LINK_DASH } from "./config.ts";
 import type { MapScene, SceneLink, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
 export const LAYER = {
@@ -15,7 +19,9 @@ export const LAYER = {
   interchanges: "interchanges",
   pins: "pins",
   pinGlyphs: "pin-glyphs",
+  linksCasing: "shop-links-casing",
   links: "shop-links",
+  linksOffTrack: "shop-links-off-track",
 } as const;
 
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
@@ -43,39 +49,13 @@ export const PIN_ICONS = {
 const CHEVRON = { url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${PIN.edge}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`), width: 12, height: 12, anchorY: 6 };
 
 /** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
-const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3 };
+const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3, linkCasing: 2 };
 
-/** A suggested link's alpha, of 255: fainter than a link the shop has. */
+/** A suggested link's alpha, of 255, and a drag's preview of one: fainter than a link the shop has. */
 const SUGGESTED_ALPHA = 110;
 
 /** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
 const angleOf = (bearingDeg: number) => 90 - bearingDeg;
-
-/**
- * The mainline, one layer per class, each shown only while `drawn` lists its class. Class I is
- * coloured by owner; regional, short-line and passenger track is thinner and fainter, in the colour
- * those sections have in a route. Hidden layers stay mounted so showing one again does not
- * re-tessellate megabytes of track; all dim when a route needs the attention.
- */
-export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], dimmed: boolean, colors: ThemeColors): LayersList {
-  // Class I last, on top.
-  return [...NETWORK_CLASSES].reverse().map(
-    (c) =>
-      new GeoJsonLayer<{ owner: string }>({
-        id: `network-${c}`,
-        data: network[c],
-        visible: drawn.includes(c),
-        opacity: (dimmed ? 0.35 : 0.8) * (c === "class_i" ? 1 : 0.7),
-        filled: false,
-        lineWidthUnits: "pixels",
-        lineCapRounded: true,
-        lineJointRounded: true,
-        getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
-        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
-        updateTriggers: { getLineColor: colors },
-      }),
-  );
-}
 
 /**
  * deck.gl redraws a layer's data whenever it is a new array. The big arrays derived from a scene are
@@ -90,6 +70,36 @@ function once<K extends object, V>(): (key: K, make: () => V) => V {
 }
 const stopPinsOf = once<ScenePin[], ScenePin[]>();
 const alternativeLegsOf = once<SceneRoute[], AltLeg[]>();
+
+/** deck.gl 9.0 types have no `beforeId`; a spread passes it unchecked. The network goes under the basemap's place names. */
+const UNDER_LABELS = { beforeId: LABELS };
+
+/**
+ * The mainline, one layer per class, each shown only while `drawn` lists its class. Class I is
+ * coloured by owner; regional, short-line and passenger track is thinner and fainter, in the colour
+ * those sections have in a route. Hidden layers stay mounted so showing one again does not
+ * re-tessellate megabytes of track; all dim when a route needs the attention.
+ */
+export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], dimmed: boolean, colors: ThemeColors): LayersList {
+  // Class I last, on top.
+  return [...NETWORK_CLASSES].reverse().map(
+    (c) =>
+      new GeoJsonLayer<{ owner: string }>({
+        ...UNDER_LABELS,
+        id: `network-${c}`,
+        data: network[c],
+        visible: drawn.includes(c),
+        opacity: (dimmed ? 0.35 : 0.8) * (c === "class_i" ? 1 : 0.7),
+        filled: false,
+        lineWidthUnits: "pixels",
+        lineCapRounded: true,
+        lineJointRounded: true,
+        getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
+        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
+        updateTriggers: { getLineColor: colors },
+      }),
+  );
+}
 
 type Leg = SceneRoute["legs"][number];
 type Chevron = SceneRoute["chevrons"][number];
@@ -165,28 +175,49 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
   ];
 }
 
-/** The edited shop's links: thin straight lines in the route colour, a suggestion fainter. */
-function linkLayer(links: SceneLink[], colors: ThemeColors): PathLayer<SceneLink> {
-  return new PathLayer<SceneLink>({
-    id: LAYER.links,
-    data: links,
-    getPath: (link) => link.path,
-    getColor: (link) => (link.suggested ? fade(colors.route, SUGGESTED_ALPHA) : colors.route),
-    getWidth: ROUTE_PX.link,
-    ...ROUND,
-    updateTriggers: { getColor: colors },
-  });
+type LinkPiece = { path: LngLat[]; look: SceneLink["look"] };
+const DASHED = new PathStyleExtension({ dash: true });
+
+/** Each link in two pieces: off the track (shop to its yard, the first step) and on it (the rest, when there is a rest). */
+const piecesOf = once<SceneLink[], { off: LinkPiece[]; on: LinkPiece[] }>();
+
+/**
+ * The edited shop's links, thin in the route colour: on the track solid over a casing, off it dashed. A suggestion
+ * and a drag's preview are fainter; a drop that would be refused is the risk colour.
+ */
+function linkLayers(links: SceneLink[], colors: ThemeColors): LayersList {
+  const { off, on } = piecesOf(links, () => ({
+    off: links.map((link) => ({ path: link.path.slice(0, 2), look: link.look })),
+    on: links.filter((link) => link.path.length > 2).map((link) => ({ path: link.path.slice(1), look: link.look })),
+  }));
+  const colorOf = (piece: LinkPiece) => (piece.look === "refused" ? colors.risk : piece.look === "set" ? colors.route : fade(colors.route, SUGGESTED_ALPHA));
+  const common = { getPath: (piece: LinkPiece) => piece.path, ...ROUND, updateTriggers: { getColor: colors } };
+  return [
+    new PathLayer<LinkPiece>({ id: LAYER.linksCasing, data: on, getColor: colors.casing, getWidth: ROUTE_PX.link + ROUTE_PX.linkCasing, ...common }),
+    new PathLayer<LinkPiece>({ id: LAYER.links, data: on, getColor: colorOf, getWidth: ROUTE_PX.link, ...common }),
+    new PathLayer<LinkPiece, PathStyleExtensionProps>({
+      id: LAYER.linksOffTrack,
+      data: off,
+      getColor: colorOf,
+      getWidth: ROUTE_PX.link,
+      ...common,
+      capRounded: false,
+      getDashArray: LINK_DASH,
+      dashJustified: true,
+      extensions: [DASHED],
+    }),
+  ];
 }
 
 /**
  * Bottom to top, by scene kind:
  *   route  alternatives (thin, grey) · selected casing · selected route by railroad · chevrons ·
  *          interchange rings · pins
- *   shops  the edited shop's links · shop squares and pins
+ *   shops  the edited shop's links (casing, on track, off track) · the other shops' squares
  * The route pills and the turn-back markers are DOM, over all of these (./RouteMarks.tsx).
  */
 export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number): LayersList {
-  if (scene.kind === "shops") return [linkLayer(scene.links, colors), ...pinLayers(scene.pins, colors)];
+  if (scene.kind === "shops") return [...linkLayers(scene.links, colors), ...pinLayers(scene.pins, colors)];
 
   const alternatives = alternativeLegsOf(scene.alternatives, () => scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id }))));
   return [
