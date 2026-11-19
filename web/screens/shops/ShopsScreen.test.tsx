@@ -42,6 +42,18 @@ describe("Shops screen", () => {
     expect(screen.getByText("Map: 6 shops")).toBeInTheDocument();
   });
 
+  it("on the public site the list only shows and selects: no Add shop, ⋯ or Edit, and an edit link opens no form", async () => {
+    fake.state.readOnly = true;
+    const user = userEvent.setup();
+    openPage("/shops/shop-ex-1");
+    await screen.findByText("EX-NLR-01");
+    const nlr = within(list()).getByRole("button", { name: /North Little Rock, AR/ });
+    await user.click(nlr);
+    expect(nlr).toHaveAttribute("aria-pressed", "true");
+    expect(within(list()).getAllByRole("button").every((button) => button.classList.contains("shop-pick"))).toBe(true);
+    expect(screen.queryByRole("region", { name: "Edit shop" })).not.toBeInTheDocument();
+  });
+
   it("search keeps the shops whose name or code matches", async () => {
     const user = userEvent.setup();
     openPage("/shops");

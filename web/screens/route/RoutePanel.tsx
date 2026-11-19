@@ -38,9 +38,9 @@ export interface RoutePanelProps {
   saved: SavedRoute[];
   /** The saved route this plan is, when it is one. */
   open: SavedRoute | null;
-  /** `routeString`: the compact route string of the chosen route, saved with it. */
-  onSave: (name: string, routeString: string) => Promise<void>;
-  onRemoveSaved: (id: SavedRouteId) => Promise<void>;
+  /** `routeString`: the compact route string of the chosen route, saved with it. Null on the public site, as is `onRemoveSaved`. */
+  onSave: ((name: string, routeString: string) => Promise<void>) | null;
+  onRemoveSaved: ((id: SavedRouteId) => Promise<void>) | null;
   onNew: () => void;
   unit: DistanceUnit;
   /** Undo and redo of the plan's changes. */
@@ -513,7 +513,8 @@ function RouteName(props: { name: string; onRename: (name: string) => Promise<vo
 
 /**
  * Saved routes: folded to how many; open, a row each to open it (the open one renamed in place), with a delete on the hovered row.
- * A rename or delete the server refuses turns that row's edge red, with why in its tooltip.
+ * A rename or delete the server refuses turns that row's edge red, with why in its tooltip. On the public site (no
+ * `onRename`, `onRemove`) every row only opens its route.
  * `justSaved`: opens unfolded, with the open route's row in view and lit once.
  */
 function SavedList(props: {
@@ -521,15 +522,16 @@ function SavedList(props: {
   current: SavedRouteId | null;
   unfolded: boolean;
   justSaved: boolean;
-  onRename: (name: string) => Promise<void>;
-  onRemove: (id: SavedRouteId) => Promise<void>;
+  onRename: ((name: string) => Promise<void>) | null;
+  onRemove: ((id: SavedRouteId) => Promise<void>) | null;
 }): ReactElement {
+  const { onRename, onRemove } = props;
   const [lit, setLit] = useState(props.justSaved);
   const [confirming, setConfirming] = useState<SavedRouteId | null>(null);
   // The row whose rename or delete the server refused: its edge is red, and why is its tooltip.
   const [wrong, setWrong] = useState<{ id: SavedRouteId; why: string } | null>(null);
   const remove = (id: SavedRouteId) =>
-    props.onRemove(id).then(
+    onRemove?.(id).then(
       () => setConfirming(null),
       (e: unknown) => setWrong({ id, why: errorText(e, "Could not delete the route.") }),
     );
@@ -548,16 +550,18 @@ function SavedList(props: {
               <ConfirmDelete question="Delete this route?" label={`Delete ${route.name}`} onConfirm={() => void remove(route.id)} onKeep={() => setConfirming(null)} />
             ) : (
               <>
-                {route.id === props.current ? (
-                  <RouteName name={route.name} onRename={props.onRename} onError={(why) => setWrong(why ? { id: route.id, why } : null)} />
+                {route.id === props.current && onRename ? (
+                  <RouteName name={route.name} onRename={onRename} onError={(why) => setWrong(why ? { id: route.id, why } : null)} />
                 ) : (
                   <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })}>
                     {route.name}
                   </a>
                 )}
-                <button type="button" className="icon-btn remove-btn" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
-                  <Cross />
-                </button>
+                {onRemove && (
+                  <button type="button" className="icon-btn remove-btn" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
+                    <Cross />
+                  </button>
+                )}
               </>
             )}
           </li>
@@ -611,10 +615,11 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
     });
   // Each Save route counts up, so Saved routes opens afresh on the row saved.
   const [saves, setSaves] = useState(0);
-  const save = (as: string) => (string ? props.onSave(as, compactRouteString(string)) : Promise.resolve());
+  const { onSave } = props;
+  const save = onSave && ((as: string) => (string ? onSave(as, compactRouteString(string)) : Promise.resolve()));
   const saveNow = () => {
     setSaveError(null);
-    save(name).then(
+    save?.(name).then(
       () => setSaves((n) => n + 1),
       (e: unknown) => setSaveError(errorText(e, "Could not save the route.")),
     );
@@ -640,7 +645,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
           items={(close) => (
             <>
               <MenuItem label="Reverse route" disabled={placesSet < 2} onSelect={() => (close(), dispatch({ type: "reverse" }))} />
-              <MenuItem label={dirty || !routes ? "Save route" : "Saved"} disabled={!dirty} onSelect={() => (close(), saveNow())} />
+              {save && <MenuItem label={dirty || !routes ? "Save route" : "Saved"} disabled={!dirty} onSelect={() => (close(), saveNow())} />}
               <MenuItem label="Copy route string" disabled={!string} onSelect={() => (close(), string && void copy(shownRouteString(string)))} />
               <MenuItem label="New route" disabled={empty} onSelect={() => (close(), props.onNew())} />
             </>

@@ -10,7 +10,7 @@ import type { LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, type PlaceSuggestion, type ShopView } from "../../../shared/places.ts";
 import { placeKind } from "../../../shared/plans.ts";
 import { go, HOME, type Screen } from "../../app/routes.ts";
-import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
+import { removeRoute, saveRoute, usePlannedRoute, useReadOnly, useSavedRoutes, useShops } from "../../data/hooks.ts";
 import { SELECTED_ZOOM } from "../../map/config.ts";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
 import { chosenRoute, planScene, type Picked, type SceneTarget } from "../../map/scene.ts";
@@ -34,6 +34,7 @@ export function RouteWorkspace({ screen, onFind }: {
   const plan = session.plan.present;
   const planned = usePlannedRoute(isEmpty(plan) ? null : plan);
   const shops = useShops();
+  const readOnly = useReadOnly();
   const [clickError, setClickError] = useState<string | null>(null);
   const [flash, setFlash] = useState<MapFlash | undefined>(undefined);
   const [unit] = useDistanceUnit();
@@ -110,8 +111,8 @@ export function RouteWorkspace({ screen, onFind }: {
         onSelect={(id) => go({ ...screen, option: id }, { replace: true })}
         saved={savedRoutes}
         open={saved}
-        onSave={onSave}
-        onRemoveSaved={async (id) => void (await removeRoute(id))}
+        onSave={readOnly ? null : onSave}
+        onRemoveSaved={readOnly ? null : async (id) => void (await removeRoute(id))}
         onNew={onNew}
         unit={unit}
         history={{

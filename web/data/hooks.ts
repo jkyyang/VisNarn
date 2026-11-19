@@ -12,6 +12,11 @@ export type { AppError } from "../../shared/app.ts";
 export { fresh, type QueryState } from "./query.ts";
 
 // ---- reads ----
+/** On the public site nothing stored can be changed, so the page shows no control that would change it. True until the server says. */
+export function useReadOnly(): boolean {
+  const site = useQuery("GET /api/site", {});
+  return site.status !== "ready" || site.data.readOnly;
+}
 export const useShops = () => useQuery("GET /api/shops", {});
 export const useSavedRoutes = () => useQuery("GET /api/saved-routes", {});
 

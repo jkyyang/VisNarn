@@ -4,7 +4,7 @@ import { roundLngLat, type LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopId, type ShopLink, type ShopView } from "../../../shared/places.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
-import { fresh, importShops, removeShop, saveShop, shopLinkAt, useShopLinks, useShops } from "../../data/hooks.ts";
+import { fresh, importShops, removeShop, saveShop, shopLinkAt, useReadOnly, useShopLinks, useShops } from "../../data/hooks.ts";
 import { SELECTED_ZOOM, SHOP_ZOOM } from "../../map/config.ts";
 import type { MapHandle } from "../../map/MapHandles.tsx";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
@@ -31,6 +31,7 @@ export function ShopsScreen(props: {
 }): ReactElement {
   const { screen } = props;
   const shops = useShops();
+  const readOnly = useReadOnly();
   const flow = useImport(importShops);
   const [unit] = useDistanceUnit();
   // View state of this screen, for the form it was made in: the links with their undo history (null: the saved ones),
@@ -72,7 +73,7 @@ export function ShopsScreen(props: {
   const q = props.query.trim().toLowerCase();
   const listed = q ? list.filter((shop) => shop.name.toLowerCase().includes(q) || (shop.code ?? "").toLowerCase().includes(q)) : list;
   const selectedAt = resolvedOf(list.find((shop) => shop.id === props.selected)?.place);
-  const editing = screen.edit === "new" ? "new" : (list.find((shop) => shop.id === screen.edit) ?? null);
+  const editing = readOnly ? null : screen.edit === "new" ? "new" : (list.find((shop) => shop.id === screen.edit) ?? null);
   const shop = editing === "new" ? null : editing;
   const saved = shop && resolvedOf(shop.place);
   const place = placed ?? saved;
@@ -252,9 +253,9 @@ export function ShopsScreen(props: {
           lit={flow.saved?.ready ?? NO_SHOPS}
           onLit={flow.dismiss}
           onSelect={(shop) => props.onSelect(shop.id)}
-          onEdit={(shop) => go({ name: "shops", edit: shop.id })}
-          onAdd={() => go({ name: "shops", edit: "new" })}
-          onImport={flow.choose}
+          onEdit={readOnly ? null : (shop) => go({ name: "shops", edit: shop.id })}
+          onAdd={readOnly ? null : () => go({ name: "shops", edit: "new" })}
+          onImport={readOnly ? null : flow.choose}
           importWrong={flow.preview ? null : flow.error}
         />
       </div>

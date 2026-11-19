@@ -396,6 +396,26 @@ describe("Route planner", () => {
     await waitFor(() => expect(currentPath()).toBe("/route"));
   });
 
+  it("on the public site a saved route opens, plans and copies, with nothing to save, rename or delete", async () => {
+    fake.state.readOnly = true;
+    fake.state.savedRoutes.push({
+      id: "route-9" as SavedRouteId,
+      name: "EXAMPLE Temple run",
+      plan: { places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" as ShopId }], include: DEFAULT_INCLUDE, turnAtStops: false },
+      option: null,
+      routeString: "",
+    });
+    const user = userEvent.setup();
+    openPage("/route/saved/route-9");
+    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    await user.click(screen.getByRole("button", { name: /^Saved routes/ }));
+    expect(screen.getByRole("link", { name: "EXAMPLE Temple run" })).toHaveAttribute("href", "/route/saved/route-9");
+    expect(screen.queryByRole("textbox", { name: "Route name" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete EXAMPLE Temple run" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Route actions" }));
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual(["Reverse route", "Copy route string", "New route"]);
+  });
+
   it("Enter takes the highlighted suggestion, else the first one, else the text as typed", async () => {
     const user = userEvent.setup();
     openPage("/route");

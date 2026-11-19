@@ -43,7 +43,8 @@ function CarrierDots({ railroads }: { railroads: readonly Railroad[] }): ReactEl
 /**
  * The shops: a count, Add shop and the ⋯ menu (Import CSV) over one row per shop (its owner's mark, name, code and
  * the name's note in brackets, carriers). A row's click selects the shop and the map flies there; Edit shows on the
- * hovered or selected row. The rows an import just saved light up once.
+ * hovered or selected row. The rows an import just saved light up once. On the public site (no `onAdd`, `onEdit`,
+ * `onImport`) the list has none of those.
  */
 export function ShopList(props: {
   shops: ShopView[];
@@ -55,23 +56,26 @@ export function ShopList(props: {
   lit: ShopView[];
   onLit: () => void;
   onSelect: (shop: ShopView) => void;
-  onEdit: (shop: ShopView) => void;
-  onAdd: () => void;
-  onImport: (file: File | undefined) => void;
+  onEdit: ((shop: ShopView) => void) | null;
+  onAdd: (() => void) | null;
+  onImport: ((file: File | undefined) => void) | null;
   /** Why the file chosen could not be read: ⋯ turns red. */
   importWrong: string | null;
 }): ReactElement {
+  const { onEdit } = props;
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
   const count = props.shops.length === props.total ? plural(props.total, "shop") : `${props.shops.length} of ${plural(props.total, "shop")}`;
   return (
     <section className="shop-list" aria-label="Shop list">
       <div className="list-bar">
         <span className="list-count">{count}</span>
-        <button type="button" className="btn btn--primary btn--pill" onClick={props.onAdd} aria-pressed={props.editing === "new"}>
-          <Plus size={14} />
-          Add shop
-        </button>
-        <ShopMenu onImport={props.onImport} wrong={props.importWrong} />
+        {props.onAdd && (
+          <button type="button" className="btn btn--primary btn--pill" onClick={props.onAdd} aria-pressed={props.editing === "new"}>
+            <Plus size={14} />
+            Add shop
+          </button>
+        )}
+        {props.onImport && <ShopMenu onImport={props.onImport} wrong={props.importWrong} />}
       </div>
       <ul className="shop-rows">
         {props.shops.map((shop) => {
@@ -93,9 +97,11 @@ export function ShopList(props: {
                 </span>
                 {shop.place.ok && <CarrierDots railroads={shop.place.place.railroads} />}
               </button>
-              <button type="button" className="btn btn--pill shop-edit" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => props.onEdit(shop)}>
-                {editing ? "Editing" : "Edit"}
-              </button>
+              {onEdit && (
+                <button type="button" className="btn btn--pill shop-edit" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => onEdit(shop)}>
+                  {editing ? "Editing" : "Edit"}
+                </button>
+              )}
             </li>
           );
         })}
