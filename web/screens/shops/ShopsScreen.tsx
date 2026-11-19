@@ -1,7 +1,7 @@
 /** The Shops screen: Your shops (one selected, the map on it), the form for one with its track links, and the shop list import. */
 import { useEffect, useState, type ReactElement } from "react";
 import { roundLngLat, type LngLat } from "../../../shared/geo.ts";
-import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopId, type ShopLink } from "../../../shared/places.ts";
+import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopId, type ShopLink, type ShopView } from "../../../shared/places.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
 import { fresh, importShops, removeShop, saveShop, shopLinkAt, useShopLinks, useShops } from "../../data/hooks.ts";
@@ -16,6 +16,8 @@ import { ImportPreview, ShopForm, ShopLinks, ShopList, useImport } from "./Shops
 
 /** A link being dragged: which (0-based, the next free one for a new link), and where its ring is. */
 type Drag = { slot: number; at: LngLat };
+
+const NO_SHOPS: ShopView[] = [];
 
 /** Links nobody has changed here: the shop's saved ones. */
 const UNCHANGED: History<FraId[] | null> = { past: [], present: null, future: [] };
@@ -212,17 +214,20 @@ export function ShopsScreen(props: {
     <div className="shops-screen">
       {header}
       <div className={`shops-body${editing ? " has-form" : ""}`}>
+        <ImportPreview flow={flow} />
         <ShopList
           shops={listed}
           total={list.length}
           selected={props.selected}
           editing={editing}
+          lit={flow.saved?.ready ?? NO_SHOPS}
+          onLit={flow.dismiss}
           onSelect={(shop) => props.onSelect(shop.id)}
           onEdit={(shop) => go({ name: "shops", edit: shop.id })}
           onAdd={() => go({ name: "shops", edit: "new" })}
           onImport={flow.choose}
+          importWrong={flow.preview ? null : flow.error}
         />
-        <ImportPreview flow={flow} />
         {editing && (
           <ShopForm
             key={shop?.id ?? "new"}

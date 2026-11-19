@@ -50,7 +50,6 @@
   /* Behind the map while its tiles load. */
   --bg: #d4dde7;
   --risk: #c4161c;
-  --ok: #1e7e34;
   /* A turn-back: amber, with a shape (the ↩ disc) so colour is never the only cue. */
   --turn: #b06000;
   /* The map's own marks: the edge round lines, markers and names; routes not selected; the network, one quiet line for every carrier. */
@@ -88,7 +87,6 @@
   --scrollbar: rgba(255, 255, 255, 0.2);
   --bg: #0a0d13;
   --risk: #ff6961;
-  --ok: #30d158;
   --turn: #e8890c;
   --casing: #0a0d14;
   --alt-route: #737980;
@@ -198,10 +196,6 @@ h2 {
 }
 .page-error {
   padding: 24px;
-}
-.ok-note {
-  margin: 0;
-  color: var(--ok);
 }
 
 /* ---- Kit: one rule per shared look ---- */
@@ -1174,8 +1168,8 @@ input[aria-invalid="true"] {
 .saved-row.is-current {
   background: var(--surface-2);
 }
-/* The row Save route just wrote: an accent edge that fades. */
-.saved-row.is-lit {
+/* The row just saved (a route, a shop of an import): an accent edge that fades. */
+.is-lit {
   animation: saved-lit 1200ms var(--ease);
 }
 @keyframes saved-lit {

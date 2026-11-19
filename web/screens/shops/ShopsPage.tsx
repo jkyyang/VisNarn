@@ -43,7 +43,7 @@ function CarrierDots({ railroads }: { railroads: readonly Railroad[] }): ReactEl
 /**
  * The shops: a count, Add shop and the ⋯ menu (Import CSV) over one row per shop (its owner's mark, name, code and
  * the name's note in brackets, carriers). A row's click selects the shop and the map flies there; Edit shows on the
- * hovered or selected row.
+ * hovered or selected row. The rows an import just saved light up once.
  */
 export function ShopList(props: {
   shops: ShopView[];
@@ -51,10 +51,15 @@ export function ShopList(props: {
   total: number;
   selected: ShopId | null;
   editing: ShopView | "new" | null;
+  /** The shops an import just saved; `onLit` once their rows have lit up. */
+  lit: ShopView[];
+  onLit: () => void;
   onSelect: (shop: ShopView) => void;
   onEdit: (shop: ShopView) => void;
   onAdd: () => void;
   onImport: (file: File | undefined) => void;
+  /** Why the file chosen could not be read: ⋯ turns red. */
+  importWrong: string | null;
 }): ReactElement {
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
   const count = props.shops.length === props.total ? plural(props.total, "shop") : `${props.shops.length} of ${plural(props.total, "shop")}`;
@@ -66,7 +71,7 @@ export function ShopList(props: {
           <Plus size={14} />
           Add shop
         </button>
-        <ShopMenu onImport={props.onImport} />
+        <ShopMenu onImport={props.onImport} wrong={props.importWrong} />
       </div>
       <ul className="shop-rows">
         {props.shops.map((shop) => {
@@ -74,7 +79,12 @@ export function ShopList(props: {
           const editing = shop.id === editingId;
           const [name, note] = nameAndNote(shop.name);
           return (
-            <li key={shop.id} className={`shop-row${selected || editing ? " is-selected" : ""}${shop.place.ok ? "" : " is-off"}`} title={shop.place.ok ? undefined : "Not on the network"}>
+            <li
+              key={shop.id}
+              className={`shop-row${selected || editing ? " is-selected" : ""}${shop.place.ok ? "" : " is-off"}${props.lit.some((saved) => saved.id === shop.id) ? " is-lit" : ""}`}
+              title={shop.place.ok ? undefined : "Not on the network"}
+              onAnimationEnd={props.onLit}
+            >
               <button type="button" className="shop-pick" aria-pressed={selected} onClick={() => props.onSelect(shop)}>
                 <OwnerGlyph owner={ownerOf(shop)} />
                 <span className="shop-text">
@@ -96,11 +106,12 @@ export function ShopList(props: {
 }
 
 /** ⋯: what else the list can do. Import CSV opens the file chooser; the preview shows above the list. */
-function ShopMenu(props: { onImport: (file: File | undefined) => void }): ReactElement {
+function ShopMenu(props: { onImport: (file: File | undefined) => void; wrong: string | null }): ReactElement {
   const fileId = useId();
   return (
     <Menu
       label="More actions"
+      wrong={props.wrong}
       items={(close) => (
         <label role="menuitem" tabIndex={0} htmlFor={fileId} className="menu-item" onClick={() => requestAnimationFrame(close)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), e.currentTarget.click())}>
           Import CSV
@@ -313,13 +324,20 @@ export function useImport(run: (request: ImportRequest) => Promise<ImportReport<
 
 /**
  * A shop list being imported, from the ⋯ menu's Import CSV: how many rows are ready, and each row that will not be
- * saved, with why; then Save. Afterwards, how many were saved, or why it failed.
+ * saved, with why; then Save. A save the server refuses turns Save's edge red, with why in its tooltip. On screen the
+ * saved rows light up in the list, and a file that cannot be read turns ⋯ red; screen readers hear both here.
  */
-export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): ReactElement | null {
+export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): ReactElement {
   const { flow } = props;
-  if (!flow.preview && !flow.saved && !flow.error && !flow.busy) return null;
+  const said = (
+    <span className="visually-hidden" role={flow.error ? "alert" : "status"}>
+      {flow.error ?? (flow.saved ? `Saved ${plural(flow.saved.ready.length, "shop")}.` : "")}
+    </span>
+  );
+  if (!flow.preview && !flow.busy) return said;
   return (
     <section className="group import-card" aria-label="Import shop list">
+      {said}
       {flow.busy && !flow.preview && <p className="muted">Reading the file…</p>}
       {flow.preview && (
         <div className="import-preview" role="region" aria-label="Import preview">
@@ -347,21 +365,11 @@ export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): Re
             <button type="button" className="btn" onClick={flow.cancel}>
               Cancel
             </button>
-            <button type="button" className="btn btn--primary" disabled={!flow.preview.report.ready.length || flow.busy} onClick={flow.commit}>
+            <button type="button" className={`btn btn--primary${flow.error ? " is-wrong" : ""}`} title={flow.error ?? undefined} disabled={!flow.preview.report.ready.length || flow.busy} onClick={flow.commit}>
               Save {plural(flow.preview.report.ready.length, "shop")}
             </button>
           </div>
         </div>
-      )}
-      {flow.saved && (
-        <p className="ok-note" role="status">
-          Saved {plural(flow.saved.ready.length, "shop")}.
-        </p>
-      )}
-      {flow.error && (
-        <p className="error" role="alert">
-          {flow.error}
-        </p>
       )}
     </section>
   );

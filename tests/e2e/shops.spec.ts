@@ -103,7 +103,8 @@ test.describe("Shops", () => {
     await expect(row("Omaha test shop")).toHaveCount(0);
 
     await preview.getByRole("button", { name: "Save 2 shops" }).click();
-    await expect(card.getByText("Saved 2 shops.")).toBeVisible();
+    // The card goes; the rows saved are in the list, lit once.
+    await expect(card).toHaveCount(0);
     await expect(row("Omaha test shop")).toBeVisible();
     await expect(row("Denver test shop")).toBeVisible();
     await expect(row("Shop in the sea")).toHaveCount(0);

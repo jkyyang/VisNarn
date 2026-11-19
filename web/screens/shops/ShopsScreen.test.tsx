@@ -344,7 +344,7 @@ describe("Shops screen", () => {
     await waitFor(() => expect(currentPath()).toBe("/shops"));
   });
 
-  it("the import preview lists the rows that will not be saved, with why; then saves the rest", async () => {
+  it("the import preview lists the rows that will not be saved, with why; then saves the rest, and their rows light up", async () => {
     const user = userEvent.setup();
     openPage("/shops");
     await screen.findByText("EX-NLR-01");
@@ -358,12 +358,14 @@ describe("Shops screen", () => {
     expect(fake.state.shops).toHaveLength(6);
 
     await user.click(within(preview).getByRole("button", { name: "Save 2 shops" }));
-    expect(await within(card).findByText("Saved 2 shops.")).toBeInTheDocument();
-    expect(await screen.findByText("Shop at Omaha")).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: "" })).toHaveTextContent("Saved 2 shops.");
+    expect((await screen.findByText("Shop at Omaha")).closest("li")).toHaveClass("is-lit");
+    expect(screen.getByText("EX-NLR-01").closest("li")).not.toHaveClass("is-lit");
+    expect(card).not.toBeInTheDocument();
     expect(fake.state.shops).toHaveLength(8);
   });
 
-  it("a second file that fails replaces the first file's preview, so Save cannot write the old file", async () => {
+  it("a second file that fails replaces the first file's preview, so Save cannot write the old file; ⋯ turns red and says why", async () => {
     const user = userEvent.setup();
     openPage("/shops");
     await screen.findByText("EX-NLR-01");
@@ -373,9 +375,11 @@ describe("Shops screen", () => {
     expect(await within(card).findByRole("region", { name: "Import preview" })).toHaveTextContent("good.csv · 1 ready");
 
     await importFile(user, new File([""], "empty.csv", { type: "text/csv" }));
-    expect(await within(card).findByRole("alert")).toBeInTheDocument();
-    expect(within(card).queryByRole("region", { name: "Import preview" })).not.toBeInTheDocument();
-    expect(within(card).queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();
+    const why = (await screen.findByRole("alert")).textContent;
+    expect(why).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More actions" })).toHaveAttribute("title", why);
+    expect(card).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();
     expect(fake.state.shops).toHaveLength(6);
   });
 });
