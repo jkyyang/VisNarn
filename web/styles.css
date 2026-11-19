@@ -494,7 +494,6 @@ input[aria-invalid="true"] {
 :root:not([data-input="pointer"]) .place-row:has(input:focus-visible) {
   box-shadow: inset var(--focus-ring);
 }
-.alert,
 .confirm {
   display: flex;
   flex-wrap: wrap;
@@ -505,7 +504,6 @@ input[aria-invalid="true"] {
   background: var(--surface-2);
   color: var(--text);
 }
-.alert > :first-child,
 .confirm > span {
   flex: 1 1 auto;
   margin: 0;

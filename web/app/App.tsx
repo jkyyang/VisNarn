@@ -61,13 +61,14 @@ export default function App(): ReactElement {
               search={<PanelSearch chosen={chosen} problem={found && !found.ok ? found.problem.message : null} text={text} onText={setText} onChoose={choose} />}
             />
             <div className="panel-body">
+              {/* The server did not answer: a red edge, with why on hover; screen readers hear it. */}
               {shops.status === "error" && (
-                <div className="alert server-note" role="alert">
-                  <span>{shops.error.message}</span>
-                  <button type="button" className="btn" onClick={shops.retry}>
-                    Try again
-                  </button>
-                </div>
+                <button type="button" className="btn is-wrong server-note" title={shops.error.message} onClick={shops.retry}>
+                  Try again
+                  <span className="visually-hidden" role="alert">
+                    {shops.error.message}
+                  </span>
+                </button>
               )}
               <ErrorBoundary key={screen.name} fallback={<p className="error page-error">This screen could not be shown. Go back or reload the page.</p>}>
                 <ScreenView screen={screen} query={text ?? ""} selectedShop={selectedShop} onSelectShop={setSelectedShop} onFind={choose} />

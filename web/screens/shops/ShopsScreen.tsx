@@ -105,14 +105,8 @@ export function ShopsScreen(props: {
     return (
       <div className="shops-screen">
         {header}
-        {shops.status === "error" ? (
-          <div className="alert" role="alert">
-            <p>Couldn't load your shops. {shops.error.message}</p>
-            <button type="button" className="btn" onClick={shops.retry}>
-              Try again
-            </button>
-          </div>
-        ) : (
+        {/* When they cannot be read, the page says so above every screen (web/app/App.tsx). */}
+        {shops.status !== "error" && (
           <p className="panel-note" role="status">
             Loading your shops…
           </p>

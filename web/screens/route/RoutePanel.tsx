@@ -481,6 +481,7 @@ function RouteName(props: { name: string; onRename: (name: string) => Promise<vo
 
 /**
  * Saved routes: folded to how many; open, a row each to open it (the open one renamed in place), with a delete on the hovered row.
+ * A rename or delete the server refuses turns that row's edge red, with why in its tooltip.
  * `justSaved`: opens unfolded, with the open route's row in view and lit once.
  */
 function SavedList(props: {
@@ -493,11 +494,12 @@ function SavedList(props: {
 }): ReactElement {
   const [lit, setLit] = useState(props.justSaved);
   const [confirming, setConfirming] = useState<SavedRouteId | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The row whose rename or delete the server refused: its edge is red, and why is its tooltip.
+  const [wrong, setWrong] = useState<{ id: SavedRouteId; why: string } | null>(null);
   const remove = (id: SavedRouteId) =>
     props.onRemove(id).then(
       () => setConfirming(null),
-      (e: unknown) => setError(errorText(e, "Could not delete the route.")),
+      (e: unknown) => setWrong({ id, why: errorText(e, "Could not delete the route.") }),
     );
   return (
     <Accordion title="Saved routes" summary={`${props.saved.length} saved`} initiallyOpen={props.unfolded || props.justSaved}>
@@ -505,7 +507,8 @@ function SavedList(props: {
         {props.saved.map((route) => (
           <li
             key={route.id}
-            className={`saved-row${route.id === props.current ? ` is-current${lit ? " is-lit" : ""}` : ""}`}
+            className={`saved-row${route.id === props.current ? ` is-current${lit ? " is-lit" : ""}` : ""}${route.id === wrong?.id ? " is-wrong" : ""}`}
+            title={route.id === wrong?.id ? wrong.why : undefined}
             ref={lit && route.id === props.current ? (row) => row?.scrollIntoView?.({ block: "nearest" }) : undefined}
             onAnimationEnd={() => setLit(false)}
           >
@@ -514,7 +517,7 @@ function SavedList(props: {
             ) : (
               <>
                 {route.id === props.current ? (
-                  <RouteName name={route.name} onRename={props.onRename} onError={setError} />
+                  <RouteName name={route.name} onRename={props.onRename} onError={(why) => setWrong(why ? { id: route.id, why } : null)} />
                 ) : (
                   <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })}>
                     {route.name}
@@ -528,10 +531,10 @@ function SavedList(props: {
           </li>
         ))}
       </ul>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+      {wrong && (
+        <span className="visually-hidden" role="alert">
+          {wrong.why}
+        </span>
       )}
     </Accordion>
   );
