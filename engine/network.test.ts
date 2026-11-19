@@ -60,17 +60,15 @@ describe("RailNetwork", () => {
     expect(snap.km).toBeLessThan(2);
   });
 
-  it("matches city names without regard to case, and suggests those starting with the text first", () => {
+  it("matches town names without regard to case, and suggests those starting with the text first, the larger town first", () => {
     expect(network.city("  temple, tx ")?.name).toBe("Temple, TX");
     expect(network.city("Temple")).toBeNull();
-    const names = network.cities("little", 5).map((c) => c.name);
-    expect(names).toContain("Little Rock, AR");
-    expect(names).toContain("North Little Rock, AR");
-    expect(names.indexOf("Little Rock, AR")).toBeLessThan(names.indexOf("North Little Rock, AR"));
+    expect(network.cities("little rock", 5).map((c) => c.name)).toEqual(["Little Rock, AR", "North Little Rock, AR"]);
+    expect(network.cities("springfield", 3).map((c) => c.name)).toEqual(["Springfield, MO", "Springfield, MA", "Springfield, IL"]);
     expect(network.cities("a", 3)).toHaveLength(3);
   });
 
-  it("describes a place by the nearest city, or the distance to it beyond 25 km", () => {
+  it("describes a place by the nearest town, or the distance to it beyond NEAR_CITY_KM", () => {
     const temple = network.city("Temple, TX")!;
     expect(network.near(temple.lon, temple.lat)).toBe("Temple, TX");
     expect(network.near(temple.lon + 1, temple.lat)).toMatch(/^\d+ km from /);

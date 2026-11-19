@@ -5,13 +5,13 @@
 import type { Page } from "@playwright/test";
 import { expect, expectMapCanvas, expectNoSideScroll, freeMapCentre, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
 
-/** Types into the search box and picks the city of that name (Your shops may list a shop with it too). */
+/** Types into the search box and picks the city of that name, "Kansas City, MO" (Your shops may list a shop with it too). */
 async function findCity(page: Page, name: string) {
   await page.goto("/route");
   await expectMapCanvas(page);
   const box = page.getByRole("combobox", { name: "Search shops and cities" });
   await box.fill(name);
-  const city = page.getByRole("option", { name: new RegExp(`^${name}, \\w\\w\\s*City`) });
+  const city = page.getByRole("option", { name: new RegExp(`^${name}\\s*City`) });
   await expect(city).toContainText("BNSF");
   await city.click();
   return page.getByRole("region", { name: /^Found: / });
@@ -21,7 +21,7 @@ test("Search Kansas City: the map centres on it, and Start makes it the planner'
   const requests: URL[] = [];
   page.on("request", (request) => requests.push(new URL(request.url())));
 
-  const card = await findCity(page, "Kansas City");
+  const card = await findCity(page, "Kansas City, MO");
   await expect(card).toContainText("Kansas City, MO");
   await expect(card).toContainText("City");
 
@@ -48,7 +48,7 @@ test.describe("on a phone", () => {
   test.use(PHONE);
 
   test("the search runs across the top of the sheet under the map, and the found card stays on the map", async ({ page }) => {
-    const card = await findCity(page, "Kansas City");
+    const card = await findCity(page, "Kansas City, MO");
     const search = await page.locator(".panel-search").boundingBox();
     const map = await mapRegion(page).boundingBox();
     const found = await card.boundingBox();

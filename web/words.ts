@@ -12,12 +12,12 @@ import type { MapLine } from "./theme.ts";
 import type { DistanceUnit } from "./units.ts";
 
 /**
- * "Temple, TX" → "Temple"; "72 km from Jacksonville, FL" → "72 km from Jacksonville";
+ * "Temple, TX" → "Temple"; "Monterrey, NLE" → "Monterrey"; "72 km from Jacksonville, FL" → "72 km from Jacksonville";
  * "Regina, SK · Procor (approximate)" → "Regina": the shop's company tag stays in the field and leaves the short name.
  */
-export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2}$/, "");
+export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2,3}$/, "");
 
-/** A place in a result row or beside a route's node: "Chicago", and "near St. Louis" for "110 km from St. Louis, MO" (no listed city is close). */
+/** A place in a result row or beside a route's node: "Chicago", and "near St. Louis" for "110 km from St. Louis, MO" (no town is close). */
 export const nearPlace = (near: string) => shortPlace(near).replace(/^[\d,.]+ km from /, "near ");
 
 /** "Regina, SK · Procor (approximate)" → ["Regina, SK · Procor", "approximate"]: a shop row shows the note on its code's line. */

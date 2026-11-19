@@ -34,5 +34,5 @@ export const SNAP_KM = 15;
  */
 export const SERVE_SLACK_KM = 5;
 
-/** A point takes the name of a city within this distance; farther, "72 km from Jacksonville, FL". */
-export const NEAR_CITY_KM = 25;
+/** A point takes the name of the nearest town within this distance; farther, "72 km from Jacksonville, FL". */
+export const NEAR_CITY_KM = 15;

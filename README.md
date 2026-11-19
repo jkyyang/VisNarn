@@ -30,7 +30,8 @@ The database is `~/.visnarn/visnarn.db`. The server listens on 127.0.0.1 only an
 addressed to any other host name or sent from another web page. Your shops and routes never leave the laptop;
 map tiles and fonts are fetched from public servers.
 
-Network files in `public/data/` are committed. To rebuild them from public sources (BTS NTAD NARN):
+Network files in `public/data/` are committed. To rebuild them from public sources (BTS NTAD NARN, and GeoNames
+for the town names that label places):
 ```
 npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 ```
@@ -42,11 +43,12 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 - `web/`: screens, map, server data
 - `scripts/`: weekly network update, free-port, import rules test
 - `tests/`: the API over HTTP, the screens, the browser tests
-- `pipeline/`: Python that downloads NARN and writes `public/data` (graph.bin, track.bin, basemap)
+- `pipeline/`: Python that downloads NARN and GeoNames and writes `public/data` (graph.bin, graph_meta.json with the places, track.bin, basemap)
 
 ## Map sources (free, no key)
 OpenFreeMap vector styles (OpenStreetMap data) for the map and the Real tracks overlay, Esri World Imagery for
-satellite, NASA Black Marble for night lights.
+satellite, NASA Black Marble for night lights. Place names: GeoNames (CC BY 4.0), US, Canadian and Mexican towns
+of 5,000 people or more, built into `graph_meta.json`; no lookup online while the app runs.
 
 ## Routing
 Routes follow track distance and the carriers you choose. A typed coordinate snaps to nearby mainline; a shop with track links joins the network at its links.

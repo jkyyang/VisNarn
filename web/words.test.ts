@@ -60,6 +60,7 @@ describe("words", () => {
 
   it("short words for places, interchanges and turn-backs", () => {
     expect(shortPlace("Temple, TX")).toBe("Temple");
+    expect(shortPlace("Monterrey, NLE")).toBe("Monterrey");
     expect(shortPlace("72 km from Jacksonville, FL")).toBe("72 km from Jacksonville");
     expect(nearPlace("72 km from Jacksonville, FL")).toBe("near Jacksonville");
     expect(nearPlace("Temple, TX")).toBe("Temple");

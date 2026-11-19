@@ -4,7 +4,8 @@
 
 `scripts/update-network.ts` keeps `public/data` in step with the BTS NTAD North American Rail Network.
 It asks the ArcGIS layer for its data edit date and compares it with `data/source-version.json`.
-If the date is new, it rebuilds in a temporary copy of `pipeline/`, checks the result (the graph loads,
+If the date is new, it rebuilds in a temporary copy of `pipeline/` (with the latest GeoNames town names for the
+place labels), checks the result (the graph loads,
 the selftest passes, every shop in `docs/shops/marmon-rail-shops-public.csv` routes from five origins and the
 route ends within 2.5 km of the shop), and only then copies the new files over `public/data` and commits
 them. If a check fails, the old data stays. Each run writes to `~/Library/Logs/visnarn-network-update.log`

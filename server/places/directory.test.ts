@@ -114,12 +114,12 @@ describe("Directory.suggest / nearest", () => {
   it("suggests shops and cities, each as a typed ref, shops first for role shop", () => {
     const { store, directory } = setup();
     store.shops.save(shop({ name: "Kansas City, MO", code: "EX-KCY-01" }));
-    const forShop = directory.suggest("kansas", "shop", 8);
+    const forShop = directory.suggest("kansas city, mo", "shop", 8);
     expect(forShop.map((s) => s.source)).toEqual(["shop", "city"]);
     expect(forShop[0]).toEqual({ ref: { kind: "shop", shopId: "s1" }, label: "Kansas City, MO", detail: "Your shop · EX-KCY-01", source: "shop", railroads: expect.arrayContaining(["BNSF"]) });
     expect(forShop[1]).toMatchObject({ ref: { kind: "coord" }, label: "Kansas City, MO", detail: "City" });
     expect(forShop.every((s) => s.ref.kind !== "text")).toBe(true);
-    expect(directory.suggest("kansas", "position", 8).map((s) => s.source)).toEqual(["city", "shop"]);
+    expect(directory.suggest("kansas city, mo", "position", 8).map((s) => s.source)).toEqual(["city", "shop"]);
     expect(directory.suggest("kansas", "position", 1)).toHaveLength(1);
     expect(directory.suggest("  ", "shop", 8)).toEqual([]);
     expect(directory.suggest("FRA 358070", "position", 8)).toEqual([{ ref: { kind: "node", fraId: TEMPLE, railroad: null }, label: "Temple, TX", detail: "FRA node 358070", source: "junction", railroads: ["BNSF", "UP"] }]);

@@ -1,42 +1,75 @@
-"""City names and coordinates for place labels and search.
+"""Town names and coordinates for place labels and search, from the GeoNames gazetteer (CC BY 4.0,
+https://www.geonames.org): every town in the US, Canada and Mexico of MIN_POPULATION people or more.
+
+Writes them into public/data/graph_meta.json as "places": {"Oakville, ON": [lon, lat], ...}, the
+largest town first, so a search lists the bigger of two matches first. A name used twice in one state
+or province is kept once, for the larger town. Run after export_web_graph.py, which writes that file.
 """
+import csv
+import io
+import json
+import sys
+import time
+import zipfile
+from pathlib import Path
 
-PLACES = {
-    "Austin, TX": (-97.74, 30.27), "Chicago, IL": (-87.63, 41.88), "Houston, TX": (-95.37, 29.76),
-    "Dallas, TX": (-96.80, 32.78), "Fort Worth, TX": (-97.33, 32.75), "San Antonio, TX": (-98.49, 29.42),
-    "Laredo, TX": (-99.51, 27.53), "El Paso, TX": (-106.49, 31.76), "Temple, TX": (-97.34, 31.10),
-    "Taylor, TX": (-97.41, 30.57), "Waco, TX": (-97.15, 31.55), "Amarillo, TX": (-101.83, 35.22),
-    "Texarkana, TX": (-94.05, 33.43), "Oklahoma City, OK": (-97.52, 35.47), "Tulsa, OK": (-95.99, 36.15),
-    "Little Rock, AR": (-92.29, 34.75), "North Little Rock, AR": (-92.27, 34.77), "Pine Bluff, AR": (-92.00, 34.23),
-    "Kansas City, MO": (-94.58, 39.10), "St. Louis, MO": (-90.20, 38.63), "Springfield, MO": (-93.29, 37.21),
-    "Memphis, TN": (-90.05, 35.15), "Nashville, TN": (-86.78, 36.16), "Chattanooga, TN": (-85.31, 35.05),
-    "Knoxville, TN": (-83.92, 35.96), "Birmingham, AL": (-86.80, 33.52), "Mobile, AL": (-88.04, 30.69),
-    "New Orleans, LA": (-90.07, 29.95), "Shreveport, LA": (-93.75, 32.53), "Baton Rouge, LA": (-91.19, 30.45),
-    "Atlanta, GA": (-84.39, 33.75), "Savannah, GA": (-81.10, 32.08), "Jacksonville, FL": (-81.66, 30.33),
-    "Tampa, FL": (-82.46, 27.95), "Miami, FL": (-80.19, 25.76), "Charlotte, NC": (-80.84, 35.23),
-    "Raleigh, NC": (-78.64, 35.78), "Richmond, VA": (-77.44, 37.54), "Norfolk, VA": (-76.29, 36.85),
-    "Roanoke, VA": (-79.94, 37.27), "Baltimore, MD": (-76.61, 39.29), "Philadelphia, PA": (-75.17, 39.95),
-    "Harrisburg, PA": (-76.88, 40.27), "Pittsburgh, PA": (-79.99, 40.44), "Newark, NJ": (-74.17, 40.74),
-    "Albany, NY": (-73.76, 42.65), "Buffalo, NY": (-78.88, 42.89), "Syracuse, NY": (-76.15, 43.05),
-    "Boston, MA": (-71.06, 42.36), "Cleveland, OH": (-81.69, 41.50), "Columbus, OH": (-82.99, 39.96),
-    "Cincinnati, OH": (-84.51, 39.10), "Toledo, OH": (-83.54, 41.65), "Detroit, MI": (-83.05, 42.33),
-    "Indianapolis, IN": (-86.16, 39.77), "Gary, IN": (-87.35, 41.59), "Louisville, KY": (-85.76, 38.25),
-    "Milwaukee, WI": (-87.91, 43.04), "Green Bay, WI": (-88.02, 44.51), "Minneapolis, MN": (-93.27, 44.98),
-    "St. Paul, MN": (-93.09, 44.95), "Duluth, MN": (-92.10, 46.79), "Des Moines, IA": (-93.61, 41.59),
-    "Council Bluffs, IA": (-95.86, 41.26), "Omaha, NE": (-95.94, 41.26), "North Platte, NE": (-100.77, 41.12),
-    "Lincoln, NE": (-96.70, 40.81), "Fargo, ND": (-96.79, 46.88), "Denver, CO": (-104.99, 39.74),
-    "Cheyenne, WY": (-104.82, 41.14), "Salt Lake City, UT": (-111.89, 40.76), "Albuquerque, NM": (-106.65, 35.08),
-    "Phoenix, AZ": (-112.07, 33.45), "Tucson, AZ": (-110.97, 32.22), "Las Vegas, NV": (-115.14, 36.17),
-    "Reno, NV": (-119.81, 39.53), "Los Angeles, CA": (-118.24, 34.05), "Barstow, CA": (-117.02, 34.90),
-    "Oakland, CA": (-122.27, 37.80), "Stockton, CA": (-121.29, 37.96), "Fresno, CA": (-119.79, 36.74),
-    "Portland, OR": (-122.68, 45.52), "Seattle, WA": (-122.33, 47.61), "Spokane, WA": (-117.43, 47.66),
-    "Pasco, WA": (-119.10, 46.24), "Billings, MT": (-108.50, 45.78), "Havre, MT": (-109.68, 48.55),
-    "Toronto, ON": (-79.38, 43.65), "Hamilton, ON": (-79.87, 43.26), "Windsor, ON": (-83.04, 42.31),
-    "Sarnia, ON": (-82.40, 42.97), "London, ON": (-81.25, 42.98), "Ottawa, ON": (-75.70, 45.42),
-    "Sudbury, ON": (-80.99, 46.49), "Thunder Bay, ON": (-89.25, 48.38), "Montreal, QC": (-73.57, 45.50),
-    "Quebec City, QC": (-71.21, 46.81), "Halifax, NS": (-63.57, 44.65), "Moncton, NB": (-64.77, 46.09),
-    "Winnipeg, MB": (-97.14, 49.90), "Regina, SK": (-104.62, 50.45), "Saskatoon, SK": (-106.67, 52.13),
-    "Calgary, AB": (-114.07, 51.05), "Edmonton, AB": (-113.49, 53.55), "Vancouver, BC": (-123.12, 49.28),
-    "Prince Rupert, BC": (-130.32, 54.31), "Monterrey, NL": (-100.32, 25.69), "Mexico City, CDMX": (-99.13, 19.43),
-}
+import requests
 
+ROOT = Path(__file__).resolve().parent.parent
+# Every town of 5,000 people or more, and every seat of a state, county or municipality.
+URL = "https://download.geonames.org/export/dump/cities5000.zip"
+RAW = ROOT / "data/raw/cities5000.zip"
+META = ROOT / "public/data/graph_meta.json"
+COUNTRIES = {"US", "CA", "MX"}
+MIN_POPULATION = 5000
+# Neighbourhoods would name a spot in a city after its district; abandoned and historical places are gone.
+SKIP_FEATURES = {"PPLX", "PPLQ", "PPLH"}
+# About 100 m.
+DECIMALS = 3
+
+# GeoNames admin1 codes. The US ones are the postal codes already; Canada gets its postal codes and
+# Mexico its ISO 3166-2 codes.
+PROVINCES = {"01": "AB", "02": "BC", "03": "MB", "04": "NB", "05": "NL", "07": "NS", "08": "ON", "09": "PE",
+             "10": "QC", "11": "SK", "12": "YT", "13": "NT", "14": "NU"}
+MX_STATES = {"01": "AGU", "02": "BCN", "03": "BCS", "04": "CAM", "05": "CHP", "06": "CHH", "07": "COA", "08": "COL",
+             "09": "CMX", "10": "DUR", "11": "GUA", "12": "GRO", "13": "HID", "14": "JAL", "15": "MEX", "16": "MIC",
+             "17": "MOR", "18": "NAY", "19": "NLE", "20": "OAX", "21": "PUE", "22": "QUE", "23": "ROO", "24": "SLP",
+             "25": "SIN", "26": "SON", "27": "TAB", "28": "TAM", "29": "TLA", "30": "VER", "31": "YUC", "32": "ZAC"}
+STATE = {"US": lambda code: code, "CA": PROVINCES.get, "MX": MX_STATES.get}
+
+
+def download():
+    for i in range(5):
+        try:
+            r = requests.get(URL, timeout=120)
+            r.raise_for_status()
+            RAW.parent.mkdir(parents=True, exist_ok=True)
+            RAW.write_bytes(r.content)
+            return
+        except Exception as e:  # network hiccups: back off and retry
+            print(f"  retry {i + 1}: {e}", file=sys.stderr)
+            time.sleep(2 ** i)
+    raise RuntimeError("GeoNames download failed")
+
+
+def places():
+    """{"Name, ST": (lon, lat)}, the largest town first."""
+    with zipfile.ZipFile(RAW) as z:
+        rows = list(csv.reader(io.TextIOWrapper(z.open("cities5000.txt"), "utf-8"), delimiter="\t", quoting=csv.QUOTE_NONE))
+    towns = []
+    for r in rows:
+        name, lat, lon, feature, country, admin1, population = r[2], float(r[4]), float(r[5]), r[7], r[8], r[10], int(r[14] or 0)
+        state = STATE[country](admin1) if country in COUNTRIES else None
+        if state and population >= MIN_POPULATION and feature not in SKIP_FEATURES:
+            towns.append((population, f"{name}, {state}", (round(lon, DECIMALS), round(lat, DECIMALS))))
+    found = {}
+    for _, label, at in sorted(towns, key=lambda t: -t[0]):
+        found.setdefault(label, at)
+    return found
+
+
+download()
+meta = json.loads(META.read_text())
+meta["places"] = places()
+META.write_text(json.dumps(meta, separators=(",", ":")))
+print(len(meta["places"]), "places from GeoNames")

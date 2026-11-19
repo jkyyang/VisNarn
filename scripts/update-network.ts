@@ -3,7 +3,8 @@
  * launchd runs it every Monday at 07:00 (scripts/launchd/, scripts/README.md).
  *
  * 1. Ask the ArcGIS layer for its data edit date; the same date as data/source-version.json means "up to date".
- * 2. Otherwise run the pipeline in a temporary copy of it, so the live files are never half-written.
+ * 2. Otherwise run the pipeline in a temporary copy of it, so the live files are never half-written. It also takes
+ *    the latest GeoNames town names (pipeline/places.py), which the origins below are looked up in.
  * 3. Validate the new files: they load, the map has every class of line, the selftest passes, every shop routes from every origin.
  * 4. Only then copy them over public/data and commit them (those files and nothing else).
  * Every run ends with one line in the log and a macOS notification.

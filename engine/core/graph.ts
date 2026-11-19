@@ -89,10 +89,12 @@ export class RailGraph {
   readonly adj: Uint32Array;
   readonly meta: GraphMeta;
   private readonly fraIndex: Map<number, number>;
+  private readonly places: [name: string, lon: number, lat: number][];
 
   constructor(buf: ArrayBuffer, meta: GraphMeta) {
     if (meta.lines.join() !== LINES.join()) throw new Error(`graph lines ${meta.lines} do not match app ${LINES}`);
     this.meta = meta;
+    this.places = Object.entries(meta.places).map(([name, [lon, lat]]) => [name, lon, lat]);
     const [n, e] = new Uint32Array(buf, 0, 2);
     this.nodeCount = n;
     this.edgeCount = e;
@@ -199,7 +201,7 @@ export class RailGraph {
   nearestPlace(lon: number, lat: number): string {
     let best = "";
     let bd = Infinity;
-    for (const [name, [x, y]] of Object.entries(this.meta.places)) {
+    for (const [name, x, y] of this.places) {
       const d = haversineKm(lon, lat, x, y);
       if (d < bd) {
         bd = d;

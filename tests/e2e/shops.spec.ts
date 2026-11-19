@@ -150,7 +150,7 @@ test.describe("Shops", () => {
     await page.goto(`/shops/${shop.id}`);
     const form = page.getByRole("region", { name: "Edit shop" });
     const links = form.getByRole("group", { name: "Track links" });
-    await expect(links).toContainText("Hamilton · FRA 633676");
+    await expect(links).toContainText("Oakville · FRA 633676");
     // No ⌖, no Add link button, no sentence: a row per link, a ring to press and × to remove.
     await expect(form.locator(".pick-btn")).toHaveCount(0);
     await expect(form).not.toContainText(/Pick on map|cars/);
@@ -161,29 +161,29 @@ test.describe("Shops", () => {
     const ghost = page.waitForRequest((r) => isLinks(r.url()) && "lon" in (r.postDataJSON() as LinksBody).ends[0]);
     const drawn = waitForLinks(page, [{ fraId: 633683 }]);
     await drag(page, "Move link 1", PLANT_FAN, { beforeRelease: () => ghost });
-    await expect(links).toContainText("Hamilton · FRA 633683");
+    await expect(links).toContainText("Oakville · FRA 633683");
     expect((await drawn)[0]!.path.length).toBeGreaterThan(2);
 
     // The ＋ on the pin's edge, dropped on the main line west of the plant 100 m short of a node, adds link 2 at that node.
     // Undo takes it away, Redo brings it back.
     await drag(page, "Add link", { lon: -79.7256, lat: 43.41345 });
-    await expect(links).toContainText("Hamilton · FRA 633604");
+    await expect(links).toContainText("Oakville · FRA 633604");
     await page.getByRole("button", { name: "Undo link change" }).click();
     await expect(links).not.toContainText("FRA 633604");
     await page.getByRole("button", { name: "Redo link change" }).click();
-    await expect(links).toContainText("Hamilton · FRA 633604");
+    await expect(links).toContainText("Oakville · FRA 633604");
 
     // Dropped in the plant, where link 1 already joins, link 2 springs back and the panel says why.
     const before = await handle(page, "Move link 2").boundingBox();
     await drag(page, "Move link 2", PLANT_FAN);
     await expect(links).toContainText("Link 1 joins there");
-    await expect(links).toContainText("Hamilton · FRA 633604");
+    await expect(links).toContainText("Oakville · FRA 633604");
     await expect.poll(async () => (await handle(page, "Move link 2").boundingBox())?.x).toBeCloseTo(before!.x, 0);
 
     // Esc in the middle of a drag changes nothing.
     await drag(page, "Move link 2", PLANT_FAN, { beforeRelease: () => page.keyboard.press("Escape") });
-    await expect(links).toContainText("Hamilton · FRA 633683");
-    await expect(links).toContainText("Hamilton · FRA 633604");
+    await expect(links).toContainText("Oakville · FRA 633683");
+    await expect(links).toContainText("Oakville · FRA 633604");
 
     // With Real tracks on, link 1's piece on track follows the surveyed lead.
     const onTrack = page.waitForResponse((r) => r.url().endsWith("/api/track"));
@@ -203,7 +203,7 @@ test.describe("Shops", () => {
     const moved = (await (await redrawn).request().postDataJSON()) as LinksBody;
     expect(moved.lon).toBeCloseTo(-79.7198, 3);
     expect(moved.lat).toBeCloseTo(43.4177, 3);
-    await expect(links).toContainText("Hamilton · FRA 633683");
+    await expect(links).toContainText("Oakville · FRA 633683");
 
     await form.getByRole("button", { name: "Save shop" }).click();
     await expect(page).toHaveURL(/\/shops$/);
@@ -230,14 +230,14 @@ test.describe("Shops on a phone", () => {
     const shop = await makeShop(page, { name: "Oakville phone plant", code: "TEST-OAK-P", location: { kind: "coord", ...OAKVILLE }, links: [633676 as FraId] });
     await page.goto(`/shops/${shop.id}`);
     const links = page.getByRole("group", { name: "Track links" });
-    await expect(links).toContainText("Hamilton · FRA 633676");
+    await expect(links).toContainText("Oakville · FRA 633676");
     const ring = links.getByRole("button", { name: "Move link 1", exact: true });
     await ring.tap();
     await expect(ring).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("section.map")).toHaveAttribute("data-picking", "true");
     const fan = await mapPoint(page, OAKVILLE, PLANT_FAN);
     await page.touchscreen.tap(fan.x, fan.y);
-    await expect(links).toContainText("Hamilton · FRA 633683");
+    await expect(links).toContainText("Oakville · FRA 633683");
     await expect(ring).toHaveAttribute("aria-pressed", "false");
     await keepScreenshot(page, "shop-links-phone");
     expect((await page.request.delete(`/api/shops/${shop.id}`)).ok()).toBe(true);

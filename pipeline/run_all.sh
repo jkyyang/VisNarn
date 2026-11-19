@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild everything in public/data from public sources (BTS NTAD NARN).
+# Rebuild everything in public/data from public sources (BTS NTAD NARN, GeoNames).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY=.venv/bin/python
@@ -10,6 +10,7 @@ mkdir -p data/raw data/processed public/data
 $PY -I pipeline/download_narn.py
 $PY -I pipeline/build_graph.py
 $PY -I pipeline/export_web_graph.py
+$PY -I pipeline/places.py
 
 $PY -I pipeline/export_basemap.py
 $MS data/processed/mainline_full.geojson -dissolve owner,class -simplify 8% keep-shapes \

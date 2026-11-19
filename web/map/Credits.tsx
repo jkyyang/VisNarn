@@ -9,7 +9,8 @@ import { useMap } from "react-map-gl/maplibre";
 import { Info } from "../ui/icons.tsx";
 import { usePopover } from "../ui/popover.ts";
 
-const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
+/** The app's own data, after the map sources' credits. */
+const DATA_ATTRIBUTION = ["Rail network: BTS NTAD North American Rail Network", "Place names: GeoNames (CC BY 4.0)"];
 
 /** Must be a child of the map. */
 export function Credits(): ReactElement {
@@ -22,7 +23,7 @@ export function Credits(): ReactElement {
   useEffect(() => {
     const box = card.current;
     if (!map || !box) return;
-    const control = new AttributionControl({ compact: false, customAttribution: NETWORK_ATTRIBUTION });
+    const control = new AttributionControl({ compact: false, customAttribution: DATA_ATTRIBUTION });
     box.append(control.onAdd(map));
     return () => control.onRemove();
   }, [map]);

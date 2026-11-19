@@ -42,9 +42,9 @@ export interface RailNetwork {
    * shop first, then node by node from its foot in the yard to the join. Null for a node this network lacks.
    */
   lead(lon: number, lat: number, fraId: FraId): { path: LngLat[]; km: number } | null;
-  /** One of the public city names shipped with the network, matched exactly (case-insensitive). */
+  /** One of the town names shipped with the network (GeoNames, pipeline/places.py), matched exactly (case-insensitive). */
   city(name: string): City | null;
-  /** City names for autocomplete: those starting with the text first, then those containing it. */
+  /** Town names for autocomplete: those starting with the text first, then those containing it; the larger town first in each. */
   cities(text: string, limit: number): City[];
   /** "Temple, TX", or "72 km from Jacksonville, FL" when no city is within NEAR_CITY_KM. */
   near(lon: number, lat: number): string;
@@ -53,9 +53,8 @@ export interface RailNetwork {
 /** Unpacks graph.bin. Throws if the file's railroad list is not shared/railroads.ts or its size is wrong. */
 export function openNetwork(bin: ArrayBuffer, meta: GraphMeta, version: string): RailNetwork {
   const graph = new RailGraph(bin, meta);
-  const allCities: City[] = Object.entries(meta.places)
-    .map(([name, [lon, lat]]) => ({ name, lon, lat }))
-    .sort((x, y) => x.name.localeCompare(y.name));
+  // Largest first, as pipeline/places.py writes them.
+  const allCities: City[] = Object.entries(meta.places).map(([name, [lon, lat]]) => ({ name, lon, lat }));
   const byName = new Map(allCities.map((c) => [c.name.toLowerCase(), c]));
 
   const nodeView = (index: number, km: number): NetworkNode => {
