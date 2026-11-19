@@ -10,6 +10,7 @@ import { RAILROADS, type Line, type Railroad, type TrackIncluded } from "../../.
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { chosenRoute, type Picked } from "../../map/scene.ts";
@@ -98,6 +99,8 @@ function PlaceField(props: {
   /** "Remove" takes the row out; "Clear" empties one of the last two. Null: nothing to clear. */
   remove: "Remove" | "Clear" | null;
   onCommit: (ref: PlaceRef | null) => void;
+  /** After a suggestion is chosen from the list. */
+  onChosen: () => void;
   onTogglePick: () => void;
   onRemove: () => void;
 }): ReactElement {
@@ -154,7 +157,7 @@ function PlaceField(props: {
           aria-describedby={props.problem ? problemId : undefined}
           autoComplete="off"
           enterKeyHint="go"
-          placeholder="Shop or city, or click the map"
+          placeholder="Shop or city"
           value={draft ?? props.committed.label}
           onChange={(e) => {
             setDraft(e.target.value);
@@ -172,11 +175,33 @@ function PlaceField(props: {
             <Cross />
           </button>
         )}
-        <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
+        <button
+          type="button"
+          className="icon-btn pick-btn"
+          aria-pressed={props.picking}
+          aria-label={`Pick on the map: ${props.label}`}
+          title="Pick on the map"
+          onClick={() => {
+            // On a phone the sheet lowers to its head, out of the way of the map.
+            if (!props.picking) showSheet("head");
+            props.onTogglePick();
+          }}
+        >
           <Crosshair />
         </button>
       </div>
-      {open && <SuggestionList id={listId} label={`Suggestions for ${props.label}`} list={list} active={active} onChoose={(suggestion) => done(suggestion.ref)} />}
+      {open && (
+        <SuggestionList
+          id={listId}
+          label={`Suggestions for ${props.label}`}
+          list={list}
+          active={active}
+          onChoose={(suggestion) => {
+            done(suggestion.ref);
+            props.onChosen();
+          }}
+        />
+      )}
       {props.problem && (
         <span id={problemId} className="visually-hidden">
           {props.problem}
@@ -238,6 +263,13 @@ function PlaceList(props: {
   // Keyed by spot, so a row slides from where its place was; empty rows by their order among the empty.
   const keys = places.map((ref, at) => (ref ? spotKey(ref) : `empty-${places.slice(0, at).filter((p) => p === null).length}`));
   const reorder = useReorder(keys, (from, to) => dispatch({ type: "move", from, to }), (at) => [rowName(at, count), labelOf(at)].filter(Boolean).join(", "));
+  // A place chosen from the suggestions: typing goes on in the next empty row; with none left, the keyboard goes.
+  const typeOnAfter = (at: number) => {
+    const next = places.findIndex((place, i) => i !== at && place === null);
+    const input = next < 0 ? null : reorder.listRef.current?.querySelectorAll("input")[next];
+    if (input) input.focus();
+    else (document.activeElement as HTMLElement | null)?.blur();
+  };
   const problemAt = (at: number): string | null => {
     if (!current) return null;
     return placeProblem(current.places[at] ?? null) ?? (current.outcome === "no-route" && current.problem.at === at ? current.problem.message : null);
@@ -265,6 +297,7 @@ function PlaceList(props: {
                   picking={session.pick === at}
                   remove={count > 2 ? "Remove" : ref ? "Clear" : null}
                   onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
+                  onChosen={() => typeOnAfter(at)}
                   onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
                   onRemove={() => dispatch({ type: "remove", at })}
                 />
@@ -553,7 +586,8 @@ function SavedList(props: {
                 {route.id === props.current && onRename ? (
                   <RouteName name={route.name} onRename={onRename} onError={(why) => setWrong(why ? { id: route.id, why } : null)} />
                 ) : (
-                  <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })}>
+                  // On a phone the sheet lowers to half, for the route opened.
+                  <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })} onClickCapture={() => showSheet("half")}>
                     {route.name}
                   </a>
                 )}

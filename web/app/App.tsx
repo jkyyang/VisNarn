@@ -1,6 +1,6 @@
 /**
  * The page: one map filling the window, the panel floating over its left side (on a phone, a sheet
- * under it). The URL decides which screen fills the panel; the map is created once and outlives every
+ * over its foot). The URL decides which screen fills the panel; the map is created once and outlives every
  * screen change. The panel's search, the place it found and the shop picked on Shops are page state,
  * shared by the panel and the map.
  */
@@ -8,16 +8,17 @@ import { useLayoutEffect, useRef, useState, type ReactElement, type RefObject } 
 import type { PlaceSuggestion, ShopId } from "../../shared/places.ts";
 import { useBasemap } from "../data/basemap.ts";
 import { fresh, usePlace, useShops } from "../data/hooks.ts";
-import { CAMERA_MARGIN_PX } from "../map/config.ts";
 import { MapStage, MapStageProvider } from "../map/MapStage.tsx";
 import { RouteWorkspace } from "../screens/route/RouteWorkspace.tsx";
 import { ShopsScreen } from "../screens/shops/ShopsScreen.tsx";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { PanelIcon } from "../ui/icons.tsx";
 import { storedChoice } from "../ui/stored.ts";
+import { WhyTip } from "../ui/WhyTip.tsx";
 import { PanelHeader } from "./chrome.tsx";
 import { PanelSearch } from "./PanelSearch.tsx";
 import { useScreen, type Screen } from "./routes.ts";
+import { showSheet, useSheet } from "./sheet.ts";
 
 /** The panel shown or folded away, kept in this browser. */
 const usePanelState = storedChoice("visnarn.panel", ["open", "folded"], () => "open");
@@ -31,7 +32,8 @@ export default function App(): ReactElement {
   const reopen = useRef<HTMLButtonElement>(null);
   const [panelState, setPanelState] = usePanelState();
   const folded = panelState === "folded";
-  const cameraLeft = useCameraLeft(panel, !folded);
+  const coveredLeft = useCoveredLeft(panel, !folded);
+  const sheet = useSheet(panel);
   const [text, setText] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
   // The search flies to what it found; a shop square clicked on the map opens its card where the camera is.
@@ -46,6 +48,8 @@ export default function App(): ReactElement {
     setChosen(suggestion);
     setFly(flyThere);
     if (screen.name === "shops" && suggestion?.ref.kind === "shop") setSelectedShop(suggestion.ref.shopId);
+    // On a phone the sheet lowers to half, for the place flown to.
+    if (suggestion && flyThere) showSheet("half");
   };
   const fold = (next: boolean) => {
     setPanelState(next ? "folded" : "open");
@@ -58,6 +62,13 @@ export default function App(): ReactElement {
       <MapStageProvider network={network}>
         <div className="app">
           <main className={`panel glass${folded ? " is-folded" : ""}`} ref={panel}>
+            {/* On a phone: the sheet's grabber. A tap raises it full, or lowers it to half. */}
+            <button
+              type="button"
+              className="sheet-grabber"
+              aria-label={sheet.rest === "full" ? "Lower the panel" : "Raise the panel"}
+              onClick={() => showSheet(sheet.rest === "half" ? "full" : "half")}
+            />
             <PanelHeader
               current={screen.name}
               onCollapse={() => fold(true)}
@@ -83,7 +94,8 @@ export default function App(): ReactElement {
               <PanelIcon />
             </button>
           )}
-          <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
+          <WhyTip />
+          <MapStage covered={{ left: coveredLeft, bottom: sheet.covered }} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
     </ErrorBoundary>
@@ -91,26 +103,28 @@ export default function App(): ReactElement {
 }
 
 /**
- * The px every camera move keeps clear on the left: the open panel with a margin each side of it,
- * else the margin alone. On a phone the panel is as wide as the map and lies below it. The panel's
- * width follows the window only, so a window resize and a fold are the times to measure again.
+ * The px of the map under the open panel on its left: up to the panel's right edge. On a phone the panel
+ * is as wide as the map and lies over its foot (./sheet.ts says how far). Measured again whenever the
+ * panel or the window changes size: its styles laid out, the phone turned, a fold.
  */
-function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
-  const [left, setLeft] = useState(CAMERA_MARGIN_PX);
+function useCoveredLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
+  const [left, setLeft] = useState(0);
   useLayoutEffect(() => {
     const element = panel.current;
     const frame = element?.parentElement;
     if (!open || !element || !frame) {
-      setLeft(CAMERA_MARGIN_PX);
+      setLeft(0);
       return;
     }
     const measure = () => {
-      const { width } = element.getBoundingClientRect();
-      setLeft(width < frame.getBoundingClientRect().width ? Math.round(width) + 2 * CAMERA_MARGIN_PX : CAMERA_MARGIN_PX);
+      const { width, right } = element.getBoundingClientRect();
+      const box = frame.getBoundingClientRect();
+      setLeft(width < box.width ? Math.round(right - box.left) : 0);
     };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    resized.observe(frame);
+    return () => resized.disconnect();
   }, [panel, open]);
   return left;
 }

@@ -1,6 +1,6 @@
 /**
  * The one popover open on the page: opening one closes the one before. While open, Escape or a press
- * anywhere outside its own elements closes it.
+ * anywhere outside its own elements closes it. A press on the map that closes it does nothing else.
  */
 import { useCallback, useEffect, useId, useSyncExternalStore, type RefObject } from "react";
 import { useEscape } from "./useEscape.ts";
@@ -12,6 +12,12 @@ function show(id: string | null): void {
   openId = id;
   listeners.forEach((listener) => listener());
 }
+
+/** Whether the press going on began with a popover open. Heard first, on the window, before that popover closes. */
+let closingPress = false;
+window.addEventListener("pointerdown", () => void (closingPress = openId !== null), true);
+/** A press that closes a popover only closes it: the map and its marks ask this before they act on a click. */
+export const pressClosesPopover = (): boolean => closingPress;
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);

@@ -47,15 +47,17 @@ test("Search Kansas City: the map centres on it, and Start makes it the planner'
 test.describe("on a phone", () => {
   test.use(PHONE);
 
-  test("the search runs across the top of the sheet under the map, and the found card stays on the map", async ({ page }) => {
+  test("the search runs across the top of the sheet over the map's foot, and the place found shows over the sheet", async ({ page }) => {
     const card = await findCity(page, "Kansas City, MO");
+    await expect(card).toBeVisible();
     const search = await page.locator(".panel-search").boundingBox();
+    const sheet = await page.locator(".panel").boundingBox();
     const map = await mapRegion(page).boundingBox();
-    const found = await card.boundingBox();
-    if (!search || !map || !found) throw new Error("Something is not on the page.");
+    const dot = await mapRegion(page).locator(".found-dot").boundingBox();
+    if (!search || !sheet || !map || !dot) throw new Error("Something is not on the page.");
     expect(search.width).toBeGreaterThan(map.width * 0.7);
-    expect(search.y).toBeGreaterThanOrEqual(map.y + map.height - 40);
-    expect(found.y + found.height).toBeLessThanOrEqual(map.y + map.height);
+    expect(search.y - sheet.y).toBeLessThan(40);
+    expect(dot.y + dot.height).toBeLessThanOrEqual(sheet.y);
     await expectNoSideScroll(page);
     await keepScreenshot(page, "map-search-phone");
   });

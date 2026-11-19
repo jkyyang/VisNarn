@@ -365,6 +365,13 @@ describe("layers", () => {
     expect(sceneTooltip(pick(LAYER.alternatives, { railroad: "BNSF" }))).toBeNull();
   });
 
+  it("hover text opens on the side of the pointer with more map, no wider than that side", () => {
+    const at = (x: number) => sceneTooltip({ ...({ layer: layers.find((l) => l.id === LAYER.interchanges) } as PickingInfo), object: { from: "BNSF", to: "UP" }, x, y: 100, viewport: { width: 400 } } as PickingInfo)?.style;
+    expect(at(60)).toMatchObject({ transform: "translate(72px, 112px)", maxWidth: "280px" });
+    expect(at(340)).toMatchObject({ transform: "translate(calc(328px - 100%), 112px)", maxWidth: "280px" });
+    expect(at(250)).toMatchObject({ maxWidth: "226px" });
+  });
+
   it("draws Class I always and each other class only while its track box is ticked", () => {
     expect(drawnClasses(DEFAULT_INCLUDE)).toEqual(["class_i", "passenger"]);
     expect(drawnClasses({ regional: false, shortLine: true, passenger: false })).toEqual(["class_i", "short_line"]);

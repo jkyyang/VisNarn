@@ -1,13 +1,15 @@
 import { useEffect, useRef } from "react";
 import { useMap } from "react-map-gl/maplibre";
 import type { Bounds } from "../../shared/geo.ts";
-import { FIT_MAX_ZOOM, FIT_MS, FIT_PADDING } from "./config.ts";
+import { CAMERA_MARGIN_PX, FIT_MAX_ZOOM, FIT_MS, FIT_PADDING } from "./config.ts";
+import type { Covered } from "./MapStage.tsx";
 
-/** The free part of the map, right of `cameraLeft`, less FIT_PADDING. */
-function fitOptions(mapWidth: number, cameraLeft: number) {
+/** The map the panel leaves free, less FIT_PADDING. */
+function fitOptions(mapWidth: number, covered: Covered) {
   const { top, bottom, sideShare, sideMin, sideMax, buttons } = FIT_PADDING;
-  const side = Math.round(Math.min(sideMax, Math.max(sideMin, (mapWidth - cameraLeft) * sideShare)));
-  return { padding: { top, bottom, left: cameraLeft, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
+  const left = covered.left + CAMERA_MARGIN_PX;
+  const side = Math.round(Math.min(sideMax, Math.max(sideMin, (mapWidth - left) * sideShare)));
+  return { padding: { top, bottom: covered.bottom + bottom, left, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
 }
 
 /** A fit puts the route's box on the edge of its room: this much past it still counts as inside. */
@@ -41,11 +43,11 @@ export function shouldRefit(view: View, previous: Bounds | null, next: Bounds): 
 
 /**
  * Moves the camera to `bounds` when they first appear (a plan that has just got its route), and when
- * they change and `shouldRefit` says so. `cameraLeft`: the px of the map the camera keeps clear on the
- * left, for the panel. Renders nothing; must be a child of the map.
+ * they change and `shouldRefit` says so, into the map the panel leaves free (`covered`). Renders
+ * nothing; must be a child of the map.
  */
-export function FitBounds(props: { bounds: Bounds | null; cameraLeft: number }) {
-  const { bounds, cameraLeft } = props;
+export function FitBounds(props: { bounds: Bounds | null; covered: Covered }) {
+  const { bounds, covered } = props;
   const map = useMap().current;
   const mounted = useRef(false);
   const previous = useRef<Bounds | null>(null);
@@ -63,7 +65,7 @@ export function FitBounds(props: { bounds: Bounds | null; cameraLeft: number }) 
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
     const { clientWidth, clientHeight } = map.getContainer();
-    const options = fitOptions(clientWidth, cameraLeft);
+    const options = fitOptions(clientWidth, covered);
     // Where a framed route is clear of the panel and the map buttons: the room a fit keeps, with a few px to spare (a fit lands on its edge).
     const { top, right, bottom, left } = options.padding;
     const nw = map.unproject([left - EDGE_SLACK_PX, top - EDGE_SLACK_PX]);

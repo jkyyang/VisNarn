@@ -4,6 +4,7 @@ import { roundLngLat, type LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopId, type ShopLink, type ShopView } from "../../../shared/places.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { fresh, importShops, removeShop, saveShop, shopLinkAt, useReadOnly, useShopLinks, useShops } from "../../data/hooks.ts";
 import { SELECTED_ZOOM, SHOP_ZOOM } from "../../map/config.ts";
 import type { MapHandle } from "../../map/MapHandles.tsx";
@@ -145,11 +146,16 @@ export function ShopsScreen(props: {
     setPressed(null);
     change(current.toSpliced(slot, 1, link.fraId));
   };
+  // A shop picked in the list or on the map: on a phone the sheet goes to half, its row over the map flown to.
+  const select = (id: ShopId) => {
+    showSheet("half");
+    props.onSelect(id);
+  };
   const press = (slot: number) => {
     setRefused(null);
     setPressed(pressed === slot ? null : slot);
-    // On a phone the panel is a sheet that may cover the map: scroll it back down so the map can be tapped.
-    if (pressed !== slot) window.scrollTo({ top: 0 });
+    // On a phone the sheet lowers to its head, so the map can be tapped.
+    if (pressed !== slot) showSheet("head");
   };
   /** What a link's ring (or the ＋, for the next free link) does on the map: dragged, it shows where it would join; tapped, it is pressed. */
   const gestures = (slot: number): Pick<MapHandle, "onDrag" | "onDrop" | "onPress"> => ({
@@ -252,8 +258,8 @@ export function ShopsScreen(props: {
           editing={editing}
           lit={flow.saved?.ready ?? NO_SHOPS}
           onLit={flow.dismiss}
-          onSelect={(shop) => props.onSelect(shop.id)}
-          onEdit={readOnly ? null : (shop) => go({ name: "shops", edit: shop.id })}
+          onSelect={(shop) => select(shop.id)}
+          onEdit={readOnly ? null : (shop) => (showSheet("half"), go({ name: "shops", edit: shop.id }))}
           onAdd={readOnly ? null : () => go({ name: "shops", edit: "new" })}
           onImport={readOnly ? null : flow.choose}
           importWrong={flow.preview ? null : flow.error}
@@ -269,7 +275,7 @@ export function ShopsScreen(props: {
               : { kind: "fit" }
         }
         onPick={picking ? onPick : undefined}
-        onSelect={picking ? undefined : (target) => target.kind === "place" && target.ref.kind === "shop" && props.onSelect(target.ref.shopId)}
+        onSelect={picking ? undefined : (target) => target.kind === "place" && target.ref.kind === "shop" && select(target.ref.shopId)}
         handles={handles}
         flash={flash}
       />

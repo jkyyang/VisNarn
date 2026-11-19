@@ -11,10 +11,12 @@ import {
   createContext,
   lazy,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useId,
   useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactElement,
@@ -33,6 +35,12 @@ import { mapLook, sunPosition, type LightMode } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapHandle } from "./MapHandles.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
+
+/** The px of the map under the panel: at its left beside a floating panel, at its foot under a phone's sheet. */
+export interface Covered {
+  left: number;
+  bottom: number;
+}
 
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
@@ -155,14 +163,34 @@ function useNow(running: boolean): number {
 
 const nothing = () => null;
 
+/** A map started again after its WebGL context was lost waits this long since the last start, so a phone short of memory is not caught in a loop. */
+const RESTART_GAP_MS = 10_000;
+
+/**
+ * A lost WebGL context leaves the map blank, and iOS often never gives it back: the map starts again on a
+ * new canvas, once the page is in view. Returns the map's start count, to key it by, and what to call on a loss.
+ */
+function useRestart(): [starts: number, restart: () => void] {
+  const [starts, setStarts] = useState(0);
+  const last = useRef(0);
+  const restart = useCallback(() => {
+    setTimeout(function start() {
+      if (document.visibilityState === "hidden") return document.addEventListener("visibilitychange", start, { once: true });
+      last.current = Date.now();
+      setStarts((n) => n + 1);
+    }, Math.max(0, last.current + RESTART_GAP_MS - Date.now()));
+  }, []);
+  return [starts, restart];
+}
+
 const useBasemap = storedChoice<BasemapKind>("visnarn.basemap", ["map", "satellite"], () => "map");
 const useLight = storedChoice<LightMode>("visnarn.time-of-day", ["auto", "day", "night"], () => "auto");
 
 /**
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
- * `cameraLeft`: how many px of the map every camera move keeps clear on the left, for the panel.
+ * `covered`: the map under the panel, which every camera move frames clear of.
  */
-export function MapStage(props: { cameraLeft: number; found: Found | null; onCloseFound: () => void }): ReactElement {
+export function MapStage(props: { covered: Covered; found: Found | null; onCloseFound: () => void }): ReactElement {
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
@@ -179,6 +207,7 @@ export function MapStage(props: { cameraLeft: number; found: Found | null; onClo
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
   const now = useNow(layers.light === "auto");
   const look = mapLook(layers.light, sunPosition(now, centre));
+  const [starts, restart] = useRestart();
 
   return (
     <section className="map" aria-label="Map" data-picking={content?.onPick ? "true" : undefined} data-look={look.base} data-light={look.phase}>
@@ -186,6 +215,8 @@ export function MapStage(props: { cameraLeft: number; found: Found | null; onClo
         <ErrorBoundary fallback={<NoMap />}>
           <Suspense fallback={<div className="map-loading">Loading the map…</div>}>
             <MapCanvas
+              key={starts}
+              onContextLost={restart}
               network={network}
               content={content}
               layers={layers}
@@ -193,7 +224,7 @@ export function MapStage(props: { cameraLeft: number; found: Found | null; onClo
               look={look}
               now={now}
               onCentre={setCentre}
-              cameraLeft={props.cameraLeft}
+              covered={props.covered}
               found={props.found}
               onCloseFound={props.onCloseFound}
             />

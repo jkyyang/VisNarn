@@ -2,6 +2,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import type { TurnBack } from "../../shared/route.ts";
 import { TurnBadge } from "../ui/badges.tsx";
+import { pressClosesPopover } from "../ui/popover.ts";
 import { trackWords, turnBackMove } from "../words.ts";
 import type { PillCorner } from "./pills.ts";
 import type { ScenePill } from "./scene.ts";
@@ -20,7 +21,7 @@ export function useNativeClick(ref: RefObject<HTMLElement | null>, handler: () =
     if (!element) return;
     const onClick = (event: MouseEvent) => {
       event.stopPropagation();
-      latest.current();
+      if (!pressClosesPopover()) latest.current();
     };
     // Only with no button down: a drag that starts on a mark still pans the map.
     const onMove = (event: MouseEvent) => {

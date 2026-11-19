@@ -10,4 +10,10 @@ if (typeof document !== "undefined") {
   Object.defineProperty(globalThis, "localStorage", { configurable: true, value: jsdom.window.localStorage });
   // jsdom has no layout, so there is nothing to scroll; its own scrollTo only logs "Not implemented".
   window.scrollTo = () => {};
+  // Nor does anything resize: the phone's sheet watches its size with a ResizeObserver, which jsdom lacks.
+  globalThis.ResizeObserver ??= class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
 }

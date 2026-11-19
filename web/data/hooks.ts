@@ -3,6 +3,7 @@
  * whole view of the back end: a component imports from here (and domain types from shared/), never
  * from ./query.ts or shared/api.ts.
  */
+import { useMemo } from "react";
 import type { LngLat } from "../../shared/geo.ts";
 import type { ImportRequest, LinkEnd, NetworkNode, PlaceRef, PlaceRole, ShopDraft, ShopId, ShopLink } from "../../shared/places.ts";
 import type { Plan, SavedRoute, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
@@ -35,8 +36,11 @@ export const usePlannedRoute = (plan: Plan | null) => useQuery("POST /api/route"
 export const useShopLinks = (point: LngLat | null, ends: LinkEnd[] | null) =>
   useQuery("POST /api/places/links", point && ends?.length ? { body: { lon: point[0], lat: point[1], ends } } : null);
 
-/** The same paths drawn along the real track, in the same order. Null asks nothing. */
-export const useTrackPaths = (paths: LngLat[][] | null) => useQuery("POST /api/track", paths ? { body: { paths } } : null);
+/** The same paths drawn along the real track, in the same order. Null asks nothing. The request follows the paths' identity: the map renders again after every move. */
+export function useTrackPaths(paths: LngLat[][] | null) {
+  const request = useMemo(() => (paths ? { body: { paths } } : null), [paths]);
+  return useQuery("POST /api/track", request);
+}
 
 // ---- one-off reads ----
 /** The node a map click snaps to, or null when no track is that close. */

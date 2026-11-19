@@ -382,20 +382,28 @@ const TOOLTIP_STYLE: Partial<CSSStyleDeclaration> = {
   fontFamily: "var(--font)",
   fontSize: "var(--text-sm)",
   lineHeight: "1.45",
-  maxWidth: "280px",
-  marginLeft: "12px",
-  marginTop: "12px",
 };
+const TOOLTIP_GAP_PX = 12;
+const TOOLTIP_MAX_PX = 280;
 
-/** Hover text: an interchange ring "BNSF → UP · Galesburg, IL", a pin's or a shop square's name. Nothing else. */
+/** Below the pointer, on the side of it with more map, as wide as that side allows: near the right edge it is not cut off (a phone is narrow). */
+function tooltipStyle({ x, y, viewport }: PickingInfo): Partial<CSSStyleDeclaration> {
+  const width = viewport?.width ?? Infinity;
+  const leftward = x > width / 2;
+  const room = (leftward ? x : width - x) - 2 * TOOLTIP_GAP_PX;
+  const left = leftward ? `calc(${x - TOOLTIP_GAP_PX}px - 100%)` : `${x + TOOLTIP_GAP_PX}px`;
+  return { ...TOOLTIP_STYLE, maxWidth: `${Math.min(TOOLTIP_MAX_PX, room)}px`, transform: `translate(${left}, ${y + TOOLTIP_GAP_PX}px)` };
+}
+
+/** Hover text (on a phone, after a tap): an interchange ring "BNSF → UP · Galesburg, IL", a pin's or a shop square's name. Nothing else. */
 export function sceneTooltip(info: PickingInfo): { text: string; style: Partial<CSSStyleDeclaration> } | null {
   const { layer, object } = info;
   if (!layer || !object) return null;
   if (layer.id === LAYER.interchanges) {
     const x = object as Interchange;
-    return { text: `${lineName(x.from)} → ${lineName(x.to)}${x.place ? ` · ${x.place}` : ""}`, style: TOOLTIP_STYLE };
+    return { text: `${lineName(x.from)} → ${lineName(x.to)}${x.place ? ` · ${x.place}` : ""}`, style: tooltipStyle(info) };
   }
-  if (layer.id === LAYER.pins) return { text: (object as ScenePin).label, style: TOOLTIP_STYLE };
+  if (layer.id === LAYER.pins) return { text: (object as ScenePin).label, style: tooltipStyle(info) };
   return null;
 }
 
