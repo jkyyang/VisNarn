@@ -425,7 +425,7 @@ h2 {
   .map-btn:not(:disabled):hover,
   .shop-row:hover,
   .menu-item:not(:disabled):hover,
-  .leg-row:hover,
+  .section-row:hover,
   .route-row:not([aria-pressed="true"]):hover,
   .switch-row:hover,
   .accordion-head:hover,
@@ -999,7 +999,7 @@ input[aria-invalid="true"] {
   padding: 0;
   list-style: none;
 }
-.leg-row {
+.section-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1015,7 +1015,7 @@ input[aria-invalid="true"] {
   text-align: left;
   cursor: pointer;
 }
-.leg-row[aria-pressed="true"] {
+.section-row[aria-pressed="true"] {
   background: var(--surface-2);
 }
 .section-bar {
@@ -1040,13 +1040,17 @@ input[aria-invalid="true"] {
   font-variant-numeric: tabular-nums;
 }
 /* A change of carrier, a stop, a turn-back between the legs: smaller, in the leg's column. */
-.section:not(.section--leg) {
+.section:not(.section--leg),
+.section:not(.section--leg) .section-row {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 24px;
   font-size: var(--text-sm);
   color: var(--text-2);
+}
+.section:not(.section--leg) .section-row {
+  padding-block: 0;
 }
 /* The mark's middle on the legs' colour bar, its text in the carriers' column. */
 .section-mark {
@@ -1982,6 +1986,11 @@ input.saved-name {
   inset: -13px;
   border-radius: var(--radius-pill);
 }
+/* Picked: the accent ring with its dark outline, as a picked pin on the map. */
+.turn-mark[aria-pressed="true"] {
+  border-color: var(--on-accent);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 3.5px var(--on-accent), var(--shadow-glass);
+}
 /* Beside a pin it would otherwise cover (see turnBackShift): smaller, so the pin's number shows. */
 .route-mark--badge .turn-mark {
   height: 16px;
@@ -2022,7 +2031,7 @@ input.saved-name {
 .segmented > * {
   transition: scale var(--motion) var(--ease);
 }
-.leg-row {
+.section-row {
   transition: background-color var(--motion) var(--ease);
 }
 .btn:active,

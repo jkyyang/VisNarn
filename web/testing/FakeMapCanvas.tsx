@@ -37,6 +37,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look, found }
     <div
       data-testid="map"
       data-focus={content?.focus.kind ?? "none"}
+      data-fly={content?.flyTo?.kind ?? "none"}
       data-tracks={layers.tracks ? "on" : "off"}
       data-basemap={layers.basemap}
       data-carrier={preview ?? layers.carrier ?? undefined}
@@ -83,7 +84,9 @@ export default function FakeMapCanvas({ content, layers, onLayers, look, found }
           ),
       )}
       {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} corner={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
-      {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => <TurnBackMark key={i} turnBack={turnBack.turnBack} />)}
+      {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => (
+          <TurnBackMark key={i} turnBack={turnBack.turnBack} picked={scene.picked?.kind === "turn-back" && scene.picked.index === i} onPick={() => select?.({ kind: "turn-back", index: i })} />
+        ))}
       <MapControls layers={layers} onLayers={onLayers} look={look} onPreview={setPreview} onZoom={() => {}} onReset={() => {}} />
     </div>
   );

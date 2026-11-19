@@ -59,8 +59,11 @@ export function PillFace(props: { pill: ScenePill; corner: PillCorner | null; on
 /** Air kept between the turn-back popover and the map's edge, the map buttons and the panel. */
 const EDGE_PX = 8;
 
-/** The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. */
-export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
+/**
+ * The amber disc at a turn-back. Hover, focus or a tap shows two lines: where, and the headings in and out. A tap also
+ * picks it, as its row in the panel does; `picked`, it wears the accent ring.
+ */
+export function TurnBackMark(props: { turnBack: TurnBack; picked: boolean; onPick: () => void }): ReactElement {
   const { turnBack } = props;
   // Three reasons to show the details; a tap (or click) pins them, so they stay once the pointer has gone.
   const [pinned, setPinned] = useState(false);
@@ -69,7 +72,10 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
   const open = pinned || hovered || focused;
   const ref = useRef<HTMLButtonElement>(null);
   const id = useId();
-  useNativeClick(ref, () => setPinned((on) => !on));
+  useNativeClick(ref, () => {
+    setPinned((on) => !on);
+    props.onPick();
+  });
   // A tap anywhere else lets go of it (a phone has no hover to end).
   useEffect(() => {
     if (!pinned) return;
@@ -110,6 +116,7 @@ export function TurnBackMark(props: { turnBack: TurnBack }): ReactElement {
         type="button"
         className="turn-badge turn-mark"
         aria-label={`Turn-back at ${turnBack.at.near}`}
+        aria-pressed={props.picked}
         aria-describedby={open ? id : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}

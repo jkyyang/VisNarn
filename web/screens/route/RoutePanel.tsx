@@ -3,6 +3,7 @@
  * one, and saving it. Views take props and return markup; PlaceField also fetches its own suggestions.
  */
 import { useId, useState, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
+import type { LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, type PlaceRef, type PlaceSuggestion, type ResolvedPlace } from "../../../shared/places.ts";
 import { placeKind, type PlaceKind, type Plan, type PlannedRoute, type SavedRoute, type SavedRouteId } from "../../../shared/plans.ts";
 import { RAILROADS, type Line, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
@@ -11,7 +12,7 @@ import { compactRouteString, routeStringOf, shownRouteString, type RouteString }
 import { linkTo } from "../../app/routes.ts";
 import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
-import { chosenRoute } from "../../map/scene.ts";
+import { chosenRoute, type Picked } from "../../map/scene.ts";
 import { lineColor } from "../../theme.ts";
 import { PlacePin, TurnBadge } from "../../ui/badges.tsx";
 import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
@@ -44,9 +45,10 @@ export interface RoutePanelProps {
   unit: DistanceUnit;
   /** Undo and redo of the plan's changes. */
   history: History;
-  /** The leg of the chosen route picked here or on the map. */
-  leg: number | null;
-  onLeg: (leg: number | null) => void;
+  /** The leg, stop or turn-back of the chosen route picked here or on the map. */
+  picked: Picked | null;
+  /** `at`: where a stop or turn-back picked here is, for the camera to fly to. */
+  onPick: (picked: Picked | null, at?: LngLat) => void;
 }
 
 /** How long ⋯ shows ✓ after Copy route string. */
@@ -355,13 +357,16 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
   );
 }
 
+/** What a stop's or turn-back's row picks, where that is (for the camera), and the row's name for screen readers. */
+type RowPick = { what: Picked; at: LngLat; label: string };
+
 type CardRow =
   | { kind: "leg"; key: string; leg: number; railroad: Railroad | Line; km: number; from: string; to: string }
-  | { kind: "stop" | "turn-back" | "back-out"; key: string; mark: ReactNode; text: string };
+  | { kind: "stop" | "turn-back" | "back-out"; key: string; mark: ReactNode; text: string; pick: RowPick | null };
 
 /**
  * The chosen route as rows: one per carrier leg (from where to where, how far), and between them, smaller, each stop,
- * turn-back and backing out of a shop's own track.
+ * turn-back and backing out of a shop's own track; a stop and a turn-back, like a leg, to pick.
  * `rows` are the place rows the route runs through, so a stop shows its row's number.
  */
 function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: number[] }): CardRow[] {
@@ -384,18 +389,24 @@ function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: numb
       case "interchange":
         arrive(nearPlace(step.at));
         return;
-      case "stop":
-        arrive(nearPlace(step.label));
-        rows.push({ kind: "stop", key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: nearPlace(step.label) });
+      case "stop": {
+        const n = props.rows[step.stop + 1] ?? step.stop + 1;
+        const place = places[step.stop + 1];
+        const text = nearPlace(step.label);
+        arrive(text);
+        const pick: RowPick | null = place ? { what: { kind: "stop", index: n }, at: [place.lon, place.lat], label: `Stop ${n}: ${text}` } : null;
+        rows.push({ kind: "stop", key, mark: <PlacePin kind="stop" n={n} />, text, pick });
         return;
+      }
       case "turn-back": {
         const turnBack = route.turnBacks[step.turnBack];
         if (turnBack) arrive(nearPlace(turnBack.at.near));
-        rows.push({ kind: "turn-back", key, mark: <TurnBadge />, text: turnBack ? nearPlace(turnBack.at.near) : "Turn-back" });
+        const pick: RowPick | null = turnBack ? { what: { kind: "turn-back", index: step.turnBack }, at: [turnBack.at.lon, turnBack.at.lat], label: `Turn-back at ${turnBack.at.near}` } : null;
+        rows.push({ kind: "turn-back", key, mark: <TurnBadge />, text: turnBack ? nearPlace(turnBack.at.near) : "Turn-back", pick });
         return;
       }
       case "back-out":
-        rows.push({ kind: "back-out", key, mark: null, text: BACK_OUT });
+        rows.push({ kind: "back-out", key, mark: null, text: BACK_OUT, pick: null });
         return;
       case "destination":
         arrive(nearPlace(places.at(-1)?.label ?? ""));
@@ -408,7 +419,7 @@ function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: numb
 /**
  * The result: the chosen route's length, its carriers and interchanges (and turn-backs), then a row per carrier leg
  * with the stops and turn-backs between them; "Saved as" when the route string it was saved with differs from today's.
- * A leg's row and the leg on the map pick each other.
+ * A leg's, stop's or turn-back's row and the same thing on the map pick each other; a stop or turn-back picked here is flown to.
  */
 function ResultCard(props: {
   route: RoutePath;
@@ -418,10 +429,13 @@ function ResultCard(props: {
   unit: DistanceUnit;
   /** The route string it was saved with, when the router now gives another. */
   saved: string | null;
-  leg: number | null;
-  onLeg: (leg: number | null) => void;
+  picked: Picked | null;
+  onPick: (picked: Picked | null, at?: LngLat) => void;
 }): ReactElement {
   const { route } = props;
+  const isPicked = (what: Picked) => props.picked?.kind === what.kind && props.picked.index === what.index;
+  // A second press lets go.
+  const press = (what: Picked, at?: LngLat) => (isPicked(what) ? props.onPick(null) : props.onPick(what, at));
   const carriers = new Set(route.legs.map((leg) => leg.railroad)).size;
   const turns = route.turnBacks.length;
   const compact = compactRouteString(props.string);
@@ -432,25 +446,40 @@ function ResultCard(props: {
         <span className="muted">{[plural(carriers, "carrier"), interchangesWord(route.interchanges), ...(turns ? [plural(turns, "turn-back")] : [])].join(" · ")}</span>
       </div>
       <ol className="sections" aria-label="Sections">
-        {cardRows(props).map((row) =>
-          row.kind === "leg" ? (
-            <li key={row.key} className="section section--leg">
-              <button type="button" className="leg-row" aria-pressed={props.leg === row.leg} onClick={() => props.onLeg(props.leg === row.leg ? null : row.leg)}>
-                <span className="section-bar" style={{ background: lineColor(row.railroad) }} aria-hidden="true" />
-                <span className="leg-carrier">{lineName(row.railroad)}</span>
-                <span className="leg-way">
-                  {row.from} → {row.to}
-                </span>
-                <span className="leg-km">{fmtDistance(row.km, props.unit)}</span>
-              </button>
-            </li>
-          ) : (
-            <li key={row.key} className={`section section--${row.kind}`}>
+        {cardRows(props).map((row) => {
+          if (row.kind === "leg") {
+            return (
+              <li key={row.key} className="section section--leg">
+                <button type="button" className="section-row" aria-pressed={isPicked({ kind: "leg", index: row.leg })} onClick={() => press({ kind: "leg", index: row.leg })}>
+                  <span className="section-bar" style={{ background: lineColor(row.railroad) }} aria-hidden="true" />
+                  <span className="leg-carrier">{lineName(row.railroad)}</span>
+                  <span className="leg-way">
+                    {row.from} → {row.to}
+                  </span>
+                  <span className="leg-km">{fmtDistance(row.km, props.unit)}</span>
+                </button>
+              </li>
+            );
+          }
+          const { pick } = row;
+          const face = (
+            <>
               <span className="section-mark">{row.mark}</span>
               <span className="section-text">{row.text}</span>
+            </>
+          );
+          return (
+            <li key={row.key} className={`section section--${row.kind}`}>
+              {pick ? (
+                <button type="button" className="section-row" aria-label={pick.label} aria-pressed={isPicked(pick.what)} onClick={() => press(pick.what, pick.at)}>
+                  {face}
+                </button>
+              ) : (
+                face
+              )}
             </li>
-          ),
-        )}
+          );
+        })}
       </ol>
       {props.saved && props.saved !== compact && <p className="saved-as">Saved as {props.saved}</p>}
     </section>
@@ -641,8 +670,8 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
           rows={routedRows}
           unit={props.unit}
           saved={open?.routeString || null}
-          leg={props.leg}
-          onLeg={props.onLeg}
+          picked={props.picked}
+          onPick={props.onPick}
         />
       )}
       {routes && chosen && routes.length > 1 && <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />}

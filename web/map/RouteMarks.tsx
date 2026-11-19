@@ -119,7 +119,7 @@ export function RouteMarks(props: { scene: RouteScene; onSelect: (target: SceneT
             offset={shift ? [shift.x, shift.y] : [0, 0]}
             className={`route-mark route-mark--turn${shift ? " route-mark--badge" : ""}`}
           >
-            <TurnBackMark turnBack={turnBack.turnBack} />
+            <TurnBackMark turnBack={turnBack.turnBack} picked={scene.picked?.kind === "turn-back" && scene.picked.index === i} onPick={() => props.onSelect({ kind: "turn-back", index: i })} />
           </Marker>
         );
       })}

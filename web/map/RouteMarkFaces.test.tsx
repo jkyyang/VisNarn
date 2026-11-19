@@ -48,7 +48,7 @@ describe("the turn-back popover on a phone", () => {
             <button type="button" data-rect="layers">Layers</button>
             <button type="button" data-rect="reset">Reset view</button>
           </div>
-          <TurnBackMark turnBack={TURN_BACK} />
+          <TurnBackMark turnBack={TURN_BACK} picked={false} onPick={() => {}} />
         </div>
       </div>,
     );
@@ -73,7 +73,7 @@ describe("the turn-back popover beside the panel", () => {
       <div className="app">
         <main className="panel" data-rect="panel" />
         <div className="map-canvas" data-rect="frame">
-          <TurnBackMark turnBack={TURN_BACK} />
+          <TurnBackMark turnBack={TURN_BACK} picked={false} onPick={() => {}} />
         </div>
       </div>,
     );

@@ -5,7 +5,7 @@ import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlac
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
 import { fresh, importShops, removeShop, saveShop, shopLinkAt, useShopLinks, useShops } from "../../data/hooks.ts";
-import { SELECTED_SHOP_ZOOM, SHOP_ZOOM } from "../../map/config.ts";
+import { SELECTED_ZOOM, SHOP_ZOOM } from "../../map/config.ts";
 import type { MapHandle } from "../../map/MapHandles.tsx";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
 import { shopsScene, type SceneLink } from "../../map/scene.ts";
@@ -264,7 +264,7 @@ export function ShopsScreen(props: {
           camera
             ? { kind: "place", lon: camera[0], lat: camera[1], zoom: SHOP_ZOOM }
             : selectedAt
-              ? { kind: "place", lon: selectedAt.lon, lat: selectedAt.lat, zoom: SELECTED_SHOP_ZOOM }
+              ? { kind: "place", lon: selectedAt.lon, lat: selectedAt.lat, zoom: SELECTED_ZOOM }
               : { kind: "fit" }
         }
         onPick={picking ? onPick : undefined}

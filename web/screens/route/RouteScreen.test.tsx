@@ -113,6 +113,24 @@ describe("Route planner", () => {
     await waitFor(() => expect(stopRows()).toHaveLength(1));
   });
 
+  it("a stop's row and its pin on the map pick each other: the row flies to it, the pin also turns its ⌖ on", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
+    await user.click(screen.getByRole("button", { name: "Click the map" }));
+    const row = await within(screen.getByRole("list", { name: "Sections" })).findByRole("button", { name: /^Stop 1: / });
+    await user.click(row);
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("map")).toHaveAttribute("data-fly", "place");
+    await user.keyboard("{Escape}");
+    expect(row).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(screen.getByRole("button", { name: "Pin TEMPLE, TX wye" }));
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("map")).toHaveAttribute("data-fly", "none");
+    expect(screen.getByRole("button", { name: "Pick on the map: Stop 1" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("where two railroads meet, Route options offers the carrier from there: a click goes Router's pick → BNSF → UP → Router's pick; the choice is sent and summed up, and Undo puts it back", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
@@ -267,7 +285,7 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     expect(routeRows()[0]).toHaveTextContent("1 turn-back");
-    const mark = screen.getByRole("button", { name: "Turn-back at Temple, TX" });
+    const mark = within(screen.getByTestId("map")).getByRole("button", { name: "Turn-back at Temple, TX" });
     await user.hover(mark);
     const tooltip = screen.getByRole("tooltip");
     expect(tooltip).toHaveTextContent("Temple, TX · yard track (stub end)");
@@ -283,7 +301,26 @@ describe("Route planner", () => {
     expect(screen.queryByRole("button", { name: /^Turn-back at/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(await screen.findByRole("button", { name: "Turn-back at Temple, TX" })).toBeInTheDocument();
+    expect(await within(screen.getByTestId("map")).findByRole("button", { name: "Turn-back at Temple, TX" })).toBeInTheDocument();
+  });
+
+  it("a turn-back's row and its mark on the map pick each other; picked in the panel it is flown to, on the map the camera stays", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    const map = screen.getByTestId("map");
+    const row = within(screen.getByRole("list", { name: "Sections" })).getByRole("button", { name: "Turn-back at Temple, TX" });
+    const mark = within(map).getByRole("button", { name: "Turn-back at Temple, TX" });
+
+    await user.click(row);
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(mark).toHaveAttribute("aria-pressed", "true");
+    expect(map).toHaveAttribute("data-fly", "place");
+    await user.click(row);
+    expect(mark).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(mark);
+    expect(row).toHaveAttribute("aria-pressed", "true");
+    expect(map).toHaveAttribute("data-fly", "none");
   });
 
   it("a place that cannot be found shows its one line under its field, and no routes", async () => {

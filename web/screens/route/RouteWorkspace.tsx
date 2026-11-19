@@ -6,11 +6,14 @@
  *   planScene(...)                                  what the map draws
  */
 import { useEffect, useMemo, useState, type ReactElement } from "react";
+import type { LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, type PlaceSuggestion, type ShopView } from "../../../shared/places.ts";
+import { placeKind } from "../../../shared/plans.ts";
 import { go, HOME, type Screen } from "../../app/routes.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
+import { SELECTED_ZOOM } from "../../map/config.ts";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
-import { chosenRoute, planScene, type SceneTarget } from "../../map/scene.ts";
+import { chosenRoute, planScene, type Picked, type SceneTarget } from "../../map/scene.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { useDistanceUnit } from "../../units.ts";
 import { errorText } from "../../words.ts";
@@ -41,11 +44,18 @@ export function RouteWorkspace({ screen, onFind }: {
   const option = screen.option ?? saved?.option ?? null;
   const chosen = result?.outcome === "routed" ? chosenRoute(result.routes, option) : null;
   const shopList = shops.status === "ready" ? shops.data : NO_SHOPS;
-  // The leg picked in the panel or on the map; a new route, or Esc, lets go of it.
-  const [leg, setLeg] = useState<number | null>(null);
-  useEffect(() => setLeg(null), [chosen]);
-  useEscape(leg !== null, () => setLeg(null));
-  const scene = useMemo(() => planScene({ planned: result, option, leg, shops: shopList, unit }), [result, option, leg, shopList, unit]);
+  // The leg, stop or turn-back picked in the panel or on the map; a new route, or Esc, lets go of it.
+  // Picked in the panel, a stop or turn-back is also flown to; on the map the camera stays.
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [flyTo, setFlyTo] = useState<LngLat | null>(null);
+  const pick = (next: Picked | null, at: LngLat | null = null) => {
+    setPicked(next);
+    setFlyTo(at);
+  };
+  const toggle = (next: Picked) => pick(picked?.kind === next.kind && picked.index === next.index ? null : next);
+  useEffect(() => pick(null), [chosen]);
+  useEscape(picked !== null, () => pick(null));
+  const scene = useMemo(() => planScene({ planned: result, option, picked, shops: shopList, unit }), [result, option, picked, shopList, unit]);
 
   // A link to a saved route that is gone (deleted, or never there) opens a new plan instead.
   const known = list.status === "ready" && !list.stale;
@@ -55,9 +65,13 @@ export function RouteWorkspace({ screen, onFind }: {
 
   const onSelect = (target: SceneTarget) => {
     if (target.kind === "option") go({ ...screen, option: target.id }, { replace: true });
-    else if (target.kind === "leg") setLeg(leg === target.index ? null : target.index);
-    // One of the plan's pins turns its row's ⌖ on. While a ⌖ is on it does nothing: the second click of a double click lands on the pin just set.
-    else if (target.kind === "row") session.pick === null && dispatch({ type: "pick", at: target.index });
+    else if (target.kind === "leg" || target.kind === "turn-back") toggle(target);
+    // One of the plan's pins turns its row's ⌖ on, and a stop's also picks it. While a ⌖ is on it does nothing: the second click of a double click lands on the pin just set.
+    else if (target.kind === "row") {
+      if (session.pick !== null) return;
+      dispatch({ type: "pick", at: target.index });
+      if (placeKind(target.index, plan.places.length) === "stop") pick({ kind: "stop", index: target.index });
+    }
     else if (session.pick !== null) clickPlace(target.ref);
     else {
       const ref = target.ref;
@@ -105,16 +119,17 @@ export function RouteWorkspace({ screen, onFind }: {
           undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,
           redo: session.plan.future.length ? () => dispatch({ type: "redo" }) : null,
         }}
-        leg={leg}
-        onLeg={setLeg}
+        picked={picked}
+        onPick={pick}
       />
       <MapContent
         scene={scene}
         focus={{ kind: "fit" }}
+        flyTo={flyTo ? { kind: "place", lon: flyTo[0], lat: flyTo[1], zoom: SELECTED_ZOOM } : undefined}
         include={plan.include}
         onPick={session.pick === null ? undefined : (lon, lat, km, line) => {
           setClickError(null);
-          setLeg(null);
+          pick(null);
           // The place snaps to the line clicked: a grey route, else the selected one.
           const onLine = result?.outcome === "routed" ? chosenRoute(result.routes, line ?? option) : null;
           clickMap(lon, lat, km, onLine?.legs.map((leg) => leg.path) ?? null).then(

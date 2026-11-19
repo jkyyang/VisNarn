@@ -65,8 +65,8 @@ export type MapScene =
   | {
       kind: "route";
       selected: SceneRoute | null;
-      /** The leg of the selected route picked in the panel or on the map (its `index`), drawn over the rest. */
-      leg: number | null;
+      /** The leg, stop or turn-back of the selected route picked in the panel or on the map, drawn lit. */
+      picked: Picked | null;
       /** The other routes, drawn thin and grey underneath; a click on one adds a stop on it. */
       alternatives: SceneRoute[];
       /** Empty unless there are two or more routes. */
@@ -103,10 +103,17 @@ export interface EditedShop {
   links: SceneLink[];
 }
 
-/** Something in the scene the user clicked: a route to select, a leg of the selected one (by its `index`), a place to put in the plan, or a place of the plan (by its row). */
+/** A leg (by its `index`), stop (by its row) or turn-back (by its place in `turnBacks`) of the selected route, picked in the panel or on the map. */
+export interface Picked {
+  kind: "leg" | "stop" | "turn-back";
+  index: number;
+}
+
+/** Something in the scene the user clicked: a route to select, a leg or turn-back of the selected one, a place to put in the plan, or a place of the plan (by its row). */
 export type SceneTarget =
   | { kind: "option"; id: RouteStrategy }
   | { kind: "leg"; index: number }
+  | { kind: "turn-back"; index: number }
   | { kind: "place"; ref: PlaceRef; position: LngLat }
   | { kind: "row"; index: number };
 
@@ -287,7 +294,7 @@ const inPlaces = (shop: ResolvedPlace, places: (ResolvedPlace | null)[]) => plac
  * turn-backs, a pin for each place as soon as it resolves, and every other saved shop as a small square
  * to click.
  */
-export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; leg?: number | null; shops: ShopView[]; unit: DistanceUnit }): MapScene {
+export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; picked?: Picked | null; shops: ShopView[]; unit: DistanceUnit }): MapScene {
   const { planned, option, shops, unit } = input;
   const routes = planned?.outcome === "routed" ? planned.routes : null;
   const chosen = routes ? chosenRoute(routes, option) : null;
@@ -314,7 +321,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
     pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null, row: i, mark });
   });
 
-  if (!routes || !chosen) return { kind: "route", selected: null, leg: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
+  if (!routes || !chosen) return { kind: "route", selected: null, picked: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
 
   const selected = sceneRoute(chosen);
   const others = routes.filter((route) => route !== chosen);
@@ -338,7 +345,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   return {
     kind: "route",
     selected,
-    leg: input.leg ?? null,
+    picked: input.picked ?? null,
     alternatives,
     pills,
     turnBacks: chosen.turnBacks.map((turnBack) => ({ position: [turnBack.at.lon, turnBack.at.lat], turnBack })),

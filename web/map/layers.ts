@@ -55,9 +55,9 @@ export const PIN_BOX = {
 /** A marker's look: a filled dot or a ring (a shop's company, or the start's dot and the destination's ring), or a stop's numbered ring. */
 type Face = { shape: "dot" | "ring" | "stop"; approximate: boolean; ringed: boolean };
 
-/** A shop keeps its own marker as a place of the plan; the start and the destination wear the accent ring. */
-function faceOf(pin: ScenePin): Face {
-  if (pin.kind === "stop") return { shape: "stop", approximate: false, ringed: false };
+/** A shop keeps its own marker as a place of the plan; the start, the destination and the stop picked (`litRow`) wear the accent ring. */
+function faceOf(pin: ScenePin, litRow: number | null): Face {
+  if (pin.kind === "stop") return { shape: "stop", approximate: false, ringed: pin.row === litRow };
   const filled = pin.mark ? pin.mark.filled : pin.kind === "start";
   return { shape: filled ? "dot" : "ring", approximate: pin.mark?.approximate ?? false, ringed: pin.kind !== "shop" || !!pin.mark?.selected };
 }
@@ -68,8 +68,13 @@ function faceOf(pin: ScenePin): Face {
  * map's paper, the accent ring with its dark outline.
  */
 function iconOf(face: Face, colors: ThemeColors): Icon {
-  const [ink, paper] = [css(colors.fg), css(colors.casing)];
-  if (face.shape === "stop") return { ...PIN_BOX.stop, url: svgUrl(22, 22, `<circle cx="11" cy="11" r="9" fill="${paper}" stroke="${ink}" stroke-width="3"/>`) };
+  const [ink, paper, accent, onAccent] = [css(colors.fg), css(colors.casing), css(colors.accent), css(colors.onAccent)];
+  if (face.shape === "stop") {
+    const disc = (stroke: string, width: number, fill = "none") => `<circle cx="11" cy="11" r="9" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
+    // Ringed: the accent ring with its dark outline in place of the ink ring.
+    const body = face.ringed ? disc(onAccent, 4, paper) + disc(accent, 2) : disc(ink, 3, paper);
+    return { ...PIN_BOX.stop, url: svgUrl(22, 22, body) };
+  }
   const ring = (r: number, stroke: string, width: number, extra = "") => `<circle cx="14" cy="14" r="${r}" fill="none" stroke="${stroke}" stroke-width="${width}"${extra}/>`;
   const body = [
     `<circle cx="14" cy="14" r="10" fill="${ink}" fill-opacity=".1"/>`,
@@ -77,14 +82,14 @@ function iconOf(face: Face, colors: ThemeColors): Icon {
     face.shape === "dot"
       ? `<circle cx="14" cy="14" r="5" fill="${ink}" stroke="${paper}" stroke-width="2"/>`
       : `<circle cx="14" cy="14" r="6" fill="${paper}"/><circle cx="14" cy="14" r="4" fill="${paper}" stroke="${ink}" stroke-width="2.2"/>`,
-    face.ringed ? ring(11, css(colors.onAccent), 5) + ring(11, css(colors.accent), 2.5) : "",
+    face.ringed ? ring(11, onAccent, 5) + ring(11, accent, 2.5) : "",
   ];
   return { ...PIN_BOX.shop, url: svgUrl(28, 28, body.join("")) };
 }
 
 const iconsOf = once<ThemeColors, Map<string, Icon>>();
-function pinIcon(pin: ScenePin, colors: ThemeColors): Icon {
-  const face = faceOf(pin);
+function pinIcon(pin: ScenePin, colors: ThemeColors, litRow: number | null): Icon {
+  const face = faceOf(pin, litRow);
   const key = `${face.shape} ${face.approximate} ${face.ringed}`;
   const made = iconsOf(colors, () => new Map());
   if (!made.has(key)) made.set(key, iconOf(face, colors));
@@ -262,19 +267,19 @@ function selectedRouteLayers(route: SceneRoute, focus: number | null, colors: Th
   ];
 }
 
-/** Pins, and the number in each stop's ring. Their names are map labels (./SceneLabels.tsx). */
-function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
+/** Pins, and the number in each stop's ring; `litRow`: the stop picked. Their names are map labels (./SceneLabels.tsx). */
+function pinLayers(pins: ScenePin[], colors: ThemeColors, litRow: number | null = null): LayersList {
   return [
     new IconLayer<ScenePin>({
       ...UNDER_NAMES,
       id: LAYER.pins,
       data: pins,
       getPosition: (pin) => pin.position,
-      getIcon: (pin) => pinIcon(pin, colors),
+      getIcon: (pin) => pinIcon(pin, colors, litRow),
       getSize: (pin) => PIN_BOX[pin.kind].height,
       sizeUnits: "pixels",
       pickable: true,
-      updateTriggers: { getIcon: colors },
+      updateTriggers: { getIcon: [colors, litRow] },
     }),
     new TextLayer<ScenePin>({
       ...UNDER_NAMES,
@@ -336,6 +341,7 @@ function linkLayers(links: SceneLink[], colors: ThemeColors): LayersList {
 export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number): LayersList {
   if (scene.kind === "shops") return [...linkLayers(scene.links, colors), ...pinLayers(scene.pins, colors)];
 
+  const { picked } = scene;
   const alternatives = alternativeLegsOf(scene.alternatives, () => scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id }))));
   return [
     new PathLayer<AltLeg>({
@@ -361,8 +367,8 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       highlightColor: fade(colors.fg, 140),
       updateTriggers: { getColor: colors },
     }),
-    ...(scene.selected ? selectedRouteLayers(scene.selected, scene.leg, colors, zoom) : []),
-    ...pinLayers(scene.pins, colors),
+    ...(scene.selected ? selectedRouteLayers(scene.selected, picked?.kind === "leg" ? picked.index : null, colors, zoom) : []),
+    ...pinLayers(scene.pins, colors, picked?.kind === "stop" ? picked.index : null),
   ];
 }
 

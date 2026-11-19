@@ -40,6 +40,8 @@ export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: numb
 export interface MapContentProps {
   scene: MapScene | null;
   focus: MapFocus;
+  /** One place the camera flies to, while `focus` still holds: a stop or turn-back picked in the panel. */
+  flyTo?: MapFocus;
   /** The track the plan may use: the network shows the same classes. No plan: DEFAULT_INCLUDE. */
   include?: TrackIncluded;
   /** While set, the cursor is a crosshair and a click that hits nothing to select is reported here, with the grey route it landed on. */

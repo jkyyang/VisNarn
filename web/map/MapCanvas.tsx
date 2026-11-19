@@ -238,6 +238,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <SceneLabels scene={scene} colors={colors} />
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} cameraLeft={props.cameraLeft} />}
         <FlyTo focus={content?.focus} cameraLeft={props.cameraLeft} />
+        <FlyTo focus={content?.flyTo} cameraLeft={props.cameraLeft} />
         <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} cameraLeft={props.cameraLeft} />
         <Controls canvas={props} onPreview={setPreview} />
         <Credits />
