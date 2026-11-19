@@ -36,7 +36,7 @@ export const FIT_MAX_ZOOM = 11;
  * share of the free map for the labels that hang off the outermost pins, never less than the map
  * buttons take. The left is the camera's own (CAMERA_MARGIN_PX).
  */
-export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 72 };
+export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 92 };
 
 /** A shop picked in the list or on the map is shown this close: the lines that reach it and the towns round it. */
 export const SELECTED_SHOP_ZOOM = 8;
