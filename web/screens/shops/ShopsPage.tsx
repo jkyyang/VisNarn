@@ -65,6 +65,11 @@ export function ShopList(props: {
   const { onEdit } = props;
   const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
   const count = props.shops.length === props.total ? plural(props.total, "shop") : `${props.shops.length} of ${plural(props.total, "shop")}`;
+  // The shop picked, here or on the map, is on show in the list: on a phone, in the part of the sheet above the screen's foot.
+  const selectedRow = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    selectedRow.current?.scrollIntoView?.({ block: "nearest" });
+  }, [props.selected]);
   return (
     <section className="shop-list" aria-label="Shop list">
       <div className="list-bar">
@@ -85,6 +90,7 @@ export function ShopList(props: {
           return (
             <li
               key={shop.id}
+              ref={selected ? selectedRow : undefined}
               className={`shop-row${selected || editing ? " is-selected" : ""}${shop.place.ok ? "" : " is-off"}${props.lit.some((saved) => saved.id === shop.id) ? " is-lit" : ""}`}
               title={shop.place.ok ? undefined : "Not on the network"}
               onAnimationEnd={props.onLit}

@@ -601,6 +601,8 @@ input[aria-invalid="true"] {
   flex-direction: column;
   width: var(--panel-w);
   max-height: calc(100% - var(--edge-top) - var(--edge-bottom));
+  /* A finger scrolls it; a pinch or a double tap on it never zooms the page. */
+  touch-action: pan-y;
 }
 .panel.is-folded {
   display: none;
@@ -978,6 +980,10 @@ input[aria-invalid="true"] {
   .remove-btn {
     opacity: 1;
   }
+  /* Edit shows on the picked row only: unseen, it takes no tap, and the row's first tap picks it. */
+  .shop-row:not(.is-selected, :focus-within) .shop-edit {
+    pointer-events: none;
+  }
 }
 /* Where several railroads meet: which one takes the car on. A click moves to the next. */
 .next-carrier {
@@ -1263,6 +1269,10 @@ input[aria-invalid="true"] {
   color: var(--text);
   text-decoration: none;
 }
+/* The link is as tall as its row: a tap anywhere along the row opens the route. */
+a.saved-name {
+  line-height: var(--row);
+}
 input.saved-name {
   height: 32px;
   padding: 0 var(--space);
@@ -1314,6 +1324,7 @@ input.saved-name {
   list-style: none;
 }
 .shop-row {
+  position: relative;
   display: flex;
   align-items: center;
   border-radius: var(--radius-ctl);
@@ -1336,6 +1347,12 @@ input.saved-name {
   color: var(--text);
   text-align: left;
   cursor: pointer;
+}
+/* The whole row picks its shop, under Edit too while Edit takes no tap. */
+.shop-pick::before {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 .owner-glyph {
   flex: none;
@@ -1379,6 +1396,7 @@ input.saved-name {
   border-radius: var(--radius-pill);
 }
 .shop-edit {
+  position: relative;
   flex: none;
   height: 32px;
   margin: 0 6px 0 2px;
@@ -2147,6 +2165,25 @@ input.saved-name {
     position: absolute;
     inset: -8px;
   }
+  /* The smaller ones: the found place's Close (24 px), a route's pill on the map (26 px). */
+  .found-head .icon-btn::before {
+    inset: -10px;
+  }
+  .route-pill::before {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+  .section-row,
+  .section:not(.section--leg) .section-row,
+  .layers-card .segmented,
+  input.saved-name {
+    min-height: var(--ctl);
+  }
+  /* The card is often shorter than its rows on a phone: the choices first, the carriers' list after them. */
+  .layers-card > :first-child {
+    order: 1;
+  }
 }
 
 /* ---- Phone held upright: the map fills the screen, the panel is a sheet over its foot (web/app/sheet.ts) ---- */
@@ -2168,7 +2205,9 @@ input.saved-name {
     left: 0;
     width: auto;
     max-height: none;
-    padding-bottom: max(calc(2 * var(--space)), env(safe-area-inset-bottom));
+    /* The head rests clear of the home indicator; the body scrolls on under it. */
+    --foot: max(calc(2 * var(--space)), env(safe-area-inset-bottom));
+    padding-bottom: var(--foot);
     border-width: var(--stroke-w) 0 0;
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     will-change: transform;
@@ -2214,9 +2253,11 @@ input.saved-name {
     box-shadow: none;
     touch-action: pan-y;
   }
-  /* Every row can scroll into view, above the screen's foot and the keyboard. */
+  /* Every row can scroll into view, above the screen's foot and the keyboard; one brought into view stops there. */
   .panel-body {
-    padding-bottom: calc(var(--sheet-hidden, 0px) + var(--keyboard, 0px) + 6 * var(--space));
+    margin-bottom: calc(-1 * var(--foot));
+    padding-bottom: calc(var(--sheet-hidden, 0px) + var(--keyboard, 0px) + var(--foot) + 4 * var(--space));
+    scroll-padding-bottom: calc(var(--sheet-hidden, 0px) + var(--keyboard, 0px) + var(--foot));
   }
   /* Over the sheet's top, wherever it rests: the credits, and the Layers card that takes its limits from the controls' box. */
   .map-controls,

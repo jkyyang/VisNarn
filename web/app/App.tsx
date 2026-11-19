@@ -104,8 +104,8 @@ export default function App(): ReactElement {
 
 /**
  * The px of the map under the open panel on its left: up to the panel's right edge. On a phone the panel
- * is as wide as the map and lies over its foot (./sheet.ts says how far). The panel's place follows the
- * window only, so a window resize and a fold are the times to measure again.
+ * is as wide as the map and lies over its foot (./sheet.ts says how far). Measured again whenever the
+ * panel or the window changes size: its styles laid out, the phone turned, a fold.
  */
 function useCoveredLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
   const [left, setLeft] = useState(0);
@@ -121,9 +121,10 @@ function useCoveredLeft(panel: RefObject<HTMLElement | null>, open: boolean): nu
       const box = frame.getBoundingClientRect();
       setLeft(width < box.width ? Math.round(right - box.left) : 0);
     };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    resized.observe(frame);
+    return () => resized.disconnect();
   }, [panel, open]);
   return left;
 }

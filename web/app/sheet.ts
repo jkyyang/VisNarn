@@ -5,7 +5,8 @@
  * settles on a spring at the rest its momentum points to; only `transform` changes while it moves.
  *
  * It writes on the panel its transform, --sheet-hidden (how much of it is below the screen, which the body
- * keeps clear so every row can scroll into view) and --keyboard (the on-screen keyboard's height); on the
+ * keeps clear so every row can scroll into view) and --keyboard (the on-screen keyboard's height); lowered, its
+ * body starts at its first rows again; on the
  * frame, --sheet-covered (how much of the map it covers) once it rests; the camera is told at once where it
  * goes to rest, so a flight started with it frames clear of it. A text field focused raises it full, above the
  * keyboard; lowered, it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
@@ -61,6 +62,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
   useLayoutEffect(() => {
     const el = panel.current;
     if (!el || !on) return;
+    const body = el.querySelector<HTMLElement>(".panel-body");
     let y = 0;
     let stop: (() => void) | null = null;
 
@@ -79,7 +81,11 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       setRest(next);
       // A field the sheet lowers over takes no more typing: its keyboard goes.
       if (next !== "full" && isTextField(document.activeElement) && el.contains(document.activeElement)) document.activeElement.blur();
+      // Lowered, it shows its first rows again, as it opened.
+      if (next !== "full") body?.scrollTo(0, 0);
       const to = offsets(el)[next];
+      // At once: a row brought into view while the sheet moves stops where it will show.
+      el.style.setProperty("--sheet-hidden", `${to}px`);
       setCovered(coveredAt(to));
       if (reducedMotion()) {
         place(to);
@@ -159,7 +165,6 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     };
 
     // The body: a finger, decided on its first move, before the browser begins to scroll. A row's drag handle keeps its own.
-    const body = el.querySelector<HTMLElement>(".panel-body");
     let touch: { x: number; y: number; decided: boolean; mine: boolean } | null = null;
     const onTouchStart = (event: TouchEvent) => {
       const t = event.touches[0];

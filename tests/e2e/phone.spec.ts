@@ -111,14 +111,18 @@ test("A red edge says why on a tap: no hover on a phone", async ({ page }) => {
   await expect(page.locator(".why-tip")).toBeInViewport();
 });
 
-test("Shops fits the width; Edit lowers the sheet to half, its form opens at its heading", async ({ page }) => {
+test("Shops fits the width; a shop picked stays on show at half, and its Edit opens the form at its heading", async ({ page }) => {
   await page.goto("/shops");
   await expectMapCanvas(page);
   await expectNoSideScroll(page);
   await page.getByRole("button", { name: "Raise the panel" }).tap();
-  const last = page.getByRole("button", { name: /^Edit / }).last();
-  await last.scrollIntoViewIfNeeded();
-  await last.tap();
+  // A row's tap selects it: the sheet lowers to half with the row, and now its Edit, still on show.
+  const row = page.getByRole("listitem").filter({ has: page.getByRole("button", { name: /^Edit / }) }).last();
+  await row.scrollIntoViewIfNeeded();
+  await row.getByRole("button").first().tap();
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
+  await expect(row).toBeInViewport({ ratio: 1 });
+  await row.getByRole("button", { name: /^Edit / }).tap();
   await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
   const form = page.getByRole("region", { name: "Edit shop" });
   await expect(form.getByRole("heading", { name: "Edit shop" })).toBeInViewport({ ratio: 1 });
