@@ -261,7 +261,7 @@ export function ShopsScreen(props: {
         )}
       </div>
       <MapContent
-        scene={shopsScene(list, editing && point && { shopId: shop?.id ?? null, at: pinAt ?? point, links: lines })}
+        scene={shopsScene(list, editing && point && { shopId: shop?.id ?? null, at: pinAt ?? point, links: lines }, props.selected)}
         focus={
           camera
             ? { kind: "place", lon: camera[0], lat: camera[1], zoom: SHOP_ZOOM }

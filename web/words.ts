@@ -17,6 +17,9 @@ import type { DistanceUnit } from "./units.ts";
  */
 export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2}$/, "");
 
+/** "Regina, SK · Procor (approximate)": the shop is placed at its city's centre. */
+export const isApproximate = (name: string): boolean => /\(approximate\)$/.test(name);
+
 /** "UP", "Regional", "Short line", "Passenger". */
 export const lineName = (line: MapLine) => (isClassI(line) ? line : line[0].toUpperCase() + line.slice(1));
 

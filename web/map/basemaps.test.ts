@@ -1,7 +1,7 @@
 import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { basemapStyle, carryOwnLayers, GROUND, LABELS, NIGHT_LABEL_PAINT, OCEAN_FROM_SPACE, type StreetLook } from "./basemaps.ts";
-import { AUTO_DARK_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
+import { basemapStyle, carryOwnLayers, GROUND, LABELS, NIGHT_LABEL_PAINT, OCEAN_FROM_SPACE, SCENE_NAMES, type StreetLook } from "./basemaps.ts";
+import { AUTO_DARK_ZOOM, DETAIL_MIN_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
 
 const LOOKS: StreetLook[] = [
   { ground: "day", fromSpace: false },
@@ -52,10 +52,25 @@ describe("the street map", () => {
     const style = street(LOOKS[0]);
     const sourceLayers = style.layers.flatMap((l) => ("source-layer" in l ? [l["source-layer"]] : []));
     for (const unwanted of ["transportation_name", "poi", "building", "aerodrome_label", "housenumber"]) expect(sourceLayers).not.toContain(unwanted);
-    expect(style.layers.filter((l) => l.type === "symbol").map((l) => ("source-layer" in l ? l["source-layer"] : ""))).toEqual(["water_name", "place", "place", "place", "place", "place"]);
+    expect(style.layers.filter((l) => l.type === "symbol").map((l) => ("source-layer" in l ? l["source-layer"] : ""))).toEqual(["water_name", "place", "place", "place", "place"]);
     expect(JSON.stringify(style.layers.map((l) => ("filter" in l ? l.filter : null)))).not.toMatch(/"rail"|"transit"/);
     expect(style.sprite).toBeUndefined();
     expect(layerOf(style, LABELS).maxzoom).toBe(11);
+  });
+
+  it("ends every style with the empty layer the scene's names go over, so the routes under it always have a layer to go under", () => {
+    for (const style of [...LOOKS.map(street), basemapStyle("satellite", LOOKS[0])]) {
+      expect(style.layers.at(-1)).toMatchObject({ id: SCENE_NAMES, type: "background", paint: { "background-opacity": 0 } });
+    }
+  });
+
+  it("names the big cities only zoomed out, beside the shops' names: no states, no countries", () => {
+    const style = street(LOOKS[0]);
+    const city = layerOf(style, "label-city");
+    const layout = ("layout" in city ? city.layout : {}) as Record<string, unknown>;
+    expect(layout["text-field"]).toEqual(["step", ["zoom"], ["case", ["<=", ["get", "rank"], 3], ["coalesce", ["get", "name_en"], ["get", "name"]], ""], DETAIL_MIN_ZOOM, ["coalesce", ["get", "name_en"], ["get", "name"]]]);
+    expect(layerOf(style, "label-state").minzoom).toBe(DETAIL_MIN_ZOOM);
+    expect(style.layers.map((l) => l.id)).not.toContain("label-country");
   });
 
   it("in Auto shows the Earth from space zoomed out: the deep blue ocean and bright names, its own ground from AUTO_DARK_ZOOM", () => {

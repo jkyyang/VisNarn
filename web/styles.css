@@ -51,9 +51,13 @@
   --ok: #1e7e34;
   /* A turn-back: amber, with a shape (the ↩ disc) so colour is never the only cue. */
   --turn: #b06000;
-  /* The map's own marks: the edge round lines and rings, routes not selected. */
-  --casing: #ffffff;
+  /* The map's own marks: the edge round lines, markers and names; routes not selected; the network, one quiet line for every carrier. */
+  --casing: #f7f8fa;
   --alt-route: #8e8e93;
+  --rail-neutral: #3a4350;
+  /* Auto zoomed out, over the day side and the night side at once. */
+  --rail-from-space: #c9d1dc;
+  --rail-casing-from-space: #0a0d1499;
   /* The railroads: told apart by people with any common colour vision, by day and by night (tests/map-look.test.ts). */
   --rr-BNSF: #c65000;
   --rr-UP: #bc9400;
@@ -83,8 +87,9 @@
   --risk: #ff6961;
   --ok: #30d158;
   --turn: #e8890c;
-  --casing: #1c1c1e;
+  --casing: #0a0d14;
   --alt-route: #737980;
+  --rail-neutral: #c9d1dc;
   --rr-BNSF: #ff9a2e;
   --rr-UP: #f5dc45;
   --rr-CSXT: #a3d8ff;
@@ -1524,10 +1529,8 @@ input.saved-name {
   flex-direction: column;
   gap: 8px;
 }
-/* Inside the map, which has MapLibre's own font. */
-.map-controls,
-.layers-card,
-.credits-card {
+/* MapLibre gives its map a font of its own; the cards on the map take the page's. */
+.map .maplibregl-map {
   font-family: var(--font);
   font-size: var(--text-lg);
   line-height: 1.35;

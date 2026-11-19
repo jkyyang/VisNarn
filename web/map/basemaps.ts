@@ -7,7 +7,7 @@
  * - Optional overlay, Real tracks: the rail lines in the same OpenFreeMap vector tiles.
  */
 import type { ExpressionSpecification, FilterSpecification, LayerSpecification, StyleSpecification, SymbolLayerSpecification } from "maplibre-gl";
-import { AUTO_DARK_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
+import { AUTO_DARK_ZOOM, DETAIL_MIN_ZOOM, OCEAN_SPACE_ZOOM } from "./config.ts";
 
 export type BasemapKind = "map" | "satellite";
 export type Ground = "day" | "night";
@@ -29,6 +29,13 @@ export const STREET_SOURCE = "openmaptiles";
 
 /** The bottom text layer of both styles. The night tiles, Real tracks and the rail network go under it, so place names stay on top. */
 export const LABELS = "labels";
+
+/**
+ * An empty layer on top of both styles, so it is there before anything is drawn and after every switch: the scene's
+ * routes and markers (deck.gl) go under it, the scene's own names (./SceneLabels.tsx) over it.
+ */
+export const SCENE_NAMES = "scene-names";
+const SCENE_NAMES_SLOT: LayerSpecification = { id: SCENE_NAMES, type: "background", paint: { "background-opacity": 0 } };
 
 /** The street map's colours. Land, water, parks and roads stay within 1.5:1 of each other; names read at 4.5:1, faint ones at 3:1. */
 export const GROUND = {
@@ -65,6 +72,7 @@ const SATELLITE: StyleSpecification = {
   layers: [
     { id: "imagery", type: "raster", source: "imagery" },
     { id: LABELS, type: "raster", source: "labels" },
+    SCENE_NAMES_SLOT,
   ],
 };
 
@@ -72,6 +80,11 @@ const zoomRamp = (...stops: (number | string)[]) => ["interpolate", ["linear"], 
 const classIn = (...names: string[]): FilterSpecification => ["in", ["get", "class"], ["literal", names]];
 const onLand = (level: number): FilterSpecification => ["all", ["==", ["get", "admin_level"], level], ["!=", ["get", "maritime"], 1]];
 const NAME: ExpressionSpecification = ["coalesce", ["get", "name_en"], ["get", "name"]];
+
+/** OpenMapTiles ranks cities 1 (New York) to 4 (Pierre, Helena) and more: zoomed out, the map names these and bigger only. */
+const BIG_CITY_RANK = 3;
+/** Zoomed out, a big city's name, else none; from DETAIL_MIN_ZOOM in, every city's. */
+const CITY_NAME: ExpressionSpecification = ["step", ["zoom"], ["case", ["<=", ["get", "rank"], BIG_CITY_RANK], NAME, ""], DETAIL_MIN_ZOOM, NAME];
 
 /**
  * A text layer's paint in its ground's colours. In Auto, zoomed out past AUTO_DARK_ZOOM, the screen
@@ -145,9 +158,16 @@ function streetStyle({ ground: which, fromSpace }: StreetLook): StyleSpecificati
     names(LABELS, "water_name", ["==", ["geometry-type"], "Point"], { minzoom: 5, maxzoom: 11 }, "labelFaint", { "text-font": ["Noto Sans Italic"], "text-size": 11, "text-padding": 20 }),
     names("label-village", "place", classIn("village"), { minzoom: 11 }, "labelFaint", { "text-size": 11, "text-padding": 10 }),
     names("label-town", "place", classIn("town"), { minzoom: 8 }, "label", { "text-size": zoomRamp(8, 11, 12, 13), "text-padding": 10 }),
-    names("label-city", "place", classIn("city"), { minzoom: 3 }, "label", { "text-font": ["Noto Sans Bold"], "text-size": zoomRamp(3, 11, 8, 14, 12, 17), "symbol-sort-key": ["get", "rank"], "text-padding": 10 }),
-    names("label-state", "place", classIn("state"), { minzoom: 4, maxzoom: 7 }, "labelFaint", { "text-size": 10, "text-transform": "uppercase", "text-letter-spacing": 0.15, "text-padding": 20 }),
-    names("label-country", "place", classIn("country"), { minzoom: 1, maxzoom: 5 }, "label", { "text-font": ["Noto Sans Bold"], "text-size": 13, "text-padding": 20 }),
+    // Zoomed out, the map names the big cities beside the shops, in a lighter face than the shops' names (./SceneLabels.tsx), and no state or country.
+    names("label-city", "place", classIn("city"), { minzoom: 3 }, "label", {
+      "text-field": CITY_NAME,
+      "text-font": ["step", ["zoom"], ["literal", ["Noto Sans Regular"]], DETAIL_MIN_ZOOM, ["literal", ["Noto Sans Bold"]]],
+      "text-size": zoomRamp(3, 10.5, 8, 14, 12, 17),
+      "symbol-sort-key": ["get", "rank"],
+      "text-padding": 10,
+    }),
+    names("label-state", "place", classIn("state"), { minzoom: DETAIL_MIN_ZOOM, maxzoom: 7 }, "labelFaint", { "text-size": 10, "text-transform": "uppercase", "text-letter-spacing": 0.15, "text-padding": 20 }),
+    SCENE_NAMES_SLOT,
   ];
   return { version: 8, glyphs: GLYPHS, sources: { [source]: { type: "vector", url: OPENFREEMAP_TILES } }, layers };
 }

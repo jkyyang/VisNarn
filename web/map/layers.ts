@@ -2,11 +2,11 @@
 import { PathStyleExtension, type PathStyleExtensionProps } from "@deck.gl/extensions";
 import { GeoJsonLayer, IconLayer, PathLayer, ScatterplotLayer, TextLayer, type LayersList, type PickingInfo } from "deck.gl";
 import type { LngLat } from "../../shared/geo.ts";
-import { isClassI, NETWORK_CLASSES, type NetworkClass } from "../../shared/railroads.ts";
+import { NETWORK_CLASSES, RAILROADS, type NetworkClass, type Railroad } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
-import { CLASS_LINES, type RGBA, type ThemeColors } from "../theme.ts";
+import { css, type RGBA, type ThemeColors } from "../theme.ts";
 import { lineName } from "../words.ts";
-import { LABELS } from "./basemaps.ts";
+import { LABELS, SCENE_NAMES } from "./basemaps.ts";
 import { LINK_DASH } from "./config.ts";
 import type { MapScene, SceneLink, ScenePin, SceneRoute, SceneTarget } from "./scene.ts";
 
@@ -15,6 +15,7 @@ export const LAYER = {
   alternatives: "alternatives",
   routeCasing: "route-casing",
   route: "route",
+  carrier: "network-carrier",
   chevrons: "chevrons",
   interchanges: "interchanges",
   pins: "pins",
@@ -41,31 +42,54 @@ function once<K extends object, V>(): (key: K, make: () => V) => V {
     return made.get(key)!;
   };
 }
-/** Each pin's image box: width, height, and where the point it marks sits from the top. */
-export const PIN_BOX = {
-  start: { width: 18, height: 18, anchorY: 9 },
-  destination: { width: 18, height: 18, anchorY: 9 },
-  stop: { width: 22, height: 22, anchorY: 11 },
-  shop: { width: 15, height: 15, anchorY: 7.5 },
-} satisfies Record<ScenePin["kind"], { width: number; height: number; anchorY: number }>;
+type Icon = { url: string; width: number; height: number; anchorY: number };
 
-const css = ([r, g, b]: RGBA) => `rgb(${r},${g},${b})`;
+/** Each pin's image box: width, height, and where the point it marks sits from the top. A marker is the mockup's 28 px square. */
+export const PIN_BOX = {
+  start: { width: 28, height: 28, anchorY: 14 },
+  destination: { width: 28, height: 28, anchorY: 14 },
+  stop: { width: 22, height: 22, anchorY: 11 },
+  shop: { width: 28, height: 28, anchorY: 14 },
+} satisfies Record<ScenePin["kind"], Omit<Icon, "url">>;
+
+/** A marker's look: a filled dot or a ring (a shop's company, or the start's dot and the destination's ring), or a stop's numbered ring. */
+type Face = { shape: "dot" | "ring" | "stop"; approximate: boolean; ringed: boolean };
+
+/** A shop keeps its own marker as a place of the plan; the start and the destination wear the accent ring. */
+function faceOf(pin: ScenePin): Face {
+  if (pin.kind === "stop") return { shape: "stop", approximate: false, ringed: false };
+  const filled = pin.mark ? pin.mark.filled : pin.kind === "start";
+  return { shape: filled ? "dot" : "ring", approximate: pin.mark?.approximate ?? false, ringed: pin.kind !== "shop" || !!pin.mark?.selected };
+}
 
 /**
- * Pins as images, in the theme's colours (an image cannot read CSS variables): the start a filled dot, the destination a
- * ring, a stop a numbered ring, a shop a small square; each with the casing round it.
+ * A pin as an image, in the theme's colours: an image cannot read CSS variables; deck.gl knows an image by its url, so
+ * a new theme is a new image. A marker as the mockup draws it: a halo, the dashed ring, the dot or the ring on the
+ * map's paper, the accent ring with its dark outline.
  */
-function pinIcons(colors: ThemeColors) {
-  const [ink, edge] = [css(colors.fg), css(colors.casing)];
-  const icon = (kind: ScenePin["kind"], body: string) => ({ ...PIN_BOX[kind], url: svgUrl(PIN_BOX[kind].width, PIN_BOX[kind].height, body) });
-  return {
-    start: icon("start", `<circle cx="9" cy="9" r="6" fill="${ink}" stroke="${edge}" stroke-width="2"/>`),
-    destination: icon("destination", `<circle cx="9" cy="9" r="6" fill="${edge}" stroke="${ink}" stroke-width="3"/>`),
-    stop: icon("stop", `<circle cx="11" cy="11" r="9" fill="${edge}" stroke="${ink}" stroke-width="3"/>`),
-    shop: icon("shop", `<rect x="1.5" y="1.5" width="12" height="12" rx="3" fill="${ink}" stroke="${edge}" stroke-width="1.5"/>`),
-  } satisfies Record<ScenePin["kind"], { url: string; width: number; height: number; anchorY: number }>;
+function iconOf(face: Face, colors: ThemeColors): Icon {
+  const [ink, paper] = [css(colors.fg), css(colors.casing)];
+  if (face.shape === "stop") return { ...PIN_BOX.stop, url: svgUrl(22, 22, `<circle cx="11" cy="11" r="9" fill="${paper}" stroke="${ink}" stroke-width="3"/>`) };
+  const ring = (r: number, stroke: string, width: number, extra = "") => `<circle cx="14" cy="14" r="${r}" fill="none" stroke="${stroke}" stroke-width="${width}"${extra}/>`;
+  const body = [
+    `<circle cx="14" cy="14" r="10" fill="${ink}" fill-opacity=".1"/>`,
+    face.approximate ? ring(10, ink, 1, ` stroke-opacity=".75" stroke-dasharray="2 3"`) : "",
+    face.shape === "dot"
+      ? `<circle cx="14" cy="14" r="5" fill="${ink}" stroke="${paper}" stroke-width="2"/>`
+      : `<circle cx="14" cy="14" r="6" fill="${paper}"/><circle cx="14" cy="14" r="4" fill="${paper}" stroke="${ink}" stroke-width="2.2"/>`,
+    face.ringed ? ring(11, css(colors.onAccent), 5) + ring(11, css(colors.accent), 2.5) : "",
+  ];
+  return { ...PIN_BOX.shop, url: svgUrl(28, 28, body.join("")) };
 }
-const pinIconsOf = once<ThemeColors, ReturnType<typeof pinIcons>>();
+
+const iconsOf = once<ThemeColors, Map<string, Icon>>();
+function pinIcon(pin: ScenePin, colors: ThemeColors): Icon {
+  const face = faceOf(pin);
+  const key = `${face.shape} ${face.approximate} ${face.ringed}`;
+  const made = iconsOf(colors, () => new Map());
+  if (!made.has(key)) made.set(key, iconOf(face, colors));
+  return made.get(key)!;
+}
 
 const chevronOf = once<ThemeColors, { url: string; width: number; height: number; anchorY: number }>();
 const chevron = (colors: ThemeColors) =>
@@ -76,8 +100,12 @@ const chevron = (colors: ThemeColors) =>
     anchorY: 6,
   }));
 
-/** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
-const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3, linkCasing: 2 };
+/** Line widths in px: the selected route over its casing (the casing's whole width), the grey routes and a shop's links with the casing added. */
+const ROUTE_PX = { line: 3.4, casing: 7.5, alternative: 2.4, alternativeCasing: 2, link: 3, linkCasing: 2 };
+/** The selected route's casing lets a little of the map through. */
+const ROUTE_CASING_ALPHA = 235;
+/** Zoomed out, the route is a thin line: its chevrons start here. */
+const CHEVRON_MIN_ZOOM = 6;
 
 /** A suggested link's alpha, of 255, and a drag's preview of one: fainter than a link the shop has. */
 const SUGGESTED_ALPHA = 110;
@@ -88,34 +116,75 @@ const angleOf = (bearingDeg: number) => 90 - bearingDeg;
 const stopPinsOf = once<ScenePin[], ScenePin[]>();
 const alternativeLegsOf = once<SceneRoute[], AltLeg[]>();
 
-/** deck.gl 9.0 types have no `beforeId`; a spread passes it unchecked. The network goes under the basemap's place names. */
+/**
+ * deck.gl 9.0 types have no `beforeId`; a spread passes it unchecked. The network goes under the basemap's place names,
+ * the scene under its own names (./SceneLabels.tsx), so a shop's name stays readable where the route runs past it.
+ */
 const UNDER_LABELS = { beforeId: LABELS };
+const UNDER_NAMES = { beforeId: SCENE_NAMES };
+
+/** What the network shows besides its quiet lines. */
+export interface NetworkFocus {
+  /** The carrier the Layers popover shows, in its colour over the rest. */
+  carrier: Railroad | null;
+  /** A route is selected: the network steps back under it. */
+  underRoute: boolean;
+  /** Auto zoomed out: the day side and the night side on one screen. */
+  fromSpace: boolean;
+}
 
 /**
- * The mainline, one layer per class, each shown only while `drawn` lists its class. Class I is
- * coloured by owner; regional, short-line and passenger track is thinner and fainter, in the colour
- * those sections have in a route. Hidden layers stay mounted so showing one again does not
- * re-tessellate megabytes of track; all dim when a route needs the attention.
+ * The network's lines in px and opacity: every line one neutral colour, faint. The carrier the Layers popover
+ * shows stands out in its colour while the rest fade; under a route all fade further, that carrier half lit.
+ * Seen from space, a casing 1 px wide each side keeps the light line readable on the day side.
  */
-export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], dimmed: boolean, colors: ThemeColors): LayersList {
+const NETWORK_LOOK = {
+  width: 1.1,
+  casing: 1.1 + 2,
+  opacity: { plain: 0.4, besideCarrier: 0.13, underRoute: 0.16 },
+  carrier: { width: 1.9, opacity: 1 },
+  carrierUnderRoute: { width: 1.4, opacity: 0.55 },
+};
+
+const LINE_PX = { lineWidthUnits: "pixels", lineCapRounded: true, lineJointRounded: true } as const;
+
+/** The Class I lines of each carrier, sorted once per network, so showing a carrier again gives deck.gl the same data. */
+const carrierLinesOf = once<Mainline, Record<Railroad, Mainline["class_i"]>>();
+const carrierLines = (network: Mainline, carrier: Railroad) =>
+  carrierLinesOf(network, () => Object.fromEntries(RAILROADS.map((r) => [r, network.class_i.filter((f) => f.properties.owner === r)])) as Record<Railroad, Mainline["class_i"]>)[carrier];
+
+/**
+ * The mainline, one layer per class, each shown only while `drawn` lists its class, all in one neutral colour; seen
+ * from space, over their casings. On top, the shown carrier's Class I lines in its colour. Hidden layers stay mounted
+ * so showing one again does not re-tessellate megabytes of track; a fade is the layers' opacity, so it redraws nothing.
+ */
+export function networkLayers(network: Mainline, drawn: readonly NetworkClass[], focus: NetworkFocus, colors: ThemeColors): LayersList {
+  const { carrier, underRoute, fromSpace } = focus;
+  const opacity = underRoute ? NETWORK_LOOK.opacity.underRoute : carrier ? NETWORK_LOOK.opacity.besideCarrier : NETWORK_LOOK.opacity.plain;
   // Class I last, on top.
-  return [...NETWORK_CLASSES].reverse().map(
-    (c) =>
-      new GeoJsonLayer<{ owner: string }>({
-        ...UNDER_LABELS,
-        id: `network-${c}`,
-        data: network[c],
-        visible: drawn.includes(c),
-        opacity: (dimmed ? 0.35 : 0.8) * (c === "class_i" ? 1 : 0.7),
-        filled: false,
-        lineWidthUnits: "pixels",
-        lineCapRounded: true,
-        lineJointRounded: true,
-        getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
-        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.alternative),
-        updateTriggers: { getLineColor: colors },
-      }),
-  );
+  const classes = [...NETWORK_CLASSES].reverse();
+  const lines = (part: "casing" | "line") =>
+    classes.map(
+      (c) =>
+        new GeoJsonLayer({
+          ...UNDER_LABELS,
+          id: part === "line" ? `network-${c}` : `network-${c}-casing`,
+          data: network[c],
+          visible: drawn.includes(c),
+          opacity,
+          filled: false,
+          ...LINE_PX,
+          getLineWidth: part === "line" ? NETWORK_LOOK.width : NETWORK_LOOK.casing,
+          getLineColor: part === "casing" ? colors.fromSpace.casing : fromSpace ? colors.fromSpace.line : colors.neutral,
+        }),
+    );
+  const quiet = [...(fromSpace ? lines("casing") : []), ...lines("line")];
+  if (!carrier || !drawn.includes("class_i")) return quiet;
+  const look = underRoute ? NETWORK_LOOK.carrierUnderRoute : NETWORK_LOOK.carrier;
+  return [
+    ...quiet,
+    new GeoJsonLayer({ ...UNDER_LABELS, id: LAYER.carrier, data: carrierLines(network, carrier), opacity: look.opacity, filled: false, ...LINE_PX, getLineWidth: look.width, getLineColor: colors.rail[carrier] }),
+  ];
 }
 
 type Leg = SceneRoute["legs"][number];
@@ -123,28 +192,31 @@ type Chevron = SceneRoute["chevrons"][number];
 type Interchange = SceneRoute["interchanges"][number];
 type AltLeg = Leg & { option: SceneRoute["id"] };
 
-const legWidth = (leg: Leg) => (isClassI(leg.railroad) ? ROUTE_PX.classI : ROUTE_PX.other);
-
-/** The selected route: a white casing so it stands out, each section in its line's colour, and chevrons for the direction of travel. */
+/**
+ * The selected route: a casing in the map's paper so it stands out, in ink round the leg picked in the panel or on
+ * the map; each section in its carrier's colour, chevrons for the direction of travel, and a small node at each
+ * interchange (its name is a map label, ./SceneLabels.tsx).
+ */
 function selectedRouteLayers(route: SceneRoute, focus: number | null, colors: ThemeColors, zoom: number): LayersList {
-  // The picked leg's edge is ink, so it stands out of the route.
-  const focused = (leg: Leg) => leg.index === focus;
+  const paper = fade(colors.casing, ROUTE_CASING_ALPHA);
   return [
     new PathLayer<Leg>({
+      ...UNDER_NAMES,
       id: LAYER.routeCasing,
       data: route.legs,
       getPath: (leg) => leg.path,
-      getColor: (leg) => (focused(leg) ? colors.fg : colors.casing),
-      getWidth: (leg) => legWidth(leg) + ROUTE_PX.casing,
+      getColor: (leg) => (leg.index === focus ? colors.fg : paper),
+      getWidth: ROUTE_PX.casing,
       ...ROUND,
       updateTriggers: { getColor: [colors, focus] },
     }),
     new PathLayer<Leg>({
+      ...UNDER_NAMES,
       id: LAYER.route,
       data: route.legs,
       getPath: (leg) => leg.path,
       getColor: (leg) => colors.rail[leg.railroad],
-      getWidth: legWidth,
+      getWidth: ROUTE_PX.line,
       ...ROUND,
       // A click on a leg picks it, in the panel too; hovering one lights it.
       pickable: true,
@@ -153,44 +225,49 @@ function selectedRouteLayers(route: SceneRoute, focus: number | null, colors: Th
       updateTriggers: { getColor: colors },
     }),
     new IconLayer<Chevron>({
+      ...UNDER_NAMES,
       id: LAYER.chevrons,
-      data: route.chevrons.filter((c) => c.minZoom <= zoom),
+      data: zoom < CHEVRON_MIN_ZOOM ? [] : route.chevrons.filter((c) => c.minZoom <= zoom),
       getPosition: (c) => c.position,
       getIcon: () => chevron(colors),
       getAngle: (c) => angleOf(c.bearingDeg),
       getSize: 12,
       sizeUnits: "pixels",
+      updateTriggers: { getIcon: colors },
     }),
     new ScatterplotLayer<Interchange>({
+      ...UNDER_NAMES,
       id: LAYER.interchanges,
       data: route.interchanges,
       getPosition: (x) => x.position,
       radiusUnits: "pixels",
-      getRadius: 7,
+      getRadius: 4.5,
       getFillColor: colors.casing,
       stroked: true,
       lineWidthUnits: "pixels",
-      getLineWidth: 3,
+      getLineWidth: 2,
       getLineColor: colors.fg,
       pickable: true,
-      updateTriggers: { getFillColor: colors, getLineColor: colors },
     }),
   ];
 }
 
-/** Pins, and the number in each stop's ring. No names: the panel has them, and the map's own place names are under the pins. */
+/** Pins, and the number in each stop's ring. Their names are map labels (./SceneLabels.tsx). */
 function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
   return [
     new IconLayer<ScenePin>({
+      ...UNDER_NAMES,
       id: LAYER.pins,
       data: pins,
       getPosition: (pin) => pin.position,
-      getIcon: (pin) => pinIconsOf(colors, () => pinIcons(colors))[pin.kind],
+      getIcon: (pin) => pinIcon(pin, colors),
       getSize: (pin) => PIN_BOX[pin.kind].height,
       sizeUnits: "pixels",
       pickable: true,
+      updateTriggers: { getIcon: colors },
     }),
     new TextLayer<ScenePin>({
+      ...UNDER_NAMES,
       id: LAYER.pinGlyphs,
       data: stopPinsOf(pins, () => pins.filter((pin) => pin.kind === "stop")),
       getPosition: (pin) => pin.position,
@@ -222,9 +299,10 @@ function linkLayers(links: SceneLink[], colors: ThemeColors): LayersList {
   const colorOf = (piece: LinkPiece) => (piece.look === "refused" ? colors.risk : piece.look === "set" ? colors.fg : fade(colors.fg, SUGGESTED_ALPHA));
   const common = { getPath: (piece: LinkPiece) => piece.path, ...ROUND, updateTriggers: { getColor: colors } };
   return [
-    new PathLayer<LinkPiece>({ id: LAYER.linksCasing, data: on, getColor: colors.casing, getWidth: ROUTE_PX.link + ROUTE_PX.linkCasing, ...common }),
-    new PathLayer<LinkPiece>({ id: LAYER.links, data: on, getColor: colorOf, getWidth: ROUTE_PX.link, ...common }),
+    new PathLayer<LinkPiece>({ ...UNDER_NAMES, id: LAYER.linksCasing, data: on, getColor: colors.casing, getWidth: ROUTE_PX.link + ROUTE_PX.linkCasing, ...common }),
+    new PathLayer<LinkPiece>({ ...UNDER_NAMES, id: LAYER.links, data: on, getColor: colorOf, getWidth: ROUTE_PX.link, ...common }),
     new PathLayer<LinkPiece, PathStyleExtensionProps>({
+      ...UNDER_NAMES,
       id: LAYER.linksOffTrack,
       data: off,
       getColor: colorOf,
@@ -251,6 +329,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
   const alternatives = alternativeLegsOf(scene.alternatives, () => scene.alternatives.flatMap((route) => route.legs.map((leg) => ({ ...leg, option: route.id }))));
   return [
     new PathLayer<AltLeg>({
+      ...UNDER_NAMES,
       id: LAYER.alternativesCasing,
       data: alternatives,
       getPath: (leg) => leg.path,
@@ -260,6 +339,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       updateTriggers: { getColor: colors },
     }),
     new PathLayer<AltLeg>({
+      ...UNDER_NAMES,
       id: LAYER.alternatives,
       data: alternatives,
       getPath: (leg) => leg.path,
