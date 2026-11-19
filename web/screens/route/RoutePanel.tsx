@@ -49,6 +49,9 @@ export interface RoutePanelProps {
   onLeg: (leg: number | null) => void;
 }
 
+/** How long ⋯ shows ✓ after Copy route string. */
+const COPIED_MS = 1000;
+
 /** Shorter railroad stretches are left out of the sections. */
 const MIN_SECTION_KM = 0.5;
 
@@ -571,6 +574,12 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
 
   const name = open?.name ?? (result ? routeName(result.places) : "");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copy = (text: string) =>
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), COPIED_MS);
+    });
   // Each Save route counts up, so Saved routes opens afresh on the row saved.
   const [saves, setSaves] = useState(0);
   const save = (as: string) => (string ? props.onSave(as, compactRouteString(string)) : Promise.resolve());
@@ -598,11 +607,12 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
         <HistoryButtons history={props.history} />
         <Menu
           label="Route actions"
+          done={copied}
           items={(close) => (
             <>
               <MenuItem label="Reverse route" disabled={placesSet < 2} onSelect={() => (close(), dispatch({ type: "reverse" }))} />
               <MenuItem label={dirty || !routes ? "Save route" : "Saved"} disabled={!dirty} onSelect={() => (close(), saveNow())} />
-              <MenuItem label="Copy route string" disabled={!string} onSelect={() => (close(), string && void navigator.clipboard?.writeText(shownRouteString(string)))} />
+              <MenuItem label="Copy route string" disabled={!string} onSelect={() => (close(), string && void copy(shownRouteString(string)))} />
               <MenuItem label="New route" disabled={empty} onSelect={() => (close(), props.onNew())} />
             </>
           )}

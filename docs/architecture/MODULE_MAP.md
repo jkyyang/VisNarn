@@ -145,13 +145,13 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `screens/shops/ShopsScreen.tsx` | container: shops (narrowed by the panel's search, one selected and flown to), the form, the shop import; the edited shop's links with their undo history, the suggestion and a drag's preview (`useShopLinks`), a drop or a tap refined (`shopLinkAt`); the map's handles for the pin (red where no track is near), the rings and the ＋; the answer to a drop or a tap | `./ShopsPage`, `../route/session` (`History`, a type), `../../data/hooks`, `../../map/*`, `../../app/*` |
 | `screens/shops/ShopsPage.tsx` | `ShopList` (count, Add shop, ⋯ with Import CSV; a row per shop: owner's mark, name, code, carrier dots, Edit), `ShopForm` (Undo / Redo of link changes, Name, Shop code, Location set on the map and shown as the place it is near), `ShopLinks` (Track links: a ring per link to press, ×, the suggestion's Use, ＋), `ImportPreview` ("update" on a row that replaces a saved shop), `useImport` | `../../ui/*`, `../../data/hooks`, `../../owner`, `shared/` |
 | `ui/badges.tsx` | `RailroadChip`, `RailroadChips`, `Railroads`, `PlacePin` (the start a filled dot, a numbered stop, the destination a ring), `TurnBadge` | `shared/` |
-| `ui/icons.tsx` | the icons, one stroke style: `Crosshair`, `Cross`, `Search`, `Undo`, `Redo`, `Plus`, `More`, `Chevron`, `PanelIcon`, `Grip` | |
+| `ui/icons.tsx` | the icons, one stroke style: `Crosshair`, `Cross`, `Search`, `Undo`, `Redo`, `Plus`, `More`, `Check`, `Chevron`, `PanelIcon`, `Grip` | |
 | `ui/combobox.tsx` | `moveActive`, `SuggestionList` (grouped under headings when asked): what the place inputs share | `shared/` (types) |
 | `ui/ConfirmDelete.tsx` | the inline "Delete this …?" question | |
 | `ui/useEscape.ts` | Escape anywhere turns a mode off | |
 | `ui/segmented.ts` | `thumbAt`: where a segmented control's thumb sits | |
 | `ui/popover.ts` | `usePopover`: one popover open in the whole page; a press outside it or Escape closes it | `./useEscape` |
-| `ui/Menu.tsx` | `Menu`, `MenuItem`: ⋯ and a list's other actions | `./popover`, `./icons` |
+| `ui/Menu.tsx` | `Menu`, `MenuItem`: ⋯ and a list's other actions; ✓ in place of ⋯ a moment after one worked | `./popover`, `./icons` |
 | `ui/Accordion.tsx` | `Accordion`: a card that folds to a line saying what is in it | `./icons` |
 | `ui/Switch.tsx` | `Switch`: an on/off row, the accent when on | |
 | `ui/history.tsx` | `HistoryButtons`, `useHistoryKeys`: Undo and Redo while there is history, and Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | `./icons` |

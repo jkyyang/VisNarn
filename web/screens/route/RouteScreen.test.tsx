@@ -146,6 +146,9 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Route actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Copy route string" }));
     expect(copied).toEqual(["BNSF – [Fort Worth, TX] – UP"]);
+    // ⋯ says it worked with a ✓ for a moment.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Route actions" }).querySelector(".dot")).toBeNull());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Route actions" }).querySelector(".dot")).not.toBeNull(), { timeout: 2000 });
   });
 
   it("Save saves a route with a railroad change; Reverse route flips the ends", async () => {

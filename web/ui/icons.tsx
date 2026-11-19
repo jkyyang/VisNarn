@@ -59,6 +59,13 @@ export const More = (): ReactElement => (
   </Icon>
 );
 
+/** Done. */
+export const Check = (): ReactElement => (
+  <Icon>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </Icon>
+);
+
 /** A chevron pointing left; turned by CSS where it points elsewhere. */
 export const Chevron = ({ size = 18 }: { size?: number }): ReactElement => (
   <Icon size={size}>

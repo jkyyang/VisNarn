@@ -1,15 +1,18 @@
-/** ⋯: a list's other actions, in a popover. `items` gets `close`, for an item of its own kind (a file chooser's label) to call. `wrong`: why its last action failed: a red edge, and this as its tooltip. */
+/**
+ * ⋯: a list's other actions, in a popover. `items` gets `close`, for an item of its own kind (a file chooser's label) to call.
+ * `wrong`: why its last action failed: a red edge, and this as its tooltip. `done`: its last action worked: ✓ in place of ⋯.
+ */
 import { useRef, type ReactElement, type ReactNode } from "react";
-import { More } from "./icons.tsx";
+import { Check, More } from "./icons.tsx";
 import { usePopover } from "./popover.ts";
 
-export function Menu(props: { label: string; items: (close: () => void) => ReactNode; wrong?: string | null; children?: ReactNode }): ReactElement {
+export function Menu(props: { label: string; items: (close: () => void) => ReactNode; wrong?: string | null; done?: boolean; children?: ReactNode }): ReactElement {
   const root = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = usePopover([root]);
   return (
     <span className="menu" ref={root}>
       <button type="button" className={`icon-btn${props.wrong ? " is-wrong" : ""}`} aria-label={props.label} title={props.wrong ?? undefined} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <More />
+        {props.done ? <Check /> : <More />}
       </button>
       {props.children}
       {open && (
