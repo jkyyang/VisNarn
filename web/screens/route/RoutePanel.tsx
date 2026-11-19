@@ -99,6 +99,8 @@ function PlaceField(props: {
   /** "Remove" takes the row out; "Clear" empties one of the last two. Null: nothing to clear. */
   remove: "Remove" | "Clear" | null;
   onCommit: (ref: PlaceRef | null) => void;
+  /** After a suggestion is chosen from the list. */
+  onChosen: () => void;
   onTogglePick: () => void;
   onRemove: () => void;
 }): ReactElement {
@@ -188,7 +190,18 @@ function PlaceField(props: {
           <Crosshair />
         </button>
       </div>
-      {open && <SuggestionList id={listId} label={`Suggestions for ${props.label}`} list={list} active={active} onChoose={(suggestion) => done(suggestion.ref)} />}
+      {open && (
+        <SuggestionList
+          id={listId}
+          label={`Suggestions for ${props.label}`}
+          list={list}
+          active={active}
+          onChoose={(suggestion) => {
+            done(suggestion.ref);
+            props.onChosen();
+          }}
+        />
+      )}
       {props.problem && (
         <span id={problemId} className="visually-hidden">
           {props.problem}
@@ -250,6 +263,13 @@ function PlaceList(props: {
   // Keyed by spot, so a row slides from where its place was; empty rows by their order among the empty.
   const keys = places.map((ref, at) => (ref ? spotKey(ref) : `empty-${places.slice(0, at).filter((p) => p === null).length}`));
   const reorder = useReorder(keys, (from, to) => dispatch({ type: "move", from, to }), (at) => [rowName(at, count), labelOf(at)].filter(Boolean).join(", "));
+  // A place chosen from the suggestions: typing goes on in the next empty row; with none left, the keyboard goes.
+  const typeOnAfter = (at: number) => {
+    const next = places.findIndex((place, i) => i !== at && place === null);
+    const input = next < 0 ? null : reorder.listRef.current?.querySelectorAll("input")[next];
+    if (input) input.focus();
+    else (document.activeElement as HTMLElement | null)?.blur();
+  };
   const problemAt = (at: number): string | null => {
     if (!current) return null;
     return placeProblem(current.places[at] ?? null) ?? (current.outcome === "no-route" && current.problem.at === at ? current.problem.message : null);
@@ -277,6 +297,7 @@ function PlaceList(props: {
                   picking={session.pick === at}
                   remove={count > 2 ? "Remove" : ref ? "Clear" : null}
                   onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
+                  onChosen={() => typeOnAfter(at)}
                   onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
                   onRemove={() => dispatch({ type: "remove", at })}
                 />

@@ -12,6 +12,7 @@ import { DEFAULT_INCLUDE, drawnClasses, type Railroad } from "../../shared/railr
 import type { Mainline } from "../data/basemap.ts";
 import { fresh, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
+import { pressClosesPopover } from "../ui/popover.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
 import { Credits } from "./Credits.tsx";
@@ -243,7 +244,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           onClick={(info) => {
             const target = sceneTarget(info);
             const current = latest.current;
-            if (!current) return;
+            if (!current || pressClosesPopover()) return;
             // While a click places something, a pin or a shop square is still itself; a line under it is a spot on the map.
             const line = target?.kind === "option" || target?.kind === "leg";
             if (target && current.onSelect && !(line && current.onPick)) return current.onSelect(target);

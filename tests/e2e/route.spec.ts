@@ -117,6 +117,35 @@ test.describe("Route planner", () => {
     await expect(page.locator(".flash")).toHaveCount(0);
   });
 
+  test("a click on the map that closes a popover only closes it; the next click places", async ({ page }) => {
+    await page.goto("/route");
+    await expectMapCanvas(page);
+    const start = page.getByRole("combobox", { name: "Start" });
+    for (const [button, card] of [[/^Map layers/, ".layers-card"], ["Map credits", ".credits-card"], ["Route actions", ".menu-card"]] as const) {
+      await page.getByRole("button", { name: button }).click();
+      await expect(page.locator(card)).toBeVisible();
+      await clickMapCentre(page);
+      await expect(page.locator(card)).toBeHidden();
+    }
+    await page.waitForTimeout(500);
+    await expect(start).toHaveValue("");
+    await clickMapCentre(page);
+    await expect(start).not.toHaveValue("");
+  });
+
+  test("a place chosen from the suggestions moves the typing to the next empty row; the last one ends it", async ({ page }) => {
+    await page.goto("/route");
+    const [start, destination] = [page.getByRole("combobox", { name: "Start" }), page.getByRole("combobox", { name: "Destination" })];
+    await start.fill("Taylor, TX");
+    await page.getByRole("option", { name: /^Taylor, TX/ }).click();
+    await expect(destination).toBeFocused();
+    await destination.fill("North Little Rock, AR");
+    await page.getByRole("option", { name: /^North Little Rock, AR/ }).first().click();
+    await expect(destination).not.toBeFocused();
+    await expect(start).not.toBeFocused();
+    await expect(result(page)).toBeVisible();
+  });
+
   test("a click at Temple adds a stop that Undo takes back", async ({ page }) => {
     await page.goto("/route");
     await planRoute(page, "Taylor, TX", "North Little Rock, AR");

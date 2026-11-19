@@ -101,6 +101,35 @@ test("A plan on a phone: ⌖ lowers the sheet for the map, the route's places lo
   await expectNoSideScroll(page);
 });
 
+test("A tap on the map that closes a popover only closes it; the next tap places", async ({ page }) => {
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  const start = page.getByRole("combobox", { name: "Start" });
+  // North Platte, NE: the EXAMPLE shop there, where a tap sets Start.
+  const shop = await mapPoint(page, [-100.77, 41.12]);
+  await page.getByRole("button", { name: "Route actions" }).tap();
+  await page.touchscreen.tap(shop.x, shop.y);
+  await expect(page.locator(".menu-card")).toBeHidden();
+  await page.waitForTimeout(500);
+  await expect(start).toHaveValue("");
+  await page.touchscreen.tap(shop.x, shop.y);
+  await expect(start).toHaveValue("North Platte, NE");
+});
+
+test("A place chosen from the suggestions keeps the keyboard for the next empty row; the last one lowers the sheet", async ({ page }) => {
+  await page.goto("/route");
+  const [start, destination] = [page.getByRole("combobox", { name: "Start" }), page.getByRole("combobox", { name: "Destination" })];
+  await start.tap();
+  await start.fill("Taylor, TX");
+  await page.getByRole("option", { name: /^Taylor, TX/ }).tap();
+  await expect(destination).toBeFocused();
+  await expect.poll(() => sheetTop(page)).toBeLessThan(0.1);
+  await destination.fill("North Little Rock, AR");
+  await page.getByRole("option", { name: /^North Little Rock, AR/ }).first().tap();
+  await expect(destination).not.toBeFocused();
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
+});
+
 test("A red edge says why on a tap: no hover on a phone", async ({ page }) => {
   await page.goto("/route");
   const search = page.getByRole("combobox", { name: "Search shops and cities" });
