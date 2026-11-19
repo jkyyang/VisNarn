@@ -20,7 +20,6 @@
   --icon-btn: 32px;
   --row: 40px;
   --stroke-w: 1px;
-  --text-input: var(--text-lg);
   /* The map beside the panel, less a margin each side: no card over the map is wider. */
   --free-w: calc(100vw - var(--panel-w) - 3 * var(--inset));
   /* The window's edges a floating thing keeps off: the margin, or the notch, the status bar and the home indicator where they are wider. */
@@ -106,12 +105,15 @@
   --rr-passenger: #ff8ad0;
   color-scheme: dark;
 }
-/* A finger: bigger targets. Inputs stay at 16 px so iOS does not zoom into them. */
+/* A finger: bigger targets, and a phone's type sizes (body 17, secondary 15, footnote 13). Fields at 17 px: iOS zooms into one under 16. */
 @media (pointer: coarse) {
   :root {
     --ctl: 44px;
     --row: 48px;
-    --text-input: 16px;
+    --text-sm: 13px;
+    --text-md: 15px;
+    --text-lg: 17px;
+    --text-display: 28px;
   }
 }
 /* A phone held upright: the panel is a sheet, no map beside it. */
@@ -171,7 +173,7 @@ input {
   color: inherit;
 }
 input {
-  font-size: var(--text-input);
+  font-size: var(--text-lg);
 }
 h1,
 h2 {
@@ -2183,6 +2185,10 @@ input.saved-name {
   /* The card is often shorter than its rows on a phone: the choices first, the carriers' list after them. */
   .layers-card > :first-child {
     order: 1;
+  }
+  /* At a phone's type size a shop's or a route's name takes a second line rather than lose its end. */
+  :is(.shop-row, .route-row) .shop-name {
+    white-space: normal;
   }
 }
 
