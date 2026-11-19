@@ -1485,6 +1485,9 @@ input.saved-name {
 .map-handle-mark {
   --handle: var(--icon-btn);
   z-index: 3;
+  /* No box of its own: the ＋'s marker is at the pin's spot, and would lie over the pin and take its drags. */
+  width: 0;
+  height: 0;
 }
 @media (pointer: coarse) {
   .map-handle-mark {
@@ -1495,10 +1498,12 @@ input.saved-name {
   z-index: 4;
 }
 .map-handle {
+  position: absolute;
   display: grid;
   place-items: center;
   width: var(--handle);
   height: var(--handle);
+  margin: calc(var(--handle) / -2);
   padding: 0;
   border: 0;
   background: none;

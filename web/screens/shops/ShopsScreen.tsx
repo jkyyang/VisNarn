@@ -77,8 +77,7 @@ export function ShopsScreen(props: {
   const point: LngLat | null = place ? [place.lon, place.lat] : null;
   const atNode = place?.fraId != null;
   // The camera goes to the shop as it opens or is given a place; a pin dragged somewhere stays where it was let go.
-  const draggedHere = picked?.dragged && point?.join() === picked.at.join();
-  if (!draggedHere && camera?.join() !== point?.join()) setCamera(point);
+  if (!picked?.dragged && camera?.join() !== point?.join()) setCamera(point);
 
   // The links: those set here, else the saved ones. With none, the suggestion is link 1 of a shop just placed (new, or
   // moved) and an offer to a saved shop where it is, so saving that one again never wires it. A shop at a node has none.
