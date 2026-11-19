@@ -79,7 +79,7 @@ export function ShopList(props: {
                 <OwnerGlyph owner={ownerOf(shop)} />
                 <span className="shop-text">
                   <span className="shop-name">{name}</span>
-                  <span className="shop-sub">{[shop.code, note].filter(Boolean).join(" · ")}</span>
+                  <span className="shop-sub" title={note ?? undefined}>{[shop.code, note].filter(Boolean).join(" · ")}</span>
                 </span>
                 {shop.place.ok && <CarrierDots railroads={shop.place.place.railroads} />}
               </button>
@@ -135,7 +135,8 @@ function savedRef(shop: ShopView | null): PlaceRef | null {
  * (`children`) · Delete / Cancel / Save shop.
  *
  * It asks the server what the location means (usePlace) and says where that is (`onPlace`). Save is off until the place
- * is on the network; off it, the Location row's edge is red and its tooltip says why.
+ * is on the network; off it, the Location row's edge is red and its tooltip says why. A save or delete the server
+ * refuses turns Save shop's edge red, with why in its tooltip.
  */
 export function ShopForm(props: {
   shop: ShopView | null;
@@ -229,11 +230,6 @@ export function ShopForm(props: {
           </output>
         </div>
         {props.children}
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
         {props.onDelete && confirmDelete && <ConfirmDelete question="Delete this shop?" busy={busy} onConfirm={remove} onKeep={() => setConfirmDelete(false)} />}
         <div className="actions">
           {props.onDelete && !confirmDelete && (
@@ -245,10 +241,15 @@ export function ShopForm(props: {
           <button type="button" className="btn" onClick={props.onCancel}>
             Cancel
           </button>
-          <button type="submit" className="btn btn--primary" disabled={!canSave}>
+          <button type="submit" className={`btn btn--primary${error ? " is-wrong" : ""}`} disabled={!canSave} title={error ?? undefined}>
             {busy ? "Saving…" : "Save shop"}
           </button>
         </div>
+        {error && (
+          <span className="visually-hidden" role="alert">
+            {error}
+          </span>
+        )}
       </form>
     </section>
   );

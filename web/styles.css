@@ -889,6 +889,10 @@ input[aria-invalid="true"] {
 .map-handle.is-wrong .map-handle-face {
   box-shadow: inset 0 0 0 1.5px var(--risk);
 }
+/* On the accent fill an inset edge is lost: the edge goes round the button, as an outline so it stays while the button has the focus. */
+.btn--primary.is-wrong {
+  outline: 2px solid var(--risk);
+}
 .place-field:has([aria-invalid="true"]) .pick-btn,
 .shop-row.is-off .owner-glyph {
   color: var(--risk);
@@ -1032,11 +1036,13 @@ input[aria-invalid="true"] {
   font-size: var(--text-sm);
   color: var(--text-2);
 }
+/* The mark's middle on the legs' colour bar, its text in the carriers' column. */
 .section-mark {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   flex: none;
-  width: 4px;
+  width: 18px;
+  margin: 0 -7px;
 }
 .section--turn-back .section-text {
   color: var(--turn);
@@ -2080,6 +2086,9 @@ input.saved-name {
   .credits-btn,
   .credits-card {
     bottom: calc(var(--inset) + var(--radius-panel));
+  }
+  .layers-card {
+    max-height: calc(100% - 2 * var(--inset) - var(--radius-panel));
   }
   /* The sheet scrolls with the page: no fold, and its body does not scroll on its own. */
   .panel.is-folded {
