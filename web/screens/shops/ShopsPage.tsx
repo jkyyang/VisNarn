@@ -323,12 +323,13 @@ export function useImport(run: (request: ImportRequest) => Promise<ImportReport<
 }
 
 /**
- * A shop list being imported, from the ⋯ menu's Import CSV: how many rows are ready, and each row that will not be
- * saved, with why; then Save. A save the server refuses turns Save's edge red, with why in its tooltip. On screen the
+ * A shop list being imported, from the ⋯ menu's Import CSV: how many rows are ready ("update" on one that replaces a
+ * saved shop: it keeps that shop's id), and each row that will not be saved, with why; then Save. A save the server refuses turns Save's edge red, with why in its tooltip. On screen the
  * saved rows light up in the list, and a file that cannot be read turns ⋯ red; screen readers hear both here.
  */
-export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): ReactElement {
+export function ImportPreview(props: { flow: ReturnType<typeof useImport>; saved: ShopView[] }): ReactElement {
   const { flow } = props;
+  const replaces = (shop: ShopView) => props.saved.some((saved) => saved.id === shop.id);
   const said = (
     <span className="visually-hidden" role={flow.error ? "alert" : "status"}>
       {flow.error ?? (flow.saved ? `Saved ${plural(flow.saved.ready.length, "shop")}.` : "")}
@@ -354,7 +355,7 @@ export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): Re
             <ul className="import-ready">
               {flow.preview.report.ready.slice(0, PREVIEW_ROWS).map((shop, i) => (
                 <li key={`${shop.name}-${i}`}>
-                  {shop.name} {shop.code && <span className="muted small">{shop.code}</span>}
+                  {shop.name} {shop.code && <span className="muted small">{shop.code}</span>} {replaces(shop) && <span className="tag">update</span>}
                 </li>
               ))}
               {flow.preview.report.ready.length > PREVIEW_ROWS && <li className="muted">and {flow.preview.report.ready.length - PREVIEW_ROWS} more</li>}

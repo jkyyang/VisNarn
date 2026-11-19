@@ -348,12 +348,16 @@ describe("Shops screen", () => {
     const user = userEvent.setup();
     openPage("/shops");
     await screen.findByText("EX-NLR-01");
-    const csv = "name,lon,lat\nShop at Omaha,-95.94,41.26\nShop at Denver,-104.99,39.74\nShop in the sea,-140,10\n";
+    const csv = "name,code,lon,lat\nShop at Omaha,EX-NPL-01,-95.94,41.26\nShop at Denver,,-104.99,39.74\nShop in the sea,,-140,10\n";
     await importFile(user, new File([csv], "shops.csv", { type: "text/csv" }));
     const card = await screen.findByRole("region", { name: "Import shop list" });
 
     const preview = await within(card).findByRole("region", { name: "Import preview" });
     expect(preview).toHaveTextContent("shops.csv · 2 ready · 1 not saved");
+    // The row with a saved shop's code replaces that shop.
+    const row = (name: string) => within(preview).getByText(name, { exact: false }).closest("li");
+    expect(row("Shop at Omaha")).toHaveTextContent(/EX-NPL-01 update$/);
+    expect(row("Shop at Denver")).not.toHaveTextContent("update");
     expect(within(preview).getByRole("list", { name: "Rows to fix before saving" })).toHaveTextContent("Line 4: No track near -140, 10.");
     expect(fake.state.shops).toHaveLength(6);
 
@@ -362,7 +366,7 @@ describe("Shops screen", () => {
     expect((await screen.findByText("Shop at Omaha")).closest("li")).toHaveClass("is-lit");
     expect(screen.getByText("EX-NLR-01").closest("li")).not.toHaveClass("is-lit");
     expect(card).not.toBeInTheDocument();
-    expect(fake.state.shops).toHaveLength(8);
+    expect(fake.state.shops).toHaveLength(7);
   });
 
   it("a second file that fails replaces the first file's preview, so Save cannot write the old file; ⋯ turns red and says why", async () => {

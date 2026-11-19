@@ -241,7 +241,9 @@ function readShopCsv(state: FakeState, text: string): ImportReport<ShopView> {
     const name = cells[h("name")] ?? "";
     const code = h("code") >= 0 ? (cells[h("code")] ?? "") : "";
     const location: PlaceRef = { kind: "coord", lon: Number(cells[h("lon")]), lat: Number(cells[h("lat")]) };
-    const view = shopView(state, `shop-${state.nextId++}`, { name, code: code || null, location, links: [] });
+    // As the real server: a row with a saved shop's code replaces that shop.
+    const before = code ? state.shops.find((shop) => shop.code === code) : undefined;
+    const view = shopView(state, before?.id ?? `shop-${state.nextId++}`, { name, code: code || null, location, links: [] });
     if ("error" in view) issues.push({ row, line: row + 2, message: view.error });
     else ready.push(view);
   });
@@ -295,7 +297,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
     // As the real server: an empty file is refused with a message.
     if (!source.text.trim()) throw new HttpError(400, "invalid", `${source.fileName} is empty.`, "source");
     const report = readShopCsv(state, source.text);
-    if (anyBody.commit) state.shops.push(...report.ready);
+    if (anyBody.commit) for (const shop of report.ready) state.shops = [...state.shops.filter((s) => s.id !== shop.id), shop];
     return { ...report, committed: !!anyBody.commit };
   }
   if (route === "POST /api/shops" || (method === "PUT" && parts[1] === "shops" && parts.length === 3)) {

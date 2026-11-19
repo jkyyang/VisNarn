@@ -170,6 +170,14 @@ h2 {
 .strong {
   font-weight: var(--weight-strong);
 }
+/* A one-word chip on a row: "update" on an import row that replaces a saved shop. */
+.tag {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
 .right {
   text-align: right;
 }

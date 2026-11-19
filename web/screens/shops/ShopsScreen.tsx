@@ -243,7 +243,7 @@ export function ShopsScreen(props: {
             )}
           </ShopForm>
         )}
-        <ImportPreview flow={flow} />
+        <ImportPreview flow={flow} saved={list} />
         <ShopList
           shops={listed}
           total={list.length}
