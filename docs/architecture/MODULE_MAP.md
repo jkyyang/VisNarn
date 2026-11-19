@@ -108,7 +108,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | File | Owns | May import |
 |---|---|---|
 | `main.tsx` | mounting the app | `./app/App`, styles |
-| `styles.css` | the look: tokens (colours, type sizes, radii, motion) at the top, with the night set the whole page takes from the map's look and the phone sizes; the shared kit classes (`.glass`, `.group`, `.segmented`, `.chip`, buttons, fields); then each part | |
+| `styles.css` | the look: tokens at the top (the accent, the glass surfaces, ink, strokes, the railroad palette, radii, sizes, motion), with the night set the whole page takes from the map's look and the phone sizes; nothing outside the token blocks names a colour (`styles.test.ts`); the shared kit classes (`.glass`, `.group`, `.segmented` with its sliding thumb, `.chip`, buttons, fields); then each part | |
 | `app/App.tsx` | the page frame: one map, the panel floating over it (a sheet under it on a phone), which screen; how far the panel covers the map, for the camera; the note when the server cannot be reached | `./routes`, `./chrome`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
 | `app/routes.ts` | `Screen` ↔ URL: `parseLocation`, `hrefFor`, `useScreen`, `go`, `linkTo` | `shared/` |
 | `app/chrome.tsx` | `AppHeader`: Route \| Shops | `./routes` |
@@ -119,7 +119,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `words.ts` | the words the page says: `shortPlace`, `lineName`, `plural`, `errorText`, `clickToSet`, `pillText`, `routeName`, `placeHint`, `placeProblem`, `interchangesWord`, `turnBackMove`, `trackWords`, `linkText`, `linkJoinsThere`, `BACK_OUT`, `PLACE_SOURCE_WORDS` | `shared/` |
 | `format.ts` | distances in the viewer's unit (`fmtDistance`), subdivision names, compass points. No clock | `shared/`, `./units` (type) |
 | `units.ts` | the viewer's distance unit, km or mi, kept in this browser: `useDistanceUnit`, `DISTANCE_UNITS`, `DEFAULT_UNIT`. Only the words change; everything else stays in km | `./ui/stored` |
-| `theme.ts` | CSS theme tokens as deck.gl colours and the page font for the map's canvas text; `MapLine`, `CLASS_LINES`, `lineColor` | `shared/railroads` |
+| `theme.ts` | CSS theme tokens as deck.gl colours (ink, accent, casing, risk, the railroads) and the page font for the map's canvas text; `MapLine`, `CLASS_LINES`, `lineColor` | `shared/railroads` |
 | `map/config.ts` | the map's camera and click numbers: pan bounds, zooms (`SHOP_ZOOM`: a shop being edited, with its own track), fly and fit times, the room kept round a framed route, pick radii, a shop link's dash, the phone query; the tile cache cap and the spare tile textures kept | nothing |
 | `map/MapStage.tsx` | the one map: `MapStageProvider`, `MapStage`, `MapContent` (a scene, clicks, handles, undo / redo); layer choices | `./MapCanvas` (lazy), `./scene`, `../data/basemap` |
 | `map/MapCanvas.tsx` | MapLibre + deck.gl + controls + legend (the heavy, lazily loaded half): the basemap look for the layer choices, the crosshair while a click places something; every camera move framed in the map the panel leaves free; frees MapLibre's spare tile textures when idle | `./layers`, `./DeckOverlay`, `./FitBounds`, `./RealTracks`, `./MapControls`, `./MapHandles`, `./Legend`, `./basemaps`, `../theme` |
@@ -146,6 +146,7 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `ui/combobox.tsx` | `moveActive`, `SuggestionList`: what the three place inputs share | `shared/` (types) |
 | `ui/ConfirmDelete.tsx` | the inline "Delete this …?" question | |
 | `ui/useEscape.ts` | Escape anywhere turns a mode off | |
+| `ui/segmented.ts` | `thumbAt`: where a segmented control's thumb sits | |
 | `ui/stored.ts` | `storedChoice`: a choice the viewer makes that this browser keeps, shared by every part of the page that shows it, held for the page while storage is refused | |
 | `ui/reorder.ts` | `useReorder`: drag to reorder with momentum, rubber band and a settle spring; keyboard grab mode; FLIP slides | `react-dom` |
 | `ui/ErrorBoundary.tsx`, `ui/files.ts` | an error fallback; reading a chosen file as text | |

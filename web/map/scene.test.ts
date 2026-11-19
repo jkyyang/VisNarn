@@ -16,9 +16,8 @@ const grey: RGBA = [90, 100, 110, 255];
 const colors: ThemeColors = {
   sans: "sans-serif",
   fg: [0, 0, 0, 255],
-  muted: grey,
-  route: [26, 115, 232, 255],
-  alternative: [154, 160, 166, 255],
+  accent: [255, 199, 44, 255],
+  alternative: grey,
   casing: [255, 255, 255, 255],
   risk: [215, 0, 21, 255],
   rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255], passenger: [9, 0, 0, 255] },
@@ -221,7 +220,7 @@ describe("shopsScene", () => {
     expect(paths(LAYER.linksCasing)).toEqual(paths(LAYER.links));
     expect(layer(LAYER.linksOffTrack).props.extensions).toHaveLength(1);
     const colorOf = (layer(LAYER.links).props as unknown as { getColor: (piece: SceneLink) => RGBA }).getColor;
-    expect(colorOf(along)).toEqual(colors.route);
+    expect(colorOf(along)).toEqual(colors.fg);
     expect(colorOf(offered)[3]).toBeLessThan(255);
     expect(colorOf(ghost)).toEqual(colorOf(offered));
     expect(colorOf(refused)).toEqual(colors.risk);

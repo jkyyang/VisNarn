@@ -1,5 +1,6 @@
 /** The panel's header on every screen: Route | Shops. */
 import type { ReactElement } from "react";
+import { thumbAt } from "../ui/segmented.ts";
 import { HOME, linkTo, type Screen } from "./routes.ts";
 
 const SHOPS: Screen = { name: "shops", edit: null };
@@ -12,7 +13,7 @@ export function AppHeader(props: { current: Screen["name"] }): ReactElement {
   );
   return (
     <header className="app-header">
-      <nav className="segmented" aria-label="Mode">
+      <nav className="segmented" aria-label="Mode" style={thumbAt(2, props.current === "route" ? 0 : 1)}>
         {tab(HOME, "Route")}
         {tab(SHOPS, "Shops")}
       </nav>

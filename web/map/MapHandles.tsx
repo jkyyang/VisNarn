@@ -39,8 +39,8 @@ function Face({ handle }: { handle: MapHandle }): ReactElement {
     case "shop":
       return (
         <svg className="map-handle-face" viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="2" y="2" width="20" height="20" rx="6" fill="var(--shop)" stroke="var(--casing)" strokeWidth="2" />
-          <rect x="9" y="9" width="6" height="6" rx="1.5" fill="var(--casing)" />
+          <circle cx="12" cy="12" r="9" fill="var(--accent)" stroke="var(--on-accent)" strokeWidth="2" />
+          <circle cx="12" cy="12" r="3.5" fill="var(--on-accent)" />
         </svg>
       );
     case "link":
@@ -52,8 +52,8 @@ function Face({ handle }: { handle: MapHandle }): ReactElement {
     case "add":
       return (
         <svg className="map-handle-face" viewBox="0 0 18 18" aria-hidden="true">
-          <circle cx="9" cy="9" r="7.5" fill="var(--route)" stroke="var(--casing)" strokeWidth="1.5" />
-          <path d="M9 5.5v7M5.5 9h7" stroke="var(--on-fill)" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="9" cy="9" r="7.5" fill="var(--text)" stroke="var(--casing)" strokeWidth="1.5" />
+          <path d="M9 5.5v7M5.5 9h7" stroke="var(--surface-solid)" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
       );
   }

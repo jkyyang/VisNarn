@@ -131,9 +131,9 @@ describe("the railroad colours", () => {
 describe("the night map", () => {
   const night = LOOKS.night;
 
-  it("draws every Class I railroad and the selected route at 4.5:1 or more against the dark ground", () => {
+  it("draws every Class I railroad and the map's ink (pins, shop links) at 4.5:1 or more against the dark ground", () => {
     for (const [ground, colour] of Object.entries(NIGHT_GROUNDS)) {
-      for (const name of [...RAILROADS.map((r) => `--rr-${r}`), "--route"]) {
+      for (const name of [...RAILROADS.map((r) => `--rr-${r}`), "--text"]) {
         expect(contrast(night[name], colour), `${name} on the ${ground}`).toBeGreaterThanOrEqual(4.5);
       }
     }

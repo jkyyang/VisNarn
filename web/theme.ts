@@ -12,9 +12,8 @@ export interface ThemeColors {
   /** The page's font stack, for text deck.gl draws on its canvas. */
   sans: string;
   fg: RGBA;
-  muted: RGBA;
-  /** The accent of the selected route's pill and of the stop pins. */
-  route: RGBA;
+  /** The selected and the edited, filled; never thin lines or text. */
+  accent: RGBA;
   /** Routes that are not selected. */
   alternative: RGBA;
   /** The white edge under a route line and around rings. */
@@ -43,10 +42,9 @@ function read(scope?: Element | null): ThemeColors {
   const style = getComputedStyle(scope ?? document.documentElement);
   const hex = (name: string) => hexOf(style, name);
   return {
-    sans: style.getPropertyValue("--sans").trim() || NO_FONT,
-    fg: hex("--fg"),
-    muted: hex("--muted"),
-    route: hex("--route"),
+    sans: style.getPropertyValue("--font").trim() || NO_FONT,
+    fg: hex("--text"),
+    accent: hex("--accent"),
     alternative: hex("--alt-route"),
     casing: hex("--casing"),
     risk: hex("--risk"),

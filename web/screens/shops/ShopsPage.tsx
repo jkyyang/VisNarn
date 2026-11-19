@@ -22,8 +22,8 @@ const PREVIEW_ROWS = 8;
 
 const ShopPin = () => (
   <svg width="14" height="17" viewBox="0 0 18 22" aria-hidden="true">
-    <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--shop)" />
-    <rect x="6.5" y="6.5" width="5" height="5" rx="1" fill="var(--panel)" />
+    <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--text)" />
+    <rect x="6.5" y="6.5" width="5" height="5" rx="1" fill="var(--surface-solid)" />
   </svg>
 );
 

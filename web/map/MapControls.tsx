@@ -1,4 +1,5 @@
 import { useId, useState, type ReactElement } from "react";
+import { thumbAt } from "../ui/segmented.ts";
 import { useEscape } from "../ui/useEscape.ts";
 import { DISTANCE_UNITS, useDistanceUnit, type DistanceUnit } from "../units.ts";
 import type { BasemapKind } from "./basemaps.ts";
@@ -25,13 +26,14 @@ const LIGHT_WORDS: Record<LightPhase, string> = { day: "Day", sunrise: "Sunrise"
 /** One setting of the layers card: its name over a segmented choice. */
 function ChoiceRow<T extends string>(props: { label: string; options: Record<T, string>; value: T; onChange: (value: T) => void }): ReactElement {
   const labelId = useId();
+  const choices = Object.entries(props.options) as [T, string][];
   return (
     <div className="choice-row">
       <span className="choice-row-label" id={labelId}>
         {props.label}
       </span>
-      <div className="segmented" role="radiogroup" aria-labelledby={labelId}>
-        {(Object.entries(props.options) as [T, string][]).map(([value, label]) => (
+      <div className="segmented" role="radiogroup" aria-labelledby={labelId} style={thumbAt(choices.length, choices.findIndex(([value]) => value === props.value))}>
+        {choices.map(([value, label]) => (
           <button key={value} type="button" role="radio" aria-checked={props.value === value} onClick={() => props.onChange(value)}>
             {label}
           </button>

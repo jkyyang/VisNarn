@@ -30,33 +30,6 @@ const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 const svgUrl = (width: number, height: number, body: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`)}`;
 
-/** Pin colours, baked into the icon images: the day look's --pin-a, --shop, --route and --casing; a shop is a dark grey square. */
-const PIN = { start: "#80868b", destination: "#c5221f", stop: "#0068d6", shop: "#3c4043", edge: "#fff" };
-
-/** Pins as images: start a hollow ring, destination a red drop with a white dot, a stop a numbered ring, a shop a small dark square. */
-export const PIN_ICONS = {
-  start: { url: svgUrl(18, 18, `<circle cx="9" cy="9" r="6" fill="${PIN.edge}" stroke="${PIN.start}" stroke-width="3"/>`), width: 18, height: 18, anchorY: 9 },
-  destination: {
-    url: svgUrl(28, 34, `<path d="M14 33c-8-10-13-15-13-21a13 13 0 0 1 26 0c0 6-5 11-13 21z" fill="${PIN.destination}" stroke="${PIN.edge}" stroke-width="1.5"/><circle cx="14" cy="12" r="4.6" fill="${PIN.edge}"/>`),
-    width: 28,
-    height: 34,
-    anchorY: 33,
-  },
-  stop: { url: svgUrl(22, 22, `<circle cx="11" cy="11" r="9" fill="${PIN.edge}" stroke="${PIN.stop}" stroke-width="3"/>`), width: 22, height: 22, anchorY: 11 },
-  shop: { url: svgUrl(15, 15, `<rect x="1.5" y="1.5" width="12" height="12" rx="3" fill="${PIN.shop}" stroke="${PIN.edge}" stroke-width="1.5"/>`), width: 15, height: 15, anchorY: 7.5 },
-} satisfies Record<ScenePin["kind"], { url: string; width: number; height: number; anchorY: number }>;
-
-const CHEVRON = { url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${PIN.edge}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`), width: 12, height: 12, anchorY: 6 };
-
-/** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
-const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3, linkCasing: 2 };
-
-/** A suggested link's alpha, of 255, and a drag's preview of one: fainter than a link the shop has. */
-const SUGGESTED_ALPHA = 110;
-
-/** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
-const angleOf = (bearingDeg: number) => 90 - bearingDeg;
-
 /**
  * deck.gl redraws a layer's data whenever it is a new array. The big arrays derived from a scene are
  * made once per scene, so a zoom step (which builds the layers again) does not redraw the routes.
@@ -68,6 +41,50 @@ function once<K extends object, V>(): (key: K, make: () => V) => V {
     return made.get(key)!;
   };
 }
+/** Each pin's image box: width, height, and where the point it marks sits from the top. */
+export const PIN_BOX = {
+  start: { width: 18, height: 18, anchorY: 9 },
+  destination: { width: 18, height: 18, anchorY: 9 },
+  stop: { width: 22, height: 22, anchorY: 11 },
+  shop: { width: 15, height: 15, anchorY: 7.5 },
+} satisfies Record<ScenePin["kind"], { width: number; height: number; anchorY: number }>;
+
+const css = ([r, g, b]: RGBA) => `rgb(${r},${g},${b})`;
+
+/**
+ * Pins as images, in the theme's colours (an image cannot read CSS variables): the start a filled dot, the destination a
+ * ring, a stop a numbered ring, a shop a small square; each with the casing round it.
+ */
+function pinIcons(colors: ThemeColors) {
+  const [ink, edge] = [css(colors.fg), css(colors.casing)];
+  const icon = (kind: ScenePin["kind"], body: string) => ({ ...PIN_BOX[kind], url: svgUrl(PIN_BOX[kind].width, PIN_BOX[kind].height, body) });
+  return {
+    start: icon("start", `<circle cx="9" cy="9" r="6" fill="${ink}" stroke="${edge}" stroke-width="2"/>`),
+    destination: icon("destination", `<circle cx="9" cy="9" r="6" fill="${edge}" stroke="${ink}" stroke-width="3"/>`),
+    stop: icon("stop", `<circle cx="11" cy="11" r="9" fill="${edge}" stroke="${ink}" stroke-width="3"/>`),
+    shop: icon("shop", `<rect x="1.5" y="1.5" width="12" height="12" rx="3" fill="${ink}" stroke="${edge}" stroke-width="1.5"/>`),
+  } satisfies Record<ScenePin["kind"], { url: string; width: number; height: number; anchorY: number }>;
+}
+const pinIconsOf = once<ThemeColors, ReturnType<typeof pinIcons>>();
+
+const chevronOf = once<ThemeColors, { url: string; width: number; height: number; anchorY: number }>();
+const chevron = (colors: ThemeColors) =>
+  chevronOf(colors, () => ({
+    url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${css(colors.casing)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`),
+    width: 12,
+    height: 12,
+    anchorY: 6,
+  }));
+
+/** Route line widths in px. Regional and short-line sections are thinner than Class I, as in the legend; the casings are added to the line. */
+const ROUTE_PX = { classI: 6, other: 4, casing: 5, alternative: 4, alternativeCasing: 2, link: 3, linkCasing: 2 };
+
+/** A suggested link's alpha, of 255, and a drag's preview of one: fainter than a link the shop has. */
+const SUGGESTED_ALPHA = 110;
+
+/** deck.gl angles turn counter-clockwise from east; a bearing turns clockwise from north. */
+const angleOf = (bearingDeg: number) => 90 - bearingDeg;
+
 const stopPinsOf = once<ScenePin[], ScenePin[]>();
 const alternativeLegsOf = once<SceneRoute[], AltLeg[]>();
 
@@ -95,7 +112,7 @@ export function networkLayers(network: Mainline, drawn: readonly NetworkClass[],
         lineCapRounded: true,
         lineJointRounded: true,
         getLineWidth: (f) => (c === "class_i" && isClassI(f.properties.owner) ? 1.8 : 1),
-        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.muted),
+        getLineColor: (f) => (c !== "class_i" ? colors.rail[CLASS_LINES[c][0]] : isClassI(f.properties.owner) ? colors.rail[f.properties.owner] : colors.alternative),
         updateTriggers: { getLineColor: colors },
       }),
   );
@@ -127,7 +144,7 @@ function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: numbe
       id: LAYER.chevrons,
       data: route.chevrons.filter((c) => c.minZoom <= zoom),
       getPosition: (c) => c.position,
-      getIcon: () => CHEVRON,
+      getIcon: () => chevron(colors),
       getAngle: (c) => angleOf(c.bearingDeg),
       getSize: 12,
       sizeUnits: "pixels",
@@ -156,8 +173,8 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
       id: LAYER.pins,
       data: pins,
       getPosition: (pin) => pin.position,
-      getIcon: (pin) => PIN_ICONS[pin.kind],
-      getSize: (pin) => PIN_ICONS[pin.kind].height,
+      getIcon: (pin) => pinIconsOf(colors, () => pinIcons(colors))[pin.kind],
+      getSize: (pin) => PIN_BOX[pin.kind].height,
       sizeUnits: "pixels",
       pickable: true,
     }),
@@ -167,7 +184,7 @@ function pinLayers(pins: ScenePin[], colors: ThemeColors): LayersList {
       getPosition: (pin) => pin.position,
       getText: (pin) => pin.glyph,
       getSize: 11,
-      getColor: colors.route,
+      getColor: colors.fg,
       fontFamily: colors.sans,
       fontWeight: 700,
       updateTriggers: { getColor: colors },
@@ -190,7 +207,7 @@ function linkLayers(links: SceneLink[], colors: ThemeColors): LayersList {
     off: links.map((link) => ({ path: link.path.slice(0, 2), look: link.look })),
     on: links.filter((link) => link.path.length > 2).map((link) => ({ path: link.path.slice(1), look: link.look })),
   }));
-  const colorOf = (piece: LinkPiece) => (piece.look === "refused" ? colors.risk : piece.look === "set" ? colors.route : fade(colors.route, SUGGESTED_ALPHA));
+  const colorOf = (piece: LinkPiece) => (piece.look === "refused" ? colors.risk : piece.look === "set" ? colors.fg : fade(colors.fg, SUGGESTED_ALPHA));
   const common = { getPath: (piece: LinkPiece) => piece.path, ...ROUND, updateTriggers: { getColor: colors } };
   return [
     new PathLayer<LinkPiece>({ id: LAYER.linksCasing, data: on, getColor: colors.casing, getWidth: ROUTE_PX.link + ROUTE_PX.linkCasing, ...common }),
@@ -239,7 +256,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       ...ROUND,
       pickable: true,
       autoHighlight: true,
-      highlightColor: fade(colors.route, 140),
+      highlightColor: fade(colors.fg, 140),
       updateTriggers: { getColor: colors },
     }),
     ...(scene.selected ? selectedRouteLayers(scene.selected, colors, zoom) : []),
@@ -248,13 +265,13 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
 }
 
 const TOOLTIP_STYLE: Partial<CSSStyleDeclaration> = {
-  backgroundColor: "var(--panel)",
-  color: "var(--fg)",
-  border: "0",
-  borderRadius: "var(--radius)",
-  boxShadow: "var(--shadow-float)",
-  padding: "5px 9px",
-  fontFamily: "var(--sans)",
+  backgroundColor: "var(--surface-solid)",
+  color: "var(--text)",
+  border: "var(--stroke-w) solid var(--stroke)",
+  borderRadius: "var(--radius-inner)",
+  boxShadow: "var(--shadow-glass)",
+  padding: "4px 8px",
+  fontFamily: "var(--font)",
   fontSize: "var(--text-sm)",
   lineHeight: "1.45",
   maxWidth: "280px",

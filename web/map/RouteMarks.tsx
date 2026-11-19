@@ -8,7 +8,7 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useState, type ReactElement } from "react";
 import { Marker, useMap } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
-import { PIN_ICONS } from "./layers.ts";
+import { PIN_BOX } from "./layers.ts";
 import { PILL_HEIGHT_PX, pillWidthPx, placePills, turnBackShift, type Box, type PillPlace, type Point } from "./pills.ts";
 import { PillFace, TurnBackMark } from "./RouteMarkFaces.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
@@ -40,7 +40,7 @@ function layout(map: MapLibreMap, scene: RouteScene): Placed {
   const obstacles: Box[] = [];
   const pins = scene.pins.map((pin) => ({ kind: pin.kind, ...point(pin.position) }));
   for (const { kind, x, y } of pins) {
-    const icon = PIN_ICONS[kind];
+    const icon = PIN_BOX[kind];
     obstacles.push({ left: x - icon.width / 2, top: y - icon.anchorY, right: x + icon.width / 2, bottom: y - icon.anchorY + icon.height });
   }
   const turns = scene.turnBacks.map((turnBack) => {
