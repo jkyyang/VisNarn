@@ -1,0 +1,19 @@
+Copyright (c) 2026 jkyyang (https://github.com/jkyyang). All rights reserved.
+
+This software, its source code, documentation, design and the data compiled for it (together, "the Software")
+are the private property of the copyright holder.
+
+No license is granted. Without a separate written license agreement signed by the copyright holder, no one may
+use, copy, modify, merge, publish, distribute, sublicense, sell, host as a service, or create derivative works of
+the Software, in whole or in part. Viewing the public demonstration site does not grant any of these rights.
+
+Commercial and other use is available only under a paid license. To ask for one, contact the copyright holder
+through https://github.com/jkyyang.
+
+Third-party components keep their own licenses (see package.json dependencies and the map credits): the rail
+network (BTS NTAD NARN, public domain), place names (GeoNames, CC BY 4.0), map tiles and data (OpenFreeMap,
+© OpenStreetMap contributors, ODbL), night lights (NASA Black Marble, public domain) and satellite imagery
+(© Esri and its partners, under Esri's terms).
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

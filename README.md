@@ -59,3 +59,6 @@ of 5,000 people or more, built into `graph_meta.json`; no lookup online while th
 
 ## Routing
 Routes follow track distance and the carriers you choose. A typed coordinate snaps to nearby mainline; a shop with track links joins the network at its links.
+
+## License
+Proprietary. Copyright (c) 2026 jkyyang, all rights reserved; use needs a paid license. See [LICENSE](LICENSE).

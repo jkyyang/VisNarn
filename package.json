@@ -1,6 +1,7 @@
 {
   "name": "visnarn",
   "private": true,
+  "license": "UNLICENSED",
   "version": "0.2.0",
   "type": "module",
   "description": "Shop Arrival Check, stage 1: plan and save routes between shops and stations over the Class I rail network.",
