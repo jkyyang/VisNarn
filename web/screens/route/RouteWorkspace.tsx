@@ -52,7 +52,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const onSelect = (target: SceneTarget) => {
     if (target.kind === "option") go({ ...screen, option: target.id }, { replace: true });
     else if (target.kind === "leg") setLeg(leg === target.index ? null : target.index);
-    else clickPlace(target.ref, target.position, places);
+    else clickPlace(target.ref);
   };
 
   const onSave = async (name: string, routeString: string) => {
@@ -100,12 +100,12 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         scene={scene}
         focus={{ kind: "fit" }}
         include={plan.include}
-        onPick={(lon, lat, km, line) => {
+        onPick={session.pick === null ? undefined : (lon, lat, km, line) => {
           setClickError(null);
           setLeg(null);
-          // The stop snaps to the line clicked: a grey route, else the selected one.
+          // The place snaps to the line clicked: a grey route, else the selected one.
           const onLine = result?.outcome === "routed" ? chosenRoute(result.routes, line ?? option) : null;
-          clickMap(lon, lat, km, places, onLine?.legs.map((leg) => leg.path) ?? null).then(
+          clickMap(lon, lat, km, onLine?.legs.map((leg) => leg.path) ?? null).then(
             (at) => at !== undefined && setFlash({ at: at ?? [lon, lat], kind: at ? "hit" : "miss", key: Date.now() }),
             (error: unknown) => setClickError(errorText(error, "The click could not be placed.")),
           );

@@ -122,9 +122,10 @@ describe("Route planner", () => {
     for (const leg of legs) expect(leg.querySelector<HTMLElement>(".section-bar")?.style.background).toBe(`var(--rr-${leg.querySelector(".leg-carrier")?.textContent})`);
   });
 
-  it("a click on the map adds a stop, which the route then runs through", async () => {
+  it("Add stop, then a click on the map, sets a stop, which the route then runs through", async () => {
     const user = userEvent.setup();
     await planExample(user);
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     const places = screen.getByRole("region", { name: "Places" });
     await waitFor(() => expect(within(places).getAllByRole("listitem")).toHaveLength(3), { timeout: ROUTING_MS });

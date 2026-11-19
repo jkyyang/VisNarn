@@ -6,7 +6,7 @@ import type { FraId, NetworkNode, PlaceRef, ShopId } from "../../../shared/place
 import type { SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../../shared/railroads.ts";
 import { snapToNetwork } from "../../data/hooks.ts";
-import { EMPTY_PLAN, forgetPlan, fullPlan, nextTarget, placeAtEnd, planReducer, routeNodeNear, samePlan, startSession, stopInsertIndex, usePlanSession, type PlanAction, type PlanSession } from "./session.ts";
+import { EMPTY_PLAN, forgetPlan, fullPlan, placeAtEnd, planReducer, routeNodeNear, samePlan, startSession, stopInsertIndex, usePlanSession, type PlanAction, type PlanSession } from "./session.ts";
 
 vi.mock("../../data/hooks.ts", () => ({ snapToNetwork: vi.fn() }));
 
@@ -22,22 +22,23 @@ const ids = (s: PlanSession) => s.plan.present.places.map((place) => (place === 
 const stopIds = (s: PlanSession) => ids(s).slice(1, -1);
 
 describe("plan session", () => {
-  it("starts with two empty rows and no history", () => {
+  it("starts with two empty rows, no history and ⌖ on the start", () => {
     const s = fresh();
     expect(s.plan.present).toEqual({ places: [null, null], include: { regional: false, shortLine: false, passenger: true }, turnAtStops: false });
     expect(s.plan.past).toEqual([]);
-    expect(s.pick).toBeNull();
+    expect(s.pick).toBe(0);
+    expect(startSession(null, { ...EMPTY_PLAN, places: [KC, CHICAGO] }).pick).toBeNull();
   });
 
-  it("a click fills the first empty row, else adds a stop; ⌖ on a row overrides that", () => {
-    expect(nextTarget(fresh())).toBe(0);
-    expect(nextTarget(planReducer(fresh(), { type: "setPlace", at: 0, ref: KC }))).toBe(1);
-    expect(nextTarget(planned())).toBeNull();
-    expect(nextTarget(planReducer(planned(), { type: "pick", at: 0 }))).toBe(0);
-    // Setting the row turns ⌖ off again.
+  it("⌖ moves to the next empty row after each change, and turns off when none is empty", () => {
+    expect(planReducer(fresh(), { type: "setPlace", at: 0, ref: KC }).pick).toBe(1);
+    expect(planned().pick).toBeNull();
+    expect(planReducer(planned(), { type: "pick", at: 0 }).pick).toBe(0);
     const repicked = run(planned(), { type: "pick", at: 0 }, { type: "setPlace", at: 0, ref: node(9) });
     expect(repicked.pick).toBeNull();
     expect(repicked.plan.present.places[0]).toEqual(node(9));
+    expect(run(planned(), { type: "undo" }).pick).toBe(1);
+    expect(run(planned(), { type: "clear" }).pick).toBe(0);
   });
 
   it("insert puts a row before its index; an empty row turns its ⌖ on", () => {
@@ -48,7 +49,7 @@ describe("plan session", () => {
     const added = planReducer(s, { type: "insert", at: 4, ref: null });
     expect(stopIds(added)).toEqual([1, 3, 2, null]);
     expect(added.pick).toBe(4);
-    expect(nextTarget(planReducer(added, { type: "pick", at: null }))).toBe(4);
+    expect(planReducer(added, { type: "pick", at: null }).pick).toBeNull();
   });
 
   it("ignores a node or shop already in the plan", () => {
@@ -174,7 +175,7 @@ describe("plan session", () => {
     expect(routeNodeNear([], { lon: 0.2, lat: 0 }, 2)).toBeNull();
   });
 
-  it("a click on the selected route adds the route's own node even when a spur node is nearer", async () => {
+  it("a click on the selected route sets the route's own node even when a spur node is nearer; with ⌖ off a click sets nothing", async () => {
     forgetPlan();
     const at = (fraId: number, lon: number, lat: number): NetworkNode => ({ fraId: fraId as FraId, lon, lat, near: "EXAMPLE", railroads: ["BNSF"], yard: false, km: 0 });
     const nodes: Record<string, NetworkNode> = { "0.1,0": at(10, 0.1, 0), spur: at(99, 0.14, 0.009) };
@@ -186,10 +187,14 @@ describe("plan session", () => {
       result.current.dispatch({ type: "setPlace", at: 1, ref: CHICAGO });
     });
     // 36 px of tolerance, 9 km: the route counts within 10 px, 2.5 km.
-    await act(() => result.current.clickMap(0.14, 0.005, 9, null, line));
+    act(() => result.current.dispatch({ type: "insert", at: 1, ref: null }));
+    await act(() => result.current.clickMap(0.14, 0.005, 9, line));
     expect(stopIds(result.current.session)).toEqual([10]);
-    // Off the route, the nearest node wins as before.
-    await act(() => result.current.clickMap(0.15, 0.05, 9, null, line));
+    await act(() => result.current.clickMap(0.15, 0.05, 9, line));
+    expect(stopIds(result.current.session)).toEqual([10]);
+    // Off the route, the nearest node wins.
+    act(() => result.current.dispatch({ type: "insert", at: 2, ref: null }));
+    await act(() => result.current.clickMap(0.15, 0.05, 9, line));
     expect(stopIds(result.current.session)).toEqual([10, 99]);
   });
 });

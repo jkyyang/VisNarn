@@ -340,11 +340,11 @@ describe("layers", () => {
     expect(iconOf(route, route.pins.find((p) => p.kind === "destination")!.label)).toContain(ring);
   });
 
-  it("a grey route is a click on the map on that line; a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
+  it("a grey route is that route (and, while a click places something, the line the place snaps to); a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
     const pick = (id: string, object: unknown) => ({ layer: layers.find((l) => l.id === id), object }) as PickingInfo;
     const routeScene = scene as Extract<MapScene, { kind: "route" }>;
     const grey = pick(LAYER.alternatives, { ...routeScene.alternatives[0].legs[0], option: "shortest" });
-    expect(sceneTarget(grey)).toBeNull();
+    expect(sceneTarget(grey)).toEqual({ kind: "option", id: "shortest" });
     expect(lineAt(grey)).toBe("shortest");
     expect(lineAt(pick(LAYER.route, {}))).toBeNull();
     const square = routeScene.pins.find((p) => p.kind === "shop")!;

@@ -49,7 +49,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
       )}
       {scene?.kind === "route" &&
         scene.alternatives.map((route) => (
-          <button key={route.id} type="button" onClick={() => content?.onPick?.(nextClick.lon, nextClick.lat, 5, route.id)}>
+          <button key={route.id} type="button" onClick={() => (content?.onPick ? content.onPick(nextClick.lon, nextClick.lat, 5, route.id) : select?.({ kind: "option", id: route.id }))}>
             Grey route {route.id}
           </button>
         ))}

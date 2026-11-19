@@ -1,8 +1,8 @@
 # VisNARN: Shop Arrival Check
 
-Stage 1: a route planner over the North American rail network (Class I, regional, short line and passenger track), for one laptop. Click (or type) a start and a
-destination, shop or station, and a route appears; each further click adds a stop the route must pass
-through. Choose the line where several meet, pick between the alternatives, and save the route with a
+Stage 1: a route planner over the North American rail network (Class I, regional, short line and passenger track), for one laptop. Type a start and a destination, shop
+or station, or set each with its ⌖ and a click on the map, and a route appears; Add stop adds a row for a stop the
+route must pass through, set the same way. Choose the line where several meet, pick between the alternatives, and save the route with a
 name. Your own shops are on the Shops screen. Stage 1 shows no dates, times or cars.
 
 > Read [docs/architecture/MODULE_MAP.md](docs/architecture/MODULE_MAP.md) first.

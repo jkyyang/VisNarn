@@ -65,7 +65,7 @@ describe("Route planner", () => {
     openPage("/route");
     expect(field("Start")).toHaveValue("");
     expect(field("Destination")).toHaveValue("");
-    expect(hint()).toHaveTextContent("Click the start on the map, or type it.");
+    expect(hint()).toHaveTextContent("Click the map to set Start · Esc to cancel");
     expect(screen.queryByRole("region", { name: "Routes" })).not.toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "EXAMPLE Omaha → North Platte" })).toHaveAttribute("href", "/route/saved/route-9");
   });
@@ -74,7 +74,7 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     openPage("/route");
     await user.type(field("Start"), "Temple, TX{Enter}");
-    expect(hint()).toHaveTextContent("Click the map to set the destination.");
+    expect(hint()).toHaveTextContent("Click the map to set Destination · Esc to cancel");
     await user.type(field("Destination"), "north little");
     await user.click(await screen.findByRole("option", { name: /North Little Rock, AR.*Your shop · EX-NLR-01/ }));
     expect(field("Destination")).toHaveValue("North Little Rock, AR");
@@ -88,21 +88,27 @@ describe("Route planner", () => {
     // The result card under them is the selected route: its length, carriers and interchanges.
     expect(screen.getByRole("region", { name: "Route" })).toHaveTextContent(/1,046 km1 carrier · 0 interchanges · 1 turn-back/);
     expect(selectedRailroads()).toEqual(["BNSF"]);
-    expect(hint()).toHaveTextContent("Click the map to add a stop.");
+    // Every row is set: a click on the map places nothing.
+    expect(screen.queryByRole("button", { name: "Click the map" })).not.toBeInTheDocument();
     expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE, turnAtStops: false });
   });
 
-  it("a click on the map adds a stop; Undo takes it away and Redo brings it back", async () => {
+  it("Add stop, then a click on the map, sets a stop; Undo takes it away and Redo brings it back", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
     expect(await within(stopRows()[0]).findByDisplayValue("TEMPLE, TX wye")).toBeInTheDocument();
     await waitFor(() => expect(routeCount()).toBe(1));
 
+    // One Undo empties the stop with its ⌖ on again, the next takes the row away.
+    await user.click(screen.getByRole("button", { name: "Undo route change" }));
+    expect(screen.getByRole("button", { name: "Pick on the map: Stop 1" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
     expect(stopRows()).toHaveLength(0);
     await waitFor(() => expect(routeCount()).toBe(2));
+    await user.click(screen.getByRole("button", { name: "Redo route change" }));
     await user.click(screen.getByRole("button", { name: "Redo route change" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
   });
@@ -110,6 +116,7 @@ describe("Route planner", () => {
   it("where two railroads meet, Route options offers the carrier from there: a click goes Router's pick → BNSF → UP → Router's pick; the choice is sent and summed up, and Undo puts it back", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
     const options = await routeOptions(user);
@@ -235,15 +242,22 @@ describe("Route planner", () => {
     expect(routeRows()[0]).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("a click on a grey route adds a stop at that line's nearest node and keeps the selected route", async () => {
+  it("a click on a grey route selects it; while ⌖ is on, it sets the row at that line's nearest node and keeps the selected route", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: "Grey route shortest" }));
+    expect(currentPath()).toBe("/route?option=shortest");
+    expect(stopRows()).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Grey route pick" }));
+    expect(currentPath()).toBe("/route?option=pick");
+
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     // On the grey route's track 17 km north of Waco: too far for a click on the map to snap to any node.
     setNextMapClick(-97.1615, 31.7);
     await user.click(screen.getByRole("button", { name: "Grey route shortest" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
     expect(within(stopRows()[0]).getByRole("combobox")).toHaveValue("Waco, TX");
-    expect(currentPath()).toBe("/route");
+    expect(currentPath()).toBe("/route?option=pick");
   });
 
   it("a turn-back shows as ↩ on its row and an amber mark with two lines on hover; a stop that removes it removes both", async () => {
@@ -259,6 +273,7 @@ describe("Route planner", () => {
     await user.unhover(mark);
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(routeCount()).toBe(1));
     expect(screen.getByRole("region", { name: "Route" })).not.toHaveTextContent("turn-back");
@@ -317,6 +332,7 @@ describe("Route planner", () => {
     await waitFor(() => expect(fake.state.savedRoutes[0].name).toBe("Temple run"));
 
     // A change to the plan makes it worth saving again.
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(routeCount()).toBe(1));
     await user.click(await menu("Save route"));
@@ -382,6 +398,7 @@ describe("Route planner", () => {
   it("every place is one row with the same buttons: Add stop, remove, and a handle that reorders by keyboard", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
+    await user.click(screen.getByRole("button", { name: "Add stop" }));
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(placeRows()).toHaveLength(3));
     for (const row of placeRows()) {

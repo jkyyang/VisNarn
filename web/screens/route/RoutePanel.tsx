@@ -24,7 +24,7 @@ import { useReorder } from "../../ui/reorder.ts";
 import { Switch } from "../../ui/Switch.tsx";
 import type { DistanceUnit } from "../../units.ts";
 import { BACK_OUT, clickToSet, errorText, interchangesWord, lineName, nearPlace, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
-import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
+import { fullPlan, isEmpty, samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
 export interface RoutePanelProps {
   session: PlanSession;
@@ -529,7 +529,7 @@ function SavedList(props: {
 
 // ---- the panel ----
 
-/** Route with Undo / Redo · the places and what a click does next · options · the result · the other routes · saved routes. */
+/** Route with Undo / Redo · the places and which row a click on the map sets · options · the result · the other routes · saved routes. */
 export function RoutePanel(props: RoutePanelProps): ReactElement {
   const { session, dispatch, planned, open } = props;
   const plan = session.plan.present;
@@ -544,21 +544,8 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
   }
 
   const routes = result?.outcome === "routed" ? result.routes : null;
-  const target = nextTarget(session);
-  const word = (at: number) => (placeKind(at, plan.places.length) === "stop" ? "" : "the ") + rowName(at, plan.places.length).toLowerCase();
   const hint =
-    props.error ??
-    (session.missed
-      ? `${NO_TRACK_NEAR}.`
-      : session.pick !== null
-        ? `${clickToSet(rowName(session.pick, plan.places.length))} · Esc to cancel`
-        : empty
-          ? "Click the start on the map, or type it."
-          : target !== null
-            ? `${clickToSet(word(target))}.`
-            : routes
-              ? "Click the map to add a stop."
-              : "");
+    props.error ?? (session.missed ? `${NO_TRACK_NEAR}.` : session.pick !== null ? `${clickToSet(rowName(session.pick, plan.places.length))} · Esc to cancel` : "");
 
   const full = fullPlan(plan);
   const chosen = routes ? chosenRoute(routes, props.selected) : null;

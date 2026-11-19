@@ -30,15 +30,18 @@ async function routeOptions(page: Page): Promise<Locator> {
 /** The railroads the selected route runs on, as its legs in the result card name them. */
 const selectedRailroads = (page: Page): Promise<Set<string>> => result(page).locator(".leg-carrier").allTextContents().then((names) => new Set(names));
 
-/** The next routing answer the page gets. */
+/** The next routing answer the page gets for a plan with every row set. */
 const nextRoute = (page: Page) =>
-  page.waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST").then(async (r) => (await r.json()) as PlannedRoute);
+  page
+    .waitForResponse((r) => r.url().endsWith("/api/route") && r.request().method() === "POST" && (r.request().postDataJSON() as Plan).places.every(Boolean))
+    .then(async (r) => (await r.json()) as PlannedRoute);
 
-/** Clicks FRA node 358070 at Temple, TX, where BNSF and UP meet: the search box centres the map on it. */
+/** Add stop, then a click at FRA node 358070 at Temple, TX, where BNSF and UP meet: the search box centres the map on it. */
 async function clickTemple(page: Page): Promise<PlannedRoute> {
   await page.getByRole("combobox", { name: "Search shops and cities" }).fill("FRA 358070");
   await page.getByRole("option", { name: /FRA node 358070/ }).click();
   await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Add stop" }).click();
   const answer = nextRoute(page);
   await clickMapCentre(page);
   return answer;
@@ -48,8 +51,8 @@ test.describe("Route planner", () => {
   test("a typed start and destination give a route, its result card naming its railroads", async ({ page }) => {
     await page.goto("/route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
-    // No sentence on screen: the empty rows and the crosshair on the map say what to do.
-    await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toHaveClass("visually-hidden");
+    // No sentence on screen: the pressed ⌖ and the crosshair on the map say what to do.
+    await expect(page.getByRole("status").filter({ hasText: "Click the map to set Start · Esc to cancel" })).toHaveClass("visually-hidden");
     await expectMapCanvas(page);
 
     const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
@@ -63,7 +66,7 @@ test.describe("Route planner", () => {
     expect(await selectedRailroads(page)).toEqual(new Set(railroads));
   });
 
-  test("a click on a grey route puts the stop on that route", async ({ page }) => {
+  test("a click on a grey route selects it; after Add stop, a click there puts the stop on that route", async ({ page }) => {
     await page.goto("/route");
     const planned = await planRoute(page, "Temple, TX", "North Little Rock, AR");
     if (planned.outcome !== "routed" || planned.routes.length < 2) throw new Error("Temple to North Little Rock should have two routes.");
@@ -80,6 +83,11 @@ test.describe("Route planner", () => {
     await page.getByRole("combobox", { name: "Search shops and cities" }).fill(`FRA ${node.fraId}`);
     await page.getByRole("option", { name: new RegExp(`FRA node ${node.fraId}`) }).click();
     await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
+    await clickMapCentre(page);
+    await expect(page).toHaveURL(new RegExp(`\\?option=${grey.strategies[0]}$`));
+    await expect(placeRows(page)).toHaveCount(2);
+
+    await page.getByRole("button", { name: "Add stop" }).click();
     const answer = nextRoute(page);
     await clickMapCentre(page);
     const withStop = await answer;
@@ -89,12 +97,21 @@ test.describe("Route planner", () => {
     expect(nearest([stop.place.lon, stop.place.lat], grey)).toBeLessThan(0.05);
   });
 
-  test("while a click places something the cursor is a crosshair", async ({ page }) => {
+  test("the cursor is a crosshair only while ⌖ is on, and a click on the map with ⌖ off places nothing", async ({ page }) => {
     await page.goto("/route");
     await expectMapCanvas(page);
+    const canvas = mapRegion(page).locator("canvas.maplibregl-canvas");
     const centre = await freeMapCentre(page);
+    // A new plan starts with the start's ⌖ on.
     await page.mouse.move(centre.x, centre.y);
-    await expect(mapRegion(page).locator("canvas.maplibregl-canvas")).toHaveCSS("cursor", "crosshair");
+    await expect(canvas).toHaveCSS("cursor", "crosshair");
+    await page.keyboard.press("Escape");
+    await page.mouse.move(centre.x + 4, centre.y);
+    await expect(canvas).toHaveCSS("cursor", "grab");
+    await page.mouse.click(centre.x + 4, centre.y);
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
+    await expect(page.locator(".flash")).toHaveCount(0);
   });
 
   test("a click at Temple adds a stop that Undo takes back", async ({ page }) => {
@@ -130,6 +147,8 @@ test.describe("Route planner", () => {
     await page.waitForTimeout(500);
     await expect(placeRows(page)).toHaveCount(3);
 
+    // Undo empties the stop, then takes its row away.
+    await page.getByRole("button", { name: "Undo route change" }).click();
     await page.getByRole("button", { name: "Undo route change" }).click();
     await expect(placeRows(page)).toHaveCount(2);
   });

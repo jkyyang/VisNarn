@@ -24,17 +24,17 @@ export interface PlanSession {
   /** The saved route this session edits; null for a new plan. */
   savedId: SavedRouteId | null;
   plan: History<Plan>;
-  /** The row whose ⌖ is on; null: a click fills the first empty row, else adds a stop. */
+  /** The row whose ⌖ is on: a click on the map sets it. Null: a click on the map places nothing. */
   pick: number | null;
   /** The last click was too far from any track. */
   missed: boolean;
 }
 
-/** Every change to the place list is undoable and turns ⌖ off. */
+/** Every change to the place list is undoable and moves ⌖ to the first empty row (off when none is empty). */
 export type PlanAction =
   /** Typed and Enter, a suggestion, a click, or emptied. */
   | { type: "setPlace"; at: number; ref: PlaceRef | null }
-  /** A new row before `at`. Ignored when the place is already in the plan. An empty row (null) gets ⌖. */
+  /** A new row before `at`. Ignored when the place is already in the plan. */
   | { type: "insert"; at: number; ref: PlaceRef | null }
   /** Takes the row out; of the last two, empties it. */
   | { type: "remove"; at: number }
@@ -55,8 +55,11 @@ export type PlanAction =
 
 export const EMPTY_PLAN: Plan = { places: [null, null], include: DEFAULT_INCLUDE, turnAtStops: false };
 
+/** The row ⌖ is on after a change: the first empty one. */
+const firstEmpty = (places: readonly (PlaceRef | null)[]) => (places.includes(null) ? places.indexOf(null) : null);
+
 export function startSession(savedId: SavedRouteId | null, plan: Plan): PlanSession {
-  return { savedId, plan: { past: [], present: plan, future: [] }, pick: null, missed: false };
+  return { savedId, plan: { past: [], present: plan, future: [] }, pick: firstEmpty(plan.places), missed: false };
 }
 
 function samePlace(x: PlaceRef | null, y: PlaceRef | null): boolean {
@@ -105,14 +108,14 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
   const plan = session.plan.present;
   const { places } = plan;
   const inside = (at: number) => Number.isInteger(at) && at >= 0 && at < places.length;
-  const change = (next: (PlaceRef | null)[], pick: number | null = null): PlanSession => ({ ...push(session, { ...plan, places: next }), pick, missed: false });
+  const change = (next: (PlaceRef | null)[]): PlanSession => ({ ...push(session, { ...plan, places: next }), pick: firstEmpty(next), missed: false });
   switch (action.type) {
     case "setPlace":
       return inside(action.at) ? change(places.with(action.at, action.ref)) : session;
     case "insert": {
       if (action.ref && inPlan(plan, action.ref)) return session.missed ? { ...session, missed: false } : session;
       const at = Math.max(0, Math.min(action.at, places.length));
-      return change(places.toSpliced(at, 0, action.ref), action.ref ? null : at);
+      return change(places.toSpliced(at, 0, action.ref));
     }
     case "remove":
       if (!inside(action.at)) return session;
@@ -131,7 +134,7 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
     case "setTurnAtStops":
       return push(session, { ...plan, turnAtStops: action.turnAtStops });
     case "clear":
-      return { ...push(session, EMPTY_PLAN), pick: null, missed: false };
+      return { ...push(session, EMPTY_PLAN), pick: firstEmpty(EMPTY_PLAN.places), missed: false };
     case "reverse":
       return change(places.toReversed());
     case "pick":
@@ -143,21 +146,15 @@ export function planReducer(session: PlanSession, action: PlanAction): PlanSessi
     case "undo": {
       const { past, present, future } = session.plan;
       if (!past.length) return session;
-      return { ...session, plan: { past: past.slice(0, -1), present: past[past.length - 1], future: [present, ...future] }, pick: null, missed: false };
+      const back = past[past.length - 1];
+      return { ...session, plan: { past: past.slice(0, -1), present: back, future: [present, ...future] }, pick: firstEmpty(back.places), missed: false };
     }
     case "redo": {
       const { past, present, future } = session.plan;
       if (!future.length) return session;
-      return { ...session, plan: { past: [...past, present], present: future[0], future: future.slice(1) }, pick: null, missed: false };
+      return { ...session, plan: { past: [...past, present], present: future[0], future: future.slice(1) }, pick: firstEmpty(future[0].places), missed: false };
     }
   }
-}
-
-/** The row the next click on the map fills: the one whose ⌖ is on, else the first empty one; null adds a stop. */
-export function nextTarget(session: PlanSession): number | null {
-  if (session.pick !== null) return session.pick;
-  const empty = session.plan.present.places.indexOf(null);
-  return empty >= 0 ? empty : null;
 }
 
 /** The found place's "Start" or "Destination": that end's row when it is empty, else a new row at that end. */
@@ -231,13 +228,13 @@ export interface PlanSessionHandle {
   session: PlanSession;
   dispatch: (action: PlanAction) => void;
   /**
-   * Snap, then place it at nextTarget: to a node of `route` (the legs' paths of the line clicked) when
+   * Snap, then set the row ⌖ is on: to a node of `route` (the legs' paths of the line clicked) when
    * the click is on it, else to the nearest node. Ignored while a previous snap is in flight (undefined). Resolves
    * to where it snapped, or null when no track is near; rejects when the server cannot be reached.
    */
-  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<LngLat | null | undefined>;
-  /** A shop square: place that ref at nextTarget. */
-  clickPlace: (ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => void;
+  clickMap: (lon: number, lat: number, toleranceKm: number, route: readonly LngLat[][] | null) => Promise<LngLat | null | undefined>;
+  /** A shop square: sets the row ⌖ is on to that shop; with ⌖ off, nothing. */
+  clickPlace: (ref: PlaceRef) => void;
 }
 
 type Held = { key: string; session: PlanSession };
@@ -297,23 +294,18 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
 
   useEscape(session.pick !== null, () => dispatch({ type: "pick", at: null }));
 
-  const place = useCallback(
-    (ref: PlaceRef, at: LonLat, places: PlanPlaces | null) => {
-      const now = latest.current;
-      const plan = now.plan.present;
-      // A place already in the plan is not added again (a double click, or a click on a pin's own node).
-      if (inPlan(plan, ref)) {
-        if (now.pick !== null) dispatch({ type: "pick", at: null });
-        return;
-      }
-      const target = nextTarget(now);
-      dispatch(target === null ? { type: "insert", at: insertIndex(plan, places, at), ref } : { type: "setPlace", at: target, ref });
+  const clickPlace = useCallback(
+    (ref: PlaceRef) => {
+      const { pick, plan } = latest.current;
+      if (pick === null) return;
+      // A place already in the plan is not set again (a double click, or a click on a pin's own node).
+      dispatch(inPlan(plan.present, ref) ? { type: "pick", at: null } : { type: "setPlace", at: pick, ref });
     },
     [dispatch],
   );
 
   const clickMap = useCallback(
-    async (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => {
+    async (lon: number, lat: number, toleranceKm: number, route: readonly LngLat[][] | null) => {
       if (snapping.current) return undefined;
       snapping.current = true;
       try {
@@ -323,16 +315,14 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
           dispatch({ type: "missed" });
           return null;
         }
-        place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
+        clickPlace({ kind: "node", fraId: node.fraId, railroad: null });
         return [node.lon, node.lat] as LngLat;
       } finally {
         snapping.current = false;
       }
     },
-    [dispatch, place],
+    [dispatch, clickPlace],
   );
-
-  const clickPlace = useCallback((ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => place(ref, { lon: at[0], lat: at[1] }, places), [place]);
 
   return { session, dispatch, clickMap, clickPlace };
 }
