@@ -395,10 +395,10 @@ export function sceneTooltip(info: PickingInfo): { text: string; style: Partial<
 
 /**
  * What a click on a picked object means. A shop square: that shop as a place. A grey route: that route. A leg of the
- * selected route: that leg; an interchange ring: the leg that leaves it. The plan's own pins: nothing ("inert").
+ * selected route: that leg; an interchange ring: the leg that leaves it. One of the plan's own pins: its row.
  * Anything else (the network, an empty spot): null, a click on the map.
  */
-export function sceneTarget(info: PickingInfo): SceneTarget | "inert" | null {
+export function sceneTarget(info: PickingInfo): SceneTarget | null {
   const { layer, object } = info;
   if (!layer || !object) return null;
   if (layer.id === LAYER.alternatives) return { kind: "option", id: (object as AltLeg).option };
@@ -406,7 +406,8 @@ export function sceneTarget(info: PickingInfo): SceneTarget | "inert" | null {
   if (layer.id === LAYER.interchanges) return { kind: "leg", index: (object as Interchange).leg };
   if (layer.id === LAYER.pins) {
     const pin = object as ScenePin;
-    return pin.shopId ? { kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position } : "inert";
+    if (pin.shopId) return { kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position };
+    return pin.row === null ? null : { kind: "row", index: pin.row };
   }
   return null;
 }

@@ -29,7 +29,7 @@ function describe(scene: MapScene | null | undefined): string {
   return `Map: ${scene.pins.filter((pin) => pin.kind === "shop").length} shops${links.length ? `, ${links.join(", ")}` : ""}`;
 }
 
-export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCanvasProps): ReactElement {
+export default function FakeMapCanvas({ content, layers, onLayers, look, found }: MapCanvasProps): ReactElement {
   const scene = content?.scene ?? null;
   const select = content?.onSelect;
   const [preview, setPreview] = useState<Railroad | null>(null);
@@ -42,6 +42,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
       data-carrier={preview ?? layers.carrier ?? undefined}
     >
       <p>{describe(scene)}</p>
+      {found && <p>Found: {found.suggestion.label}</p>}
       {content?.onPick && (
         <button type="button" onClick={() => content.onPick?.(nextClick.lon, nextClick.lat, 5, null)}>
           Click the map
@@ -59,7 +60,11 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
             <button key={pin.shopId} type="button" onClick={() => pin.shopId && select?.({ kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position })}>
               Shop square {pin.label}
             </button>
-          ) : null,
+          ) : (
+            <button key={`row-${pin.row}`} type="button" onClick={() => pin.row !== null && select?.({ kind: "row", index: pin.row })}>
+              Pin {pin.label}
+            </button>
+          ),
         )}
       {content?.handles?.length ? <p>Handles: {content.handles.map((handle) => handle.label).join(", ")}</p> : null}
       {content?.handles?.map(

@@ -6,7 +6,7 @@
  *   planScene(...)                                  what the map draws
  */
 import { useEffect, useMemo, useState, type ReactElement } from "react";
-import type { ShopView } from "../../../shared/places.ts";
+import { resolvedOf, type PlaceSuggestion, type ShopView } from "../../../shared/places.ts";
 import { go, HOME, type Screen } from "../../app/routes.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
@@ -19,7 +19,11 @@ import { fullPlan, insertIndex, isEmpty, placeAtEnd, usePlanSession } from "./se
 
 const NO_SHOPS: ShopView[] = [];
 
-export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "route" }> }): ReactElement {
+export function RouteWorkspace({ screen, onFind }: {
+  screen: Extract<Screen, { name: "route" }>;
+  /** A shop square clicked while no ⌖ is on: found, as with the panel's search. */
+  onFind: (shop: PlaceSuggestion) => void;
+}): ReactElement {
   const list = useSavedRoutes();
   const savedRoutes = list.status === "ready" ? list.data : [];
   const saved = screen.saved ? (savedRoutes.find((route) => route.id === screen.saved) ?? null) : null;
@@ -52,7 +56,15 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const onSelect = (target: SceneTarget) => {
     if (target.kind === "option") go({ ...screen, option: target.id }, { replace: true });
     else if (target.kind === "leg") setLeg(leg === target.index ? null : target.index);
-    else clickPlace(target.ref);
+    // One of the plan's pins turns its row's ⌖ on. While a ⌖ is on it does nothing: the second click of a double click lands on the pin just set.
+    else if (target.kind === "row") session.pick === null && dispatch({ type: "pick", at: target.index });
+    else if (session.pick !== null) clickPlace(target.ref);
+    else {
+      const ref = target.ref;
+      const shop = shopList.find((shop) => ref.kind === "shop" && shop.id === ref.shopId);
+      const place = resolvedOf(shop?.place);
+      if (shop && place) onFind({ ref, label: shop.name, detail: "", source: "shop", railroads: place.railroads });
+    }
   };
 
   const onSave = async (name: string, routeString: string) => {

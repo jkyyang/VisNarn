@@ -70,7 +70,7 @@ export default function App(): ReactElement {
                 </div>
               )}
               <ErrorBoundary key={screen.name} fallback={<p className="error page-error">This screen could not be shown. Go back or reload the page.</p>}>
-                <ScreenView screen={screen} query={text ?? ""} selectedShop={selectedShop} onSelectShop={setSelectedShop} />
+                <ScreenView screen={screen} query={text ?? ""} selectedShop={selectedShop} onSelectShop={setSelectedShop} onFind={choose} />
               </ErrorBoundary>
             </div>
           </main>
@@ -111,11 +111,11 @@ function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): num
   return left;
 }
 
-function ScreenView(props: { screen: Screen; query: string; selectedShop: ShopId | null; onSelectShop: (id: ShopId | null) => void }): ReactElement {
+function ScreenView(props: { screen: Screen; query: string; selectedShop: ShopId | null; onSelectShop: (id: ShopId | null) => void; onFind: (found: PlaceSuggestion) => void }): ReactElement {
   const { screen } = props;
   switch (screen.name) {
     case "route":
-      return <RouteWorkspace screen={screen} />;
+      return <RouteWorkspace screen={screen} onFind={props.onFind} />;
     case "shops":
       return <ShopsScreen screen={screen} query={props.query} selected={props.selectedShop} onSelect={props.onSelectShop} />;
   }

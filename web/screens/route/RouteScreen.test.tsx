@@ -387,6 +387,19 @@ describe("Route planner", () => {
     expect(stopRows()).toHaveLength(0);
   });
 
+  it("with no ⌖ on, a shop square is found as with the search, and one of the plan's pins turns its row's ⌖ on", async () => {
+    const user = userEvent.setup();
+    await planTempleToLittleRock(user);
+    await user.click(screen.getAllByRole("button", { name: /^Shop square / })[0]);
+    expect(await screen.findByText(/^Found: /)).toBeInTheDocument();
+    expect(rowValues()).toEqual(["Temple, TX", "North Little Rock, AR"]);
+    await user.click(screen.getByRole("button", { name: "Pin Temple, TX" }));
+    expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "true");
+    // The second click of a double click lands on the pin just set: it changes nothing.
+    await user.click(screen.getByRole("button", { name: "Pin Temple, TX" }));
+    expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("an old or unknown link (/cars, /batch) opens the planner and the address bar says /route", async () => {
     for (const path of ["/cars", "/cars/new", "/batch", "/nowhere"]) {
       const page = openPage(path);

@@ -218,9 +218,10 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
           onClick={(info) => {
             const target = sceneTarget(info);
             const current = latest.current;
-            if (target === "inert" || !current) return;
-            // While a click places something, only a place is taken as itself; anything else is a spot on the map.
-            if (target && current.onSelect && (target.kind === "place" || !current.onPick)) return current.onSelect(target);
+            if (!current) return;
+            // While a click places something, a pin or a shop square is still itself; a line under it is a spot on the map.
+            const line = target?.kind === "option" || target?.kind === "leg";
+            if (target && current.onSelect && !(line && current.onPick)) return current.onSelect(target);
             if (current.onPick && info.coordinate) {
               // West of 180° the map draws the world again (PAN_BOUNDS); a longitude goes to the server between -180 and 180.
               const lon = ((info.coordinate[0] + 540) % 360) - 180;

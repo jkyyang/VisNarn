@@ -233,7 +233,7 @@ export interface PlanSessionHandle {
    * to where it snapped, or null when no track is near; rejects when the server cannot be reached.
    */
   clickMap: (lon: number, lat: number, toleranceKm: number, route: readonly LngLat[][] | null) => Promise<LngLat | null | undefined>;
-  /** A shop square: sets the row ⌖ is on to that shop; with ⌖ off, nothing. */
+  /** A shop square while a ⌖ is on: sets that row to the shop. */
   clickPlace: (ref: PlaceRef) => void;
 }
 

@@ -340,7 +340,7 @@ describe("layers", () => {
     expect(iconOf(route, route.pins.find((p) => p.kind === "destination")!.label)).toContain(ring);
   });
 
-  it("a grey route is that route (and, while a click places something, the line the place snaps to); a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
+  it("a grey route is that route (and, while a click places something, the line the place snaps to); a shop square is a place; one of the plan's own pins is its row", () => {
     const pick = (id: string, object: unknown) => ({ layer: layers.find((l) => l.id === id), object }) as PickingInfo;
     const routeScene = scene as Extract<MapScene, { kind: "route" }>;
     const grey = pick(LAYER.alternatives, { ...routeScene.alternatives[0].legs[0], option: "shortest" });
@@ -349,7 +349,7 @@ describe("layers", () => {
     expect(lineAt(pick(LAYER.route, {}))).toBeNull();
     const square = routeScene.pins.find((p) => p.kind === "shop")!;
     expect(sceneTarget(pick(LAYER.pins, square))).toEqual({ kind: "place", ref: { kind: "shop", shopId: square.shopId }, position: square.position });
-    expect(sceneTarget(pick(LAYER.pins, routeScene.pins.find((p) => p.kind === "start")))).toBe("inert");
+    expect(sceneTarget(pick(LAYER.pins, routeScene.pins.find((p) => p.kind === "start")))).toEqual({ kind: "row", index: 0 });
     // A leg of the selected route, or the ring where one leaves, picks that leg.
     expect(sceneTarget(pick(LAYER.interchanges, { leg: 2 }))).toEqual({ kind: "leg", index: 2 });
     expect(sceneTarget(pick(LAYER.route, { index: 1 }))).toEqual({ kind: "leg", index: 1 });

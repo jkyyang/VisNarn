@@ -19,8 +19,10 @@ export interface ScenePin {
   glyph: string;
   label: string;
   position: LngLat;
-  /** A shop's marker: clicking it puts that shop in the plan. */
+  /** A shop's marker: clicking it puts that shop in the plan, or finds it. */
   shopId: ShopId | null;
+  /** A place of the plan: its row, whose ⌖ a click on it turns on. */
+  row: number | null;
   /** How a shop looks on the map, also as a place of the plan; null for any other place. */
   mark: ShopMark | null;
 }
@@ -101,8 +103,12 @@ export interface EditedShop {
   links: SceneLink[];
 }
 
-/** Something in the scene the user clicked: a route to select, a leg of the selected one (by its `index`), or a place to put in the plan. */
-export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "leg"; index: number } | { kind: "place"; ref: PlaceRef; position: LngLat };
+/** Something in the scene the user clicked: a route to select, a leg of the selected one (by its `index`), a place to put in the plan, or a place of the plan (by its row). */
+export type SceneTarget =
+  | { kind: "option"; id: RouteStrategy }
+  | { kind: "leg"; index: number }
+  | { kind: "place"; ref: PlaceRef; position: LngLat }
+  | { kind: "row"; index: number };
 
 /** The Class I network end to end, Vancouver to Montréal and Edmonton to Mexico City: where a scene with nothing in it is framed. */
 export const NETWORK_BOUNDS: Bounds = [-125, 19, -66, 55];
@@ -297,7 +303,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   for (const shop of shops) {
     const place = resolvedOf(shop.place);
     if (!place || inPlaces(place, places)) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id, mark: markOf(shop) });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id, row: null, mark: markOf(shop) });
   }
   places.forEach((place, i) => {
     if (!place) return;
@@ -305,7 +311,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
     const position = (i === first ? firstLeg?.path[0] : i === last ? lastLeg?.path.at(-1) : undefined) ?? at(place);
     // A stop's number is its row: the start is row 0.
     const mark = place.match.method === "shop" ? markOf({ name: place.label, code: null }) : null;
-    pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null, mark });
+    pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null, row: i, mark });
   });
 
   if (!routes || !chosen) return { kind: "route", selected: null, leg: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
@@ -346,7 +352,7 @@ export function shopsScene(shops: ShopView[], editing: EditedShop | null, select
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     if (!shop.place.ok || shop.id === editing?.shopId) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id, mark: markOf(shop, shop.id === selected) });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id, row: null, mark: markOf(shop, shop.id === selected) });
   }
   const links = editing?.links ?? [];
   const bounds = new BoundsBuilder();
