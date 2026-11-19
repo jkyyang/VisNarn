@@ -2158,6 +2158,12 @@ input.saved-name {
   .key-hint {
     display: none;
   }
+  /* A folded card's summary at footnote size, on two lines rather than cut. */
+  .accordion-summary {
+    font-size: var(--text-sm);
+    white-space: normal;
+    text-align: right;
+  }
   .btn--pill,
   .link-btn {
     position: relative;

@@ -157,7 +157,7 @@ function PlaceField(props: {
           aria-describedby={props.problem ? problemId : undefined}
           autoComplete="off"
           enterKeyHint="go"
-          placeholder="Shop or city, or click the map"
+          placeholder="Shop or city"
           value={draft ?? props.committed.label}
           onChange={(e) => {
             setDraft(e.target.value);
