@@ -63,6 +63,8 @@ export interface MapCanvasProps {
   /** The place chosen in the panel's search: its pin and card, and the camera flies there when `fly`. */
   found: Found | null;
   onCloseFound: () => void;
+  /** The map's WebGL context is gone (a phone short of graphics memory): this canvas draws nothing more. */
+  onContextLost: () => void;
 }
 
 /** The whole network, right of `cameraLeft`: where the map opens, and where Reset view goes back to. */
@@ -113,6 +115,17 @@ function FreeSpareTextures() {
     map.on("idle", free);
     return () => void map.off("idle", free);
   }, [map]);
+  return null;
+}
+
+/** Tells the stage when the map's WebGL context is lost, from the moment the map exists. Renders nothing; must be a child of the map. */
+function ContextLost({ onLost }: { onLost: () => void }) {
+  const map = useMap().current?.getMap();
+  useEffect(() => {
+    if (!map) return;
+    map.on("webglcontextlost", onLost);
+    return () => void map.off("webglcontextlost", onLost);
+  }, [map, onLost]);
   return null;
 }
 
@@ -243,6 +256,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
         <BasemapStyle style={style} />
         <FreeSpareTextures />
+        <ContextLost onLost={props.onContextLost} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         <SceneLabels scene={scene} colors={colors} />
