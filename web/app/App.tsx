@@ -34,14 +34,17 @@ export default function App(): ReactElement {
   const cameraLeft = useCameraLeft(panel, !folded);
   const [text, setText] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
+  // The search flies to what it found; a shop square clicked on the map opens its card where the camera is.
+  const [fly, setFly] = useState(true);
   const [selectedShop, setSelectedShop] = useState<ShopId | null>(null);
   const resolution = usePlace(chosen?.ref ?? null, "shop");
   const found = chosen && fresh(resolution);
   // On Shops a shop found is that shop selected in the list; anything else gets a pin and a card on the map.
   const asShop = screen.name === "shops" && chosen?.ref.kind === "shop";
 
-  const choose = (suggestion: PlaceSuggestion | null) => {
+  const choose = (suggestion: PlaceSuggestion | null, flyThere = true) => {
     setChosen(suggestion);
+    setFly(flyThere);
     if (screen.name === "shops" && suggestion?.ref.kind === "shop") setSelectedShop(suggestion.ref.shopId);
   };
   const fold = (next: boolean) => {
@@ -71,7 +74,7 @@ export default function App(): ReactElement {
                 </button>
               )}
               <ErrorBoundary key={screen.name} fallback={<p className="error page-error">This screen could not be shown. Go back or reload the page.</p>}>
-                <ScreenView screen={screen} query={text ?? ""} selectedShop={selectedShop} onSelectShop={setSelectedShop} onFind={choose} />
+                <ScreenView screen={screen} query={text ?? ""} selectedShop={selectedShop} onSelectShop={setSelectedShop} onFind={(shop) => choose(shop, false)} />
               </ErrorBoundary>
             </div>
           </main>
@@ -80,7 +83,7 @@ export default function App(): ReactElement {
               <PanelIcon />
             </button>
           )}
-          <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place } : null} onCloseFound={() => setChosen(null)} />
+          <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
     </ErrorBoundary>

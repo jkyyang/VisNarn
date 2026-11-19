@@ -394,7 +394,8 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getAllByRole("button", { name: /^Shop square / })[0]);
-    expect(await screen.findByText(/^Found: /)).toBeInTheDocument();
+    // The card opens where the camera is: no flight.
+    expect(await screen.findByText(/^Found: /)).toHaveAttribute("data-fly", "false");
     expect(rowValues()).toEqual(["Temple, TX", "North Little Rock, AR"]);
     await user.click(screen.getByRole("button", { name: "Pin Temple, TX" }));
     expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "true");

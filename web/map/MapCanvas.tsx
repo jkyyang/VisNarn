@@ -60,7 +60,7 @@ export interface MapCanvasProps {
    * canvas only, so a padded camera would show past them beside the panel.
    */
   cameraLeft: number;
-  /** The place chosen in the panel's search: its pin and card, and the camera flies there. */
+  /** The place chosen in the panel's search: its pin and card, and the camera flies there when `fly`. */
   found: Found | null;
   onCloseFound: () => void;
 }
@@ -238,7 +238,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <SceneLabels scene={scene} colors={colors} />
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} cameraLeft={props.cameraLeft} />}
         <FlyTo focus={content?.focus} cameraLeft={props.cameraLeft} />
-        <FlyTo focus={found ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} cameraLeft={props.cameraLeft} />
+        <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} cameraLeft={props.cameraLeft} />
         <Controls canvas={props} onPreview={setPreview} />
         <Credits />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}

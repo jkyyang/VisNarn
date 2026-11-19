@@ -60,10 +60,11 @@ export interface MapFlash {
   key: number;
 }
 
-/** A place chosen in the panel's search, and where it is. */
+/** A place chosen in the panel's search, and where it is. `fly`: the camera flies there (not for a shop square clicked on the map). */
 export interface Found {
   suggestion: PlaceSuggestion;
   place: ResolvedPlace;
+  fly: boolean;
 }
 
 export interface PlaceAction {

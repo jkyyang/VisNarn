@@ -42,7 +42,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look, found }
       data-carrier={preview ?? layers.carrier ?? undefined}
     >
       <p>{describe(scene)}</p>
-      {found && <p>Found: {found.suggestion.label}</p>}
+      {found && <p data-fly={found.fly}>Found: {found.suggestion.label}</p>}
       {content?.onPick && (
         <button type="button" onClick={() => content.onPick?.(nextClick.lon, nextClick.lat, 5, null)}>
           Click the map

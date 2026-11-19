@@ -21,7 +21,7 @@ const NO_SHOPS: ShopView[] = [];
 
 export function RouteWorkspace({ screen, onFind }: {
   screen: Extract<Screen, { name: "route" }>;
-  /** A shop square clicked while no ⌖ is on: found, as with the panel's search. */
+  /** A shop square clicked while no ⌖ is on: found, as with the panel's search, with the camera left where it is. */
   onFind: (shop: PlaceSuggestion) => void;
 }): ReactElement {
   const list = useSavedRoutes();
