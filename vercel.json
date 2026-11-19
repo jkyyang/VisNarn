@@ -10,7 +10,6 @@
       "excludeFiles": "public/data/*.geojson"
     }
   },
-  "proxy": { "entrypoint": "server/http/gate.ts" },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/(.*)", "destination": "/index.html" }

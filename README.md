@@ -32,7 +32,7 @@ The server listens on 127.0.0.1 only and refuses requests addressed to any other
 Your shops and routes stay on the laptop; map tiles and fonts are fetched from public servers.
 
 ## Deploy
-Vercel (Hobby) for the page and the API, Neon (Free) for the database, one password for everyone you let in:
+Vercel (Hobby) for the page and the API, Neon (Free) for the database, open to anyone with the link:
 [docs/deploy/vercel.md](docs/deploy/vercel.md).
 
 Network files in `public/data/` are committed. To rebuild them from public sources (BTS NTAD NARN, and GeoNames
@@ -44,7 +44,7 @@ npm run data       # needs python3; creates .venv and runs pipeline/run_all.sh
 ## Layout
 - `shared/`: places, plans, routes and the HTTP contract (`api.ts`)
 - `engine/`: rail network and router, used through `engine/index.ts`
-- `server/`: database, places, routing workers, plans, shop import, HTTP, the Vercel function and its gate
+- `server/`: database, places, routing workers, plans, shop import, HTTP, the Vercel function
 - `api/`: the Vercel function's entry (one line)
 - `web/`: screens, map, server data
 - `scripts/`: weekly network update, free-port, import rules test

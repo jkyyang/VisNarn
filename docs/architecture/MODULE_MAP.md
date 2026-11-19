@@ -45,7 +45,7 @@ How the rules are enforced:
 | `<area>/tsconfig.json` | that area's runtime and its allowed imports (`references`) | |
 | `vite.config.ts` | Vite: React, vitest settings; in development it runs inside the Node server (middleware mode, one port, no proxy) | checked in the `scripts` area |
 | `index.html` | the page shell; loads `/web/main.tsx` | |
-| `vercel.json` | Vercel: the built page (`dist/`) as static files, `/api/*` to the function and the files it reads (server sources, `public/data` network), the gate on every request | see `docs/deploy/vercel.md` |
+| `vercel.json` | Vercel: the built page (`dist/`) as static files, `/api/*` to the function and the files it reads (server sources, `public/data` network) | see `docs/deploy/vercel.md` |
 | `.vercelignore` | what never goes to Vercel: the Python pipeline and its inputs | without it `requirements.txt` makes Vercel build Python |
 | `api/index.ts` | the Vercel function: re-exports `server/vercel.ts` | outside the areas: one line |
 
@@ -93,7 +93,6 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `app.ts` | `App` (what the HTTP layer may ask for: places, shops, plans, track) and `createApp` (the composition root); on a laptop, the database in `~/.visnarn/postgres` | every server module |
 | `vercel.ts` | the Vercel function: one `App` per instance, answering with `http/serve.ts`'s `handler` | `./app`, `./config`, `./http/serve` |
 | `http/serve.ts` | the `node:http` shell: `handler` (Origin check, JSON-only bodies, `no-store`, match, decode, call, encode, errors) and `serve` on a laptop (the Host check, static files; Vite middleware in development). **Internal**: the only importer of `node:http` | `./handlers`, `./decode`, `shared/api`, `../app` (type), `../config` (`LOOPBACK`), `vite` (dev only) |
-| `http/gate.ts` | Vercel Routing Middleware: the `VISNARN_PASSWORD` asked for on every request (HTTP Basic). Built by Vercel on its own: imports no repo file | `@vercel/functions` |
 | `http/handlers.ts` | one line per route of `Api` | `./decode`, `shared/api`, `../app` (type) |
 | `http/decode.ts` | untrusted JSON and query strings → domain values; path params → ids | `shared/` |
 | `store/store.ts` | the `Store` interface: shops, saved routes (async) | `shared/` |

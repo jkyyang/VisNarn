@@ -56,7 +56,7 @@ network has between them, and your own shops. This page says why the code has th
    parameter properties and enums in the areas Node runs.
 8. **One server, two hosts, one database dialect.** A laptop runs `serve()` (loopback only, PGlite in a
    folder); Vercel runs the same `handler` as one Node function (`server/vercel.ts`, Neon through
-   `DATABASE_URL`) behind a password asked on every request, page and API alike (`server/http/gate.ts`).
+   `DATABASE_URL`), open to anyone with the link.
    `server/store/postgres.ts` has one SQL text and one list of migrations for both.
 
 ## Invariants encoded in types
@@ -68,7 +68,6 @@ network has between them, and your own shops. This page says why the code has th
 | A routed answer always has a route to show | `routes: [RoutePath, ...RoutePath[]]` |
 | Every route has a handler and a decoder | `Handlers` and `decodeBody` are mapped types over `Api` |
 | A laptop's server is not reachable from the network | `LOOPBACK` is a constant; `serve()` has no host option |
-| Nothing on Vercel answers without the password | `vercel.json` `proxy` runs `gate.ts` before every file and the function; no `VISNARN_PASSWORD`, no entry |
 | Links cannot drift from routes | links are built from `Screen` values with `hrefFor` |
 
 **Validation** lives at three edges: `server/http/decode.ts` (JSON to domain), `server/intake` (CSV records
