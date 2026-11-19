@@ -73,7 +73,7 @@ export const LINK_DASH: [dash: number, gap: number] = [2, 1.6];
 export const DECK_PICK_RADIUS_PX = { mouse: 8, finger: 16 };
 
 /**
- * The map draws at most this many pixels per CSS pixel. A 3x phone screen then draws 44% fewer
+ * The map draws at most this many pixels per CSS pixel. A 3x phone screen then draws 56% fewer
  * pixels each frame, which a person holding it cannot tell apart; screens of 2x or less are unchanged.
  */
 export const MAX_PIXEL_RATIO = 2;
