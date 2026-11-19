@@ -27,6 +27,8 @@
   --motion: 180ms;
   --ease: ease-out;
   --glass-filter: blur(20px) saturate(140%);
+  /* The one focus mark: for the keyboard only, following the focused thing's own corners. */
+  --focus-ring: 0 0 0 2px var(--accent);
 
   --accent: #ffc72c; /* placeholder: replace with the official UTLX yellow */
   --on-accent: #12161d;
@@ -140,13 +142,14 @@ h2 {
   font-size: inherit;
   text-wrap: balance;
 }
+/* The focus mark, as a ring that follows the element's radius; never after a press with a mouse, a finger or a pen. */
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-/* A text field shows its focus as the field's own edge (.input-box), the same after a click or a Tab. */
-input:focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* After a press with a mouse, a finger or a pen, no ring until the next key (web/main.tsx). */
+:root[data-input="pointer"] :focus-visible {
+  box-shadow: none;
 }
 ::placeholder {
   color: var(--text-2);
@@ -210,22 +213,22 @@ input:focus-visible {
     backdrop-filter: none;
   }
 }
-/* A grouped list: solid rows with a hairline between them, from the text column to the right edge.
-   It never clips (the suggestion menus hang out of it), so its first and last rows round their own corners. */
+/* A card in the panel. It never clips (the suggestion menus hang out of it), so its first and last rows round their own corners. */
 .group {
-  background: var(--surface-solid);
+  background: var(--surface-2);
   border-radius: var(--radius-ctl);
 }
 .group > *,
 .place-list > * {
   position: relative;
 }
-.group > * + *::before,
-.place-list > * + *::before {
+/* The one separator in the panel: between place rows (and before Add stop), from the text column to the card's edge. */
+.place-list > * + *::before,
+.place-list + .add-stop::before {
   content: "";
   position: absolute;
   top: 0;
-  left: var(--sep-inset, 12px);
+  left: 38px;
   right: 0;
   height: var(--stroke-w);
   background: var(--stroke);
@@ -341,8 +344,7 @@ input:focus-visible {
   cursor: inherit;
 }
 .chip:has(:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
 }
 /* Always on: grey, so the chips that switch are the ones to press. */
 .chip:has(:disabled) {
@@ -406,21 +408,31 @@ input:focus-visible {
   cursor: default;
 }
 @media (hover: hover) and (pointer: fine) {
+  .shop-row:hover .shop-edit {
+    opacity: 1;
+  }
   .icon-btn:not(:disabled):hover,
   .map-btn:not(:disabled):hover,
-  .route-row:not(.is-selected):hover,
+  .shop-row:hover,
+  .menu-item:not(:disabled):hover,
+  .leg-row:hover,
+  .route-row:not([aria-pressed="true"]):hover,
+  .switch-row:hover,
+  .accordion-head:hover,
   .suggestions li:hover {
     background: var(--surface-2);
   }
-  .btn:not(.btn--primary, .btn--danger, :disabled):hover,
-  .chip:not([aria-checked="true"], :has(:checked, :disabled)):hover,
+  /* On a control that already rests on --surface-2, the hover tint lies over it. */
+  .btn:not(:disabled):hover,
+  .chip:not(:has(:disabled)):hover {
+    box-shadow: inset 0 0 0 100vmax var(--surface-2);
+  }
   .segmented > :not([aria-checked="true"], [aria-current="page"], [aria-selected="true"]):hover {
     color: var(--text);
   }
 }
 input:not([type]),
-input[type="text"],
-.search-box {
+input[type="text"] {
   height: var(--ctl);
   min-width: 0;
   padding: 0 10px;
@@ -459,10 +471,20 @@ input[aria-invalid="true"] {
   outline: none;
   color: var(--text);
 }
-.search-box:focus-within,
-.map-search-box:focus-within {
+/* A field shows its focus as its own edge, after a click or a Tab alike. */
+/*
+ * A text field is its own focus mark, after a click or a key alike: a standalone field or the search field rings inside
+ * its corners. A place row shows its field focused as the row's fill, and rings the whole row for the keyboard only.
+ */
+:is(input:not([type]), input[type="text"]):not(.input-box input):focus-visible,
+.search-field:has(input:focus-visible) {
   box-shadow: inset 0 0 0 1.5px var(--accent);
-  outline-offset: -2px;
+}
+.input-box input:focus-visible {
+  box-shadow: none;
+}
+:root:not([data-input="pointer"]) .place-row:has(input:focus-visible) {
+  box-shadow: inset var(--focus-ring);
 }
 .alert,
 .confirm {
@@ -528,26 +550,175 @@ input[aria-invalid="true"] {
   overflow: hidden;
   background: var(--bg);
 }
+/* The panel: its header stays, its body scrolls inside it; it hugs what it holds, up to the window less a margin. */
 .panel {
   position: absolute;
   z-index: 2;
   top: var(--inset);
   left: var(--inset);
+  display: flex;
+  flex-direction: column;
   width: var(--panel-w);
   max-height: calc(100% - 2 * var(--inset));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0 12px 12px;
 }
-.app-header {
+.panel.is-folded {
+  display: none;
+}
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  gap: calc(2 * var(--space));
+  padding: calc(3 * var(--space)) calc(3 * var(--space)) calc(2 * var(--space));
+}
+.panel-search-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
+  gap: var(--space);
 }
-.app-header .segmented {
-  flex: 0 1 180px;
+.panel-fold,
+.panel-open {
+  width: var(--ctl);
+  height: var(--ctl);
+  border-radius: var(--radius-ctl);
+  color: var(--text);
+}
+.panel-open {
+  position: absolute;
+  z-index: 2;
+  top: var(--inset);
+  left: var(--inset);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+}
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 calc(3 * var(--space)) calc(3 * var(--space));
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+/* The one search, with its "/" key and the places it finds, grouped. */
+.panel-search {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.search-field {
+  height: var(--ctl);
+  padding: 0 calc(2 * var(--space)) 0 calc(3 * var(--space));
+  gap: calc(2 * var(--space));
+  border-radius: var(--radius-ctl);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.key-hint {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: var(--stroke-w) solid var(--stroke);
+  border-radius: var(--radius-inner);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.panel-search .suggestions {
+  z-index: 6;
+  max-height: min(360px, calc(100vh - 140px));
+}
+.suggestions ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.suggestions .suggestion-group {
+  padding: calc(2 * var(--space)) 10px var(--space);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  cursor: default;
+}
+.search-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+}
+/* A list's bar: what it is, then its actions ("12 shops · Add shop · ⋯", "Route · Undo · Redo"). */
+.list-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-left: var(--space);
+}
+.list-count {
+  flex: 1;
+  font-size: var(--text-md);
+  font-weight: var(--weight);
+  color: var(--text-2);
+}
+.history {
+  display: flex;
+  gap: 2px;
+}
+.btn--pill {
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--radius-pill);
+}
+.menu {
+  position: relative;
+}
+.menu-card {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + var(--space));
+  right: 0;
+  min-width: 160px;
+  padding: var(--space);
+  border-radius: var(--radius-ctl);
+  transform-origin: top right;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--ctl);
+  padding: 0 calc(3 * var(--space));
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.carrier-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: var(--weight-strong);
+}
+.icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.icon .dot {
+  fill: currentColor;
+  stroke: none;
 }
 .server-note {
   margin-bottom: 12px;
@@ -564,12 +735,16 @@ input[aria-invalid="true"] {
   gap: 12px;
 }
 .route-rows,
-.sections-group {
+.result {
   transition: opacity var(--motion) var(--ease);
 }
 .route-panel.is-stale .route-rows,
-.route-panel.is-stale .sections-group {
+.route-panel.is-stale .result {
   opacity: 0.4;
+}
+/* The route panel's bar sits closer to the card under it. */
+.route-panel > .list-bar {
+  margin-bottom: calc(-2 * var(--space));
 }
 .plan {
   display: flex;
@@ -578,10 +753,6 @@ input[aria-invalid="true"] {
 }
 .plan > :not(.group) {
   padding: 0 4px;
-}
-/* Pin · input, ⌖ and × · handle; the next carrier under the input. */
-.place-group {
-  --sep-inset: 44px;
 }
 /* Positioned, so each row's offsetTop is measured from the list (web/ui/reorder.ts). */
 .place-list {
@@ -593,25 +764,21 @@ input[aria-invalid="true"] {
 .place-row,
 .add-stop {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
-  column-gap: 6px;
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
+  column-gap: var(--space);
   align-items: center;
-  min-height: var(--row);
-  padding: 0 4px 0 6px;
+  min-height: 52px;
+  padding: 0 var(--space) 0 10px;
 }
 /* The slide is the FLIP and drag motion of web/ui/reorder.ts. */
 .place-row {
   transition: transform var(--motion) var(--ease);
 }
-.place-row:focus-within {
+.place-row:has(input:focus-visible) {
   background: var(--surface-2);
 }
 .place-row:has(.is-picking) {
   background: var(--surface-2);
-}
-.place-row .line-chips {
-  grid-column: 2 / -1;
-  padding-bottom: 8px;
 }
 .place-row.is-dragging {
   z-index: 1;
@@ -632,29 +799,41 @@ input[aria-invalid="true"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: var(--row);
+  height: 52px;
 }
 .place-field {
   position: relative;
   min-width: 0;
 }
 .place-box {
-  height: var(--row);
+  min-height: 52px;
+}
+/* The row's name over what is set: "Start" / "Sarnia, ON · Procor". */
+.place-value {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px var(--space);
+}
+.place-label {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.place-value input {
+  height: auto;
+  font-weight: var(--weight-strong);
 }
 .pick-btn[aria-pressed="true"] {
   background: var(--accent);
   color: var(--on-accent);
 }
-/* The one line under a place that did not resolve. */
-.place-problem {
-  display: block;
-  padding-bottom: 8px;
-  font-size: var(--text-sm);
-  color: var(--risk);
-}
 .drag-handle {
   align-self: start;
-  margin-top: calc((var(--row) - var(--icon-btn)) / 2);
+  width: 28px;
+  margin-top: calc((52px - var(--icon-btn)) / 2);
+  color: var(--text-2);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -666,11 +845,15 @@ input[aria-invalid="true"] {
   color: var(--on-accent);
   background: var(--accent);
 }
+/* Add stop: one more row of the card, in the rows' columns; quieter than a place. */
 .add-stop {
   width: 100%;
+  min-height: 44px;
   border: 0;
+  border-radius: inherit;
   background: none;
-  color: var(--text);
+  color: var(--text-2);
+  font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
 }
@@ -678,153 +861,283 @@ input[aria-invalid="true"] {
   justify-self: center;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-pill);
-  background: var(--text);
-  color: var(--surface-solid);
-  font-weight: var(--weight-strong);
-  line-height: 1;
 }
-.plan-actions {
-  display: flex;
-  gap: 12px;
+/* Something wrong, shown by the thing itself: a red edge (its tooltip says why), never a sentence in the panel. */
+.is-wrong,
+.place-field:has([aria-invalid="true"]) .place-box,
+.map-handle.is-wrong .map-handle-face {
+  box-shadow: inset 0 0 0 1.5px var(--risk);
 }
-.line-chips-label,
-.hint-line {
+.place-field:has([aria-invalid="true"]) .pick-btn,
+.shop-row.is-off .owner-glyph {
+  color: var(--risk);
+  border-color: var(--risk);
+}
+/* Remove or clear a place: on the hovered or focused row only. */
+.remove-btn {
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease);
+}
+:is(.place-row, .saved-row):is(:hover, :focus-within) .remove-btn {
+  opacity: 1;
+}
+/* Where several railroads meet: which one takes the car on. A click moves to the next. */
+.next-carrier {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space);
+  align-self: flex-start;
+  margin: -2px 0 calc(2 * var(--space)) var(--space);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
   font-size: var(--text-sm);
+  cursor: pointer;
+}
+.save-btn.is-saved {
+  opacity: 1;
   color: var(--text-2);
 }
-.hint-line {
-  margin: 0;
+/* The routes found, when there are two or more: rows like the Shops list's. */
+.route-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space);
 }
 .route-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(3 * var(--space));
   width: 100%;
-  min-height: 56px;
-  padding: 8px 12px;
+  min-height: 48px;
+  padding: 6px calc(3 * var(--space));
   border: 0;
+  border-radius: var(--radius-inner);
   background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
 }
-.route-row.is-selected {
+.route-row[aria-pressed="true"] {
   background: var(--surface-2);
 }
-.route-row-text {
-  flex: 1;
-  min-width: 0;
+.route-row .shop-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.add-stop {
+  position: relative;
+}
+/* The result: the length, carriers and interchanges, a row per carrier leg with the rest between them, the route string. */
+.result {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  padding: 14px;
 }
-.route-row-km {
+.result-head + .sections {
+  margin-top: var(--space);
+}
+.result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space) 10px;
+  margin-bottom: var(--space);
+}
+.result-head .muted {
+  font-size: var(--text-md);
+}
+.result-km {
   font-size: var(--text-display);
   font-weight: var(--weight-strong);
-  line-height: 1.15;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-}
-.route-row .rr-list {
-  font-size: var(--text-sm);
-  color: var(--text-2);
-}
-.ix-chip {
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-.sections-group {
-  padding: 8px 12px;
 }
 .sections {
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.section {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  column-gap: 10px;
+.leg-row {
+  display: flex;
   align-items: center;
-  min-height: 28px;
+  gap: 10px;
+  width: calc(100% + 12px);
+  min-height: 36px;
+  margin: 0 -6px;
+  padding: var(--space) 6px;
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+.leg-row[aria-pressed="true"] {
+  background: var(--surface-2);
+}
+.section-bar {
+  flex: none;
+  width: 4px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+}
+.leg-carrier {
+  flex: none;
+  width: 44px;
+  font-weight: var(--weight-strong);
+}
+.leg-way {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.leg-km {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+/* A change of carrier, a stop, a turn-back between the legs: smaller, in the leg's column. */
+.section:not(.section--leg) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
 }
 .section-mark {
   display: flex;
   justify-content: center;
-  align-items: center;
-  align-self: stretch;
-}
-.section--leg {
-  min-height: 34px;
-}
-.section--leg .section-text {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.section-km {
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.section-bar {
-  width: 5px;
-  align-self: stretch;
-  border-radius: var(--radius-inner);
-}
-.section-ring {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-pill);
-  border: 3px solid var(--text);
-  background: var(--surface-solid);
+  flex: none;
+  width: 4px;
 }
 .section--turn-back .section-text {
   color: var(--turn);
   font-weight: var(--weight-strong);
 }
-.junction {
+/* A saved route's string, when today's route differs from it. */
+.saved-as {
+  margin: var(--space) 0 0;
+  font-size: var(--text-sm);
   color: var(--text-2);
 }
-.junction.is-chosen {
+/* A card that folds (web/ui/Accordion.tsx): Route options, Saved routes. */
+.accordion-head {
+  display: flex;
+  align-items: center;
+  gap: calc(2 * var(--space));
+  width: 100%;
+  height: 44px;
+  padding: 0 calc(3 * var(--space)) 0 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
   color: var(--text);
-  font-weight: var(--weight-strong);
-}
-/* The route string over the sections: "BNSF – [Kansas City, MO] – UP". */
-.route-string {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.save-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.save-bar input {
-  flex: 1;
-}
-.save-bar .error {
-  flex-basis: 100%;
-}
-.saved-list summary {
+  text-align: left;
   cursor: pointer;
 }
-.saved-list ul {
+.accordion-title {
+  flex: 1 0 auto;
+  font-weight: var(--weight-strong);
+}
+.accordion-summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-md);
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.accordion-chevron {
+  display: grid;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+  transition: transform var(--motion) var(--ease);
+}
+[aria-expanded="true"] > .accordion-chevron {
+  transform: rotate(90deg);
+}
+.accordion-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px calc(2 * var(--space));
+}
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--space));
+  width: 100%;
+  min-height: var(--ctl);
+  padding: 0 var(--space);
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.switch-row > :first-child {
+  flex: 1;
+}
+.switch {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--switch-off);
+  transition: background-color var(--motion) var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--switch-knob);
+  transition:
+    transform var(--motion) var(--ease),
+    background-color var(--motion) var(--ease);
+}
+[aria-checked="true"] > .switch {
+  background: var(--accent);
+}
+[aria-checked="true"] > .switch::after {
+  background: var(--on-accent);
+  transform: translateX(16px);
+}
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(2 * var(--space));
+}
+.saved-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
-.saved-list li {
+.saved-row {
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: var(--row);
-  padding: 0 6px 0 12px;
+  padding: 0 0 0 var(--space);
+  border-radius: var(--radius-inner);
 }
-.saved-list .confirm {
+.saved-row.is-current {
+  background: var(--surface-2);
+}
+.saved-row .confirm {
   flex: 1;
   margin: 6px 0;
 }
@@ -837,7 +1150,10 @@ input[aria-invalid="true"] {
   color: var(--text);
   text-decoration: none;
 }
-.saved-list li.is-current .saved-name {
+input.saved-name {
+  height: 32px;
+  padding: 0 var(--space);
+  background: transparent;
   font-weight: var(--weight-strong);
 }
 .suggestions {
@@ -867,18 +1183,6 @@ input[aria-invalid="true"] {
 .suggestions li[aria-selected="true"] {
   background: var(--surface-2);
 }
-.hint {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-sm);
-}
-.hint--ok {
-  color: var(--ok);
-}
-.hint--bad {
-  color: var(--risk);
-}
 
 /* ---- Shops ---- */
 .shops-screen,
@@ -891,68 +1195,93 @@ input[aria-invalid="true"] {
 .shops-body.has-form .shop-form {
   order: -1;
 }
-.shop-list-bar {
+/* A shop's row: the owner's mark, name and code, carriers; Edit on the hovered or selected row. */
+.shop-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.shop-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  border-radius: var(--radius-ctl);
+  transition: background-color var(--motion) var(--ease);
 }
-.search-box {
-  flex: 1;
-  color: var(--text-2);
-}
-/* Positioned, so the visually hidden header stays inside the scroll box instead of widening the page. */
-.table-scroll {
-  position: relative;
-  overflow-x: auto;
-}
-.shop-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.shop-table td {
-  height: var(--row);
-  padding: 6px 12px 6px 0;
-}
-/* The first cell takes the room the others leave, so a name wraps only when it is longer than the row. */
-.shop-table td:first-child {
-  width: 100%;
-  padding-left: 12px;
-}
-.shop-table td + td {
-  white-space: nowrap;
-}
-.shop-table tr + tr td {
-  border-top: var(--stroke-w) solid var(--stroke);
-}
-.shop-table tr.is-editing td {
+.shop-row.is-selected {
   background: var(--surface-2);
 }
-/* Coloured text only on a solid ground: on the tint, "Editing" is plain text. */
-.shop-table tr.is-editing .link-btn {
+.shop-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--space));
+  min-height: 48px;
+  padding: 6px var(--space) 6px calc(3 * var(--space));
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
   color: var(--text);
+  text-align: left;
+  cursor: pointer;
 }
-/* The pin hangs left of the name; the code sits under the name, in its column. */
-.shop-name,
-.shop-sub {
-  padding-left: 22px;
+.owner-glyph {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+}
+.owner-glyph--procor {
+  background: var(--text);
+}
+.owner-glyph--utlx {
+  border: 2px solid var(--text);
+}
+.shop-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .shop-name {
-  display: block;
-}
-.shop-name svg {
-  margin: 0 8px 0 -22px;
-  vertical-align: -3px;
+  font-weight: var(--weight-strong);
 }
 .shop-sub {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
   font-size: var(--text-sm);
   color: var(--text-2);
-  font-variant-numeric: tabular-nums;
 }
-/* A shop name or code may be up to 200 characters with no space or hyphen; breaking anywhere keeps it from widening a card or the shop table. */
+.carrier-dots {
+  flex: none;
+  display: flex;
+  gap: var(--space);
+}
+.carrier-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+.shop-edit {
+  flex: none;
+  height: 32px;
+  margin: 0 6px 0 2px;
+  padding: 0 10px;
+  background: transparent;
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease);
+}
+.shop-row.is-selected .shop-edit,
+.shop-row:focus-within .shop-edit {
+  opacity: 1;
+}
+.list-empty {
+  padding: calc(2 * var(--space)) calc(3 * var(--space));
+  color: var(--text-2);
+}
+/* A shop name or code may be up to 200 characters with no space or hyphen; breaking anywhere keeps it from widening a card or the shop list. */
 .section-text,
 .shop-name,
 .shop-sub,
@@ -990,9 +1319,15 @@ input[aria-invalid="true"] {
   gap: 12px;
   padding-top: 12px;
 }
-/* The Location input sits in a plain block, so it sets its own width to fill the form. */
-.shop-form .place-field > input {
-  width: 100%;
+/* Where the shop is: set on the map, shown as the place it is near. */
+.location {
+  display: flex;
+  align-items: center;
+  min-height: var(--ctl);
+  padding: 0 10px;
+  border-radius: var(--radius-ctl);
+  background: var(--surface-2);
+  font-weight: var(--weight-strong);
 }
 /* A shop's track links: a row per link, numbered as its pin on the map; the suggestion offered to a shop with none is faint. */
 .link-rows {
@@ -1065,24 +1400,7 @@ input[aria-invalid="true"] {
   justify-content: flex-end;
   gap: 8px;
 }
-.import-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: var(--row);
-  padding: 8px 12px;
-}
-.import-row h2 {
-  font-weight: var(--weight-strong);
-}
-.file-button label {
-  cursor: pointer;
-}
-.file-button input:focus-visible + label {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.import-card > :not(.import-row) {
+.import-card {
   padding: 10px 12px;
 }
 .import-preview {
@@ -1302,52 +1620,6 @@ input[aria-invalid="true"] {
 .map-card {
   position: absolute;
 }
-/* The search box: top left of the free map, clear of the panel, the map buttons and the legend. */
-.map-search {
-  position: absolute;
-  z-index: 6;
-  top: var(--inset);
-  left: calc(var(--panel-w) + 2 * var(--inset));
-  width: 340px;
-  max-width: calc(var(--free-w) - var(--ctl) - var(--inset));
-}
-.map-search-box {
-  height: 40px;
-  padding: 0 10px 0 12px;
-  gap: 8px;
-  border-radius: var(--radius-ctl);
-  color: var(--text-2);
-}
-.map-search-box input {
-  font-size: var(--text-lg);
-}
-.map-search-box .icon-btn,
-.map-search-box .icon-btn:hover {
-  width: 18px;
-  height: 18px;
-  background: var(--text-2);
-  color: var(--surface-solid);
-}
-.map-search-box .icon-btn svg {
-  width: 10px;
-  height: 10px;
-}
-.map-search .suggestions {
-  max-height: min(360px, calc(100vh - 140px));
-}
-.search-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 10px;
-}
-.map-search-problem {
-  margin: 6px 0 0;
-  padding: 8px 12px;
-  border-radius: var(--radius-ctl);
-  color: var(--risk);
-  transform-origin: top left;
-}
 /* The found place: a dot on the spot, its card just under it. Over the route marks, under the map buttons. */
 .found-pin {
   z-index: 5;
@@ -1403,6 +1675,54 @@ input[aria-invalid="true"] {
 }
 .found-actions .btn {
   padding: 0 6px;
+}
+/* The answer to a click on the map (web/map/Flash.tsx): a ring that pulses where it set something, a red ✕ that fades where nothing was. */
+.flash-mark {
+  z-index: 5;
+  pointer-events: none;
+}
+.flash {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 28px;
+  animation: flash-out 600ms var(--ease) forwards;
+}
+.flash--hit {
+  border: 2.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 1.5px var(--on-accent);
+}
+.flash--miss::before,
+.flash--miss::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 15%;
+  width: 70%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: var(--radius-pill);
+  background: var(--risk);
+  rotate: 45deg;
+}
+.flash--miss::after {
+  rotate: -45deg;
+}
+@keyframes flash-fade {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes flash-out {
+  from {
+    opacity: 1;
+    scale: 0.6;
+  }
+  to {
+    opacity: 0;
+    scale: 1.4;
+  }
 }
 /* Route pills and turn-back discs: map markers over deck.gl's canvas (which sits at z-index 2). */
 .route-mark {
@@ -1532,16 +1852,13 @@ input[aria-invalid="true"] {
 .segmented > * {
   transition: scale var(--motion) var(--ease);
 }
-.route-row {
-  transition:
-    scale var(--motion) var(--ease),
-    background-color var(--motion) var(--ease);
+.leg-row {
+  transition: background-color var(--motion) var(--ease);
 }
 .btn:active,
 .icon-btn:not(.drag-handle):active,
 .map-btn:active,
 .chip:not(:has(:disabled)):active,
-.route-row:active,
 .segmented > :active {
   scale: 0.97;
 }
@@ -1550,7 +1867,7 @@ input[aria-invalid="true"] {
 .suggestions,
 .found-card,
 .turn-pop,
-.map-search-problem {
+.menu-card {
   transition:
     opacity var(--motion) var(--ease),
     scale var(--motion) var(--ease);
@@ -1560,7 +1877,7 @@ input[aria-invalid="true"] {
   .suggestions,
   .found-card,
   .turn-pop,
-  .map-search-problem {
+  .menu-card {
     opacity: 0;
     scale: 0.96;
   }
@@ -1600,7 +1917,7 @@ input[aria-invalid="true"] {
     max-height: none;
     min-height: calc(100svh - var(--inset));
     margin-top: calc(-1 * var(--radius-panel));
-    padding: 22px var(--inset) calc(24px + env(safe-area-inset-bottom));
+    padding: 10px 0 calc(24px + env(safe-area-inset-bottom));
     overflow: visible;
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     background: var(--bg);
@@ -1626,14 +1943,16 @@ input[aria-invalid="true"] {
     left: 0;
     bottom: var(--radius-panel);
   }
-  .map-search {
-    left: var(--inset);
-    right: calc(var(--ctl) + 2 * var(--inset));
-    width: auto;
-    max-width: none;
+  /* The sheet scrolls with the page: no fold, and its body does not scroll on its own. */
+  .panel.is-folded {
+    display: flex;
   }
-  .map-search-box {
-    height: var(--ctl);
+  .panel-fold,
+  .panel-open {
+    display: none;
+  }
+  .panel-body {
+    overflow: visible;
   }
   /* The map is short here: a card open over it takes the legend's room. */
   .map:has(.layers-card, .found-card) .legend {
@@ -1642,9 +1961,6 @@ input[aria-invalid="true"] {
   /* Pinch zooms on a phone. */
   .ctl-group--zoom {
     display: none;
-  }
-  .segmented > * {
-    min-height: 32px;
   }
   .chip {
     height: 32px;
@@ -1658,17 +1974,17 @@ input[aria-invalid="true"] {
   .legend-rr {
     column-gap: 8px;
   }
-  .import-row {
-    flex-wrap: wrap;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
-    animation: none !important;
   }
   :active {
     scale: none !important;
+  }
+  /* The click's answer fades in place. */
+  .flash {
+    animation-name: flash-fade;
   }
 }

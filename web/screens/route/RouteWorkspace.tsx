@@ -9,8 +9,9 @@ import { useEffect, useMemo, useState, type ReactElement } from "react";
 import type { ShopView } from "../../../shared/places.ts";
 import { go, HOME, type Screen } from "../../app/routes.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useSavedRoutes, useShops } from "../../data/hooks.ts";
-import { MapContent } from "../../map/MapStage.tsx";
+import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
 import { chosenRoute, planScene, type SceneTarget } from "../../map/scene.ts";
+import { useEscape } from "../../ui/useEscape.ts";
 import { useDistanceUnit } from "../../units.ts";
 import { errorText } from "../../words.ts";
 import { RoutePanel } from "./RoutePanel.tsx";
@@ -27,6 +28,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const planned = usePlannedRoute(isEmpty(plan) ? null : plan);
   const shops = useShops();
   const [clickError, setClickError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<MapFlash | undefined>(undefined);
   const [unit] = useDistanceUnit();
 
   const result = planned.status === "ready" ? planned.data : null;
@@ -35,7 +37,11 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
   const option = screen.option ?? saved?.option ?? null;
   const chosen = result?.outcome === "routed" ? chosenRoute(result.routes, option) : null;
   const shopList = shops.status === "ready" ? shops.data : NO_SHOPS;
-  const scene = useMemo(() => planScene({ planned: result, option, shops: shopList, unit }), [result, option, shopList, unit]);
+  // The leg picked in the panel or on the map; a new route, or Esc, lets go of it.
+  const [leg, setLeg] = useState<number | null>(null);
+  useEffect(() => setLeg(null), [chosen]);
+  useEscape(leg !== null, () => setLeg(null));
+  const scene = useMemo(() => planScene({ planned: result, option, leg, shops: shopList, unit }), [result, option, leg, shopList, unit]);
 
   // A link to a saved route that is gone (deleted, or never there) opens a new plan instead.
   const known = list.status === "ready" && !list.stale;
@@ -45,6 +51,7 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
 
   const onSelect = (target: SceneTarget) => {
     if (target.kind === "option") go({ ...screen, option: target.id }, { replace: true });
+    else if (target.kind === "leg") setLeg(leg === target.index ? null : target.index);
     else clickPlace(target.ref, target.position, places);
   };
 
@@ -81,6 +88,13 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         onRemoveSaved={async (id) => void (await removeRoute(id))}
         onNew={onNew}
         unit={unit}
+        history={{
+          what: "route change",
+          undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,
+          redo: session.plan.future.length ? () => dispatch({ type: "redo" }) : null,
+        }}
+        leg={leg}
+        onLeg={setLeg}
       />
       <MapContent
         scene={scene}
@@ -88,21 +102,21 @@ export function RouteWorkspace({ screen }: { screen: Extract<Screen, { name: "ro
         include={plan.include}
         onPick={(lon, lat, km, line) => {
           setClickError(null);
+          setLeg(null);
           // The stop snaps to the line clicked: a grey route, else the selected one.
           const onLine = result?.outcome === "routed" ? chosenRoute(result.routes, line ?? option) : null;
-          clickMap(lon, lat, km, places, onLine?.legs.map((leg) => leg.path) ?? null).catch((error: unknown) => setClickError(errorText(error, "The click could not be placed.")));
+          clickMap(lon, lat, km, places, onLine?.legs.map((leg) => leg.path) ?? null).then(
+            (at) => at !== undefined && setFlash({ at: at ?? [lon, lat], kind: at ? "hit" : "miss", key: Date.now() }),
+            (error: unknown) => setClickError(errorText(error, "The click could not be placed.")),
+          );
         }}
         onSelect={onSelect}
+        flash={flash}
         placeActions={[
           { label: "Start", run: (found) => dispatch(placeAtEnd(plan, "start", found.ref)) },
           { label: "Add stop", run: (found) => dispatch({ type: "insert", at: insertIndex(plan, places, found), ref: found.ref }) },
           { label: "Destination", run: (found) => dispatch(placeAtEnd(plan, "destination", found.ref)) },
         ]}
-        history={{
-          what: "route change",
-          undo: session.plan.past.length ? () => dispatch({ type: "undo" }) : null,
-          redo: session.plan.future.length ? () => dispatch({ type: "redo" }) : null,
-        }}
       />
     </>
   );

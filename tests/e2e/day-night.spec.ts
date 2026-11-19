@@ -15,7 +15,7 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   const lights = nasaTiles(page);
   await page.goto("/route");
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-  const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
+  const selectedRow = page.getByRole("region", { name: "Route", exact: true });
   await expect(selectedRow).toBeVisible();
   await expectMapCanvas(page);
   const map = mapRegion(page);
@@ -52,7 +52,7 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   const lights = nasaTiles(page);
   await page.goto("/route");
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-  const selectedRow = page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true });
+  const selectedRow = page.getByRole("region", { name: "Route", exact: true });
   await expect(selectedRow).toBeVisible();
   await expectMapCanvas(page);
   const map = mapRegion(page);

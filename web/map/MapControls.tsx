@@ -5,7 +5,6 @@ import { DISTANCE_UNITS, useDistanceUnit, type DistanceUnit } from "../units.ts"
 import type { BasemapKind } from "./basemaps.ts";
 import type { LightMode, LightPhase, MapLook } from "./daylight.ts";
 import type { MapLayerChoice } from "./MapCanvas.tsx";
-import type { MapHistory } from "./MapStage.tsx";
 
 interface MapControlsProps {
   layers: MapLayerChoice;
@@ -14,7 +13,6 @@ interface MapControlsProps {
   look: MapLook;
   onZoom: (step: 1 | -1) => void;
   onFit: () => void;
-  history: MapHistory | null;
 }
 
 /** Each choice and its word, in the order shown. */
@@ -45,7 +43,7 @@ function ChoiceRow<T extends string>(props: { label: string; options: Record<T, 
 
 /**
  * Top-right of the map: the layers button and its card (Map layer, Time of day, Distances, Rail
- * network, Real tracks), zoom, undo / redo, fit whole route.
+ * network, Real tracks), zoom, fit whole route.
  */
 export function MapControls(props: MapControlsProps): ReactElement {
   const { layers, onLayers } = props;
@@ -93,20 +91,6 @@ export function MapControls(props: MapControlsProps): ReactElement {
           </svg>
         </button>
       </div>
-      {props.history && (
-        <div className="glass ctl-group">
-          <button type="button" className="map-btn" aria-label={`Undo ${props.history.what}`} disabled={!props.history.undo} onClick={() => props.history?.undo?.()}>
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-              <path d="M7 4L3 8l4 4M3 8h8a4 4 0 0 1 0 8H8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <button type="button" className="map-btn" aria-label={`Redo ${props.history.what}`} disabled={!props.history.redo} onClick={() => props.history?.redo?.()}>
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-              <path d="M11 4l4 4-4 4M15 8H7a4 4 0 0 0 0 8h3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </div>
-      )}
       <div className="glass ctl-group">
         <button type="button" className="map-btn" aria-label="Fit whole route" onClick={props.onFit}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">

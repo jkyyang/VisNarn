@@ -14,6 +14,20 @@ const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Rou
 const placeRows = (page: Page): Locator => page.getByRole("region", { name: "Places" }).getByRole("listitem");
 const legend = (page: Page): Locator => page.getByRole("list", { name: "Railroad colors" }).getByRole("listitem");
 const pressedRow = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).locator('[aria-pressed="true"]');
+/** The result card: the selected route's length, carriers and legs. */
+const result = (page: Page): Locator => page.getByRole("region", { name: "Route", exact: true });
+/** One of the route's actions, from the bar's ⋯ menu. */
+async function routeAction(page: Page, item: string): Promise<void> {
+  await page.getByRole("button", { name: "Route actions" }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}
+/** Route options, opened: the track classes, Turn at stops, and the carrier from a place where several meet. */
+async function routeOptions(page: Page): Promise<Locator> {
+  const head = page.getByRole("button", { name: /^Route options/ });
+  if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+  return page.getByRole("region", { name: "Route options" });
+}
+
 
 /** The next routing answer the page gets. */
 const nextRoute = (page: Page) =>
@@ -21,7 +35,7 @@ const nextRoute = (page: Page) =>
 
 /** Clicks FRA node 358070 at Temple, TX, where BNSF and UP meet: the search box centres the map on it. */
 async function clickTemple(page: Page): Promise<PlannedRoute> {
-  await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 358070");
+  await page.getByRole("combobox", { name: "Search shops and cities" }).fill("FRA 358070");
   await page.getByRole("option", { name: /FRA node 358070/ }).click();
   await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
   const answer = nextRoute(page);
@@ -33,17 +47,19 @@ test.describe("Route planner", () => {
   test("a typed start and destination give a route and its legend", async ({ page }) => {
     await page.goto("/route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
-    await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toBeVisible();
+    // No sentence on screen: the empty rows and the crosshair on the map say what to do.
+    await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toHaveClass("visually-hidden");
     await expectMapCanvas(page);
 
     const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     expect(planned.outcome).toBe("routed");
-    await expect(routeRows(page)).toHaveCount(planned.outcome === "routed" ? planned.routes.length : 0);
-    await expect(routeRows(page).first()).toHaveAttribute("aria-pressed", "true");
+    const count = planned.outcome === "routed" ? planned.routes.length : 0;
+    // A row per route when there are two or more; the result card shows the selected one.
+    await expect(routeRows(page)).toHaveCount(count > 1 ? count : 0);
     const railroads = planned.outcome === "routed" ? planned.routes[0].railroads : [];
     await expect(legend(page)).toHaveText(RAILROADS.filter((railroad) => railroads.includes(railroad)));
-    await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor");
-    await expect(page.getByRole("list", { name: "Sections" })).toContainText("North Little Rock");
+    await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor →");
+    await expect(page.getByRole("list", { name: "Sections" })).toContainText("→ North Little Rock");
   });
 
   test("a click on a grey route puts the stop on that route", async ({ page }) => {
@@ -60,7 +76,7 @@ test.describe("Route planner", () => {
     // The search box centres the map on that point's node.
     const node = (await (await page.request.get(`/api/places/nearest?lon=${lon}&lat=${lat}&withinKm=0.1`)).json()) as NetworkNode | null;
     if (!node) throw new Error("The grey route's point is no node.");
-    await page.getByRole("combobox", { name: "Search the map" }).fill(`FRA ${node.fraId}`);
+    await page.getByRole("combobox", { name: "Search shops and cities" }).fill(`FRA ${node.fraId}`);
     await page.getByRole("option", { name: new RegExp(`FRA node ${node.fraId}`) }).click();
     await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
     const answer = nextRoute(page);
@@ -113,46 +129,47 @@ test.describe("Route planner", () => {
     await expect(placeRows(page)).toHaveCount(2);
   });
 
-  test("a stop where railroads meet sends the chosen next carrier", async ({ page }) => {
+  test("a stop where railroads meet sends the carrier chosen from there", async ({ page }) => {
     await page.goto("/route");
     await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     await clickTemple(page);
-    const lines = page.getByRole("radiogroup", { name: "Next carrier at Stop 1" });
-    await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+    const options = await routeOptions(page);
+    const carrier = options.getByRole("button", { name: /^Carrier from / });
+    await expect(carrier).toHaveAccessibleName(/: Router's pick$/);
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"UP"'));
-    await lines.getByRole("radio", { name: "UP" }).click();
+    // Router's pick → BNSF → UP.
+    await carrier.click();
+    await carrier.click();
     await answered;
     await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
-    await expect(lines.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
+    await expect(carrier).toHaveAccessibleName(/: UP$/);
 
     // Pick the second route, save, and open the saved route again from its link.
     await routeRows(page).nth(1).click();
     await expect(page).toHaveURL(/\?option=/);
     const chosen = (await pressedRow(page).textContent()) ?? "";
-    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Taylor → North Little Rock via Temple");
-    const save = page.getByRole("form", { name: "Save route" });
-    await save.getByRole("button", { name: "Save" }).click();
+    await routeAction(page, "Save route");
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
-    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
     const savedAt = new URL(page.url()).pathname;
 
     await page.goto(savedAt);
     await expect(pressedRow(page)).toHaveText(chosen);
     await expect(placeRows(page)).toHaveCount(3);
-    await expect(page.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+    await expect((await routeOptions(page)).getByRole("button", { name: /^Carrier from / })).toHaveAccessibleName(/: UP$/);
 
     // Delete it again with the inline confirm, so the other tests start from no saved routes.
-    await page.getByRole("button", { name: "New" }).click();
-    await page.getByRole("button", { name: "Delete EXAMPLE Taylor → North Little Rock via Temple" }).click();
-    await page.getByRole("group", { name: "Delete EXAMPLE Taylor → North Little Rock via Temple" }).getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
+    await routeAction(page, "New route");
+    const saved = page.getByRole("region", { name: "Saved routes" });
+    if ((await saved.getByRole("button", { name: /^Saved routes/ }).getAttribute("aria-expanded")) !== "true") await saved.getByRole("button", { name: /^Saved routes/ }).click();
+    await saved.getByRole("button", { name: "Delete Taylor → North Little Rock" }).click();
+    await saved.getByRole("group", { name: "Delete Taylor → North Little Rock" }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("region", { name: "Saved routes" })).toHaveCount(0);
   });
 
   test("ticking Short lines reaches the Ville Platte shop", async ({ page }) => {
     await page.goto("/route");
-    const shortLines = page.getByRole("group", { name: "Route options" }).getByRole("checkbox", { name: "Short lines" });
-    await expect(shortLines).not.toBeChecked();
+    const shortLines = (await routeOptions(page)).getByRole("switch", { name: "Short lines" });
+    await expect(shortLines).toHaveAttribute("aria-checked", "false");
     // The map draws the network's short-line track only while the box is ticked.
     const network = page.locator(".map-canvas");
     await expect(network).toHaveAttribute("data-network-classes", "class_i passenger");
@@ -163,28 +180,24 @@ test.describe("Route planner", () => {
     await page.getByRole("combobox", { name: "Destination" }).fill("-92.271, 30.688");
     await page.getByRole("combobox", { name: "Destination" }).press("Enter");
     expect((await (await firstAnswer).json()) as PlannedRoute).toMatchObject({ outcome: "no-route", problem: { at: 1 } });
-    await expect(routeRows(page)).toHaveCount(0);
+    await expect(result(page)).toHaveCount(0);
 
     const ticked = nextRoute(page);
-    await shortLines.check();
+    await shortLines.click();
     expect((await ticked).outcome).toBe("routed");
     await expect(network).toHaveAttribute("data-network-classes", "class_i short_line passenger");
-    await expect(routeRows(page).first()).toContainText("Short line");
-    await expect(page.getByRole("list", { name: "Sections" })).toContainText("UP → Short line");
+    const legs = page.getByRole("list", { name: "Sections" }).getByRole("button");
+    await expect(legs.first()).toContainText(/^UP/);
+    await expect(legs.last()).toContainText(/^Short line/);
     await expect(legend(page)).toHaveText(["UP", "Short line"]);
 
-    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Baton Rouge → Ville Platte");
-    const save = page.getByRole("form", { name: "Save route" });
-    await save.getByRole("button", { name: "Save" }).click();
+    await routeAction(page, "Save route");
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
+    const savedAt = new URL(page.url()).pathname;
     await page.reload();
-    await expect(shortLines).toBeChecked();
-    await expect(routeRows(page).first()).toContainText("Short line");
-
-    await page.getByRole("button", { name: "New" }).click();
-    await page.getByRole("button", { name: "Delete EXAMPLE Baton Rouge → Ville Platte" }).click();
-    await page.getByRole("group", { name: "Delete EXAMPLE Baton Rouge → Ville Platte" }).getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByText(/^Saved routes/)).toHaveCount(0);
+    await expect((await routeOptions(page)).getByRole("switch", { name: "Short lines" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("list", { name: "Sections" }).getByRole("button").last()).toContainText(/^Short line/);
+    await page.request.delete(`/api/saved-routes/${savedAt.split("/").pop()}`);
   });
 
   test("hovering a turn-back mark shows where and how the route turns", async ({ page, request }) => {
@@ -195,7 +208,7 @@ test.describe("Route planner", () => {
     const saved = (await (await request.post("/api/saved-routes", { data: { name: "EXAMPLE turn-back", plan, option: null, routeString: "" } })).json()) as { id: string };
 
     await page.goto(`/route/saved/${saved.id}`);
-    await expect(routeRows(page).first()).toContainText("turn-back");
+    await expect(result(page)).toContainText("turn-back");
     const mark = mapRegion(page).getByRole("button", { name: /^Turn-back at / }).first();
     await expect(mark).toBeVisible();
     await mark.hover();
@@ -208,7 +221,7 @@ test.describe("Route planner", () => {
   test("dragging the destination to the top makes it the start", async ({ page }) => {
     await page.goto("/route");
     await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-    await page.getByRole("combobox", { name: "Search the map" }).fill("Temple, TX");
+    await page.getByRole("combobox", { name: "Search shops and cities" }).fill("Temple, TX");
     await page.getByRole("option").first().click();
     await page.getByRole("region", { name: /^Found: / }).getByRole("button", { name: "Add stop" }).click();
     await expect(placeRows(page)).toHaveCount(3);
@@ -225,46 +238,39 @@ test.describe("Route planner", () => {
     await expect.poll(values).toEqual(["North Little Rock, AR", "Taylor, TX", "Temple, TX"]);
   });
 
-  test("the route string marks a chosen carrier and survives save and reverse", async ({ page }) => {
+  test("a carrier chosen at a place goes into the saved route string, and Reverse turns the route round", async ({ page }) => {
     await page.goto("/route");
     await planRoute(page, "Kansas City, MO", "Chicago, IL");
-    const string = page.getByRole("region", { name: "Route string" });
     // Carriers and [our own place names] only.
-    const shape = /^(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line)( – \[[^\]]+\] – (BNSF|UP|CSXT|NS|CN|CPKC|regional|short line))*$/;
-    await expect(string.locator(".route-string-text")).toHaveText(shape);
+    const shape = /^(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line)(-\[[^\]]+\]-(BNSF|UP|CSXT|NS|CN|CPKC|regional|short line))*$/;
 
     // FRA node 412783 in Chicago, where BNSF, UP, NS and CN meet: NS takes the car on there.
-    await page.getByRole("combobox", { name: "Search the map" }).fill("FRA 412783");
+    await page.getByRole("combobox", { name: "Search shops and cities" }).fill("FRA 412783");
     await page.getByRole("option", { name: /FRA node 412783/ }).click();
     await page.getByRole("region", { name: /^Found: / }).getByRole("button", { name: "Add stop" }).click();
-    const lines = page.getByRole("radiogroup", { name: "Next carrier at Stop 1" });
-    await expect(lines.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+    const carrier = (await routeOptions(page)).getByRole("button", { name: /^Carrier from / });
+    await expect(carrier).toHaveAccessibleName(/: Router's pick$/);
     const answered = page.waitForResponse((r) => r.url().endsWith("/api/route") && JSON.stringify(r.request().postDataJSON()).includes('"railroad":"NS"'));
-    await lines.getByRole("radio", { name: "NS", exact: true }).click();
+    while (!/: NS$/.test((await carrier.getAttribute("aria-label")) ?? "")) await carrier.click();
     await answered;
     await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
-    await expect(string.locator(".route-string-text")).toHaveText(/ – NS$/);
-    await expect(string.locator(".route-string-text")).toHaveText(shape);
-    const sections = page.getByRole("list", { name: "Sections" });
-    await expect(sections.locator(".section--interchange").filter({ hasText: "→ NS" })).toContainText("you chose");
-    const planned = (await string.locator(".route-string-text").textContent()) ?? "";
-    await keepScreenshot(page, "route-string");
+    await expect(page.getByRole("list", { name: "Sections" }).getByRole("button").last()).toContainText(/^NS/);
+    await keepScreenshot(page, "route-carrier");
 
-    await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Kansas City → Chicago, NS at Chicago");
-    await page.getByRole("form", { name: "Save route" }).getByRole("button", { name: "Save" }).click();
+    await routeAction(page, "Save route");
     await expect(page).toHaveURL(/\/route\/saved\/[0-9a-f-]+/);
     const savedAt = new URL(page.url()).pathname;
+    const saved = ((await (await page.request.get("/api/saved-routes")).json()) as { id: string; routeString: string }[]).find((route) => savedAt.endsWith(route.id));
+    expect(saved?.routeString).toMatch(shape);
+    expect(saved?.routeString).toMatch(/-NS$/);
     await page.goto(savedAt);
-    await expect(string.locator(".route-string-text")).toHaveText(planned);
-    await expect(string).not.toContainText("Saved as");
-    await expect(page.getByRole("button", { name: "Saved" })).toBeDisabled();
+    await expect(result(page)).not.toContainText("Saved as");
 
-    await page.getByRole("button", { name: "Reverse route" }).click();
+    await routeAction(page, "Reverse route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue(/^Chicago/);
     await expect(page.getByRole("combobox", { name: "Destination" })).toHaveValue(/^Kansas City/);
     await expect(page.locator(".route-panel.is-stale")).toHaveCount(0);
-    await expect(string.locator(".route-string-text")).toHaveText(/^NS – /);
-    await expect(string.locator(".route-string-text")).toHaveText(shape);
+    await expect(page.getByRole("list", { name: "Sections" }).getByRole("button").first()).toContainText(/^NS/);
 
     // Delete it again, so the other tests start from no saved routes.
     await page.request.delete(`/api/saved-routes/${savedAt.split("/").pop()}`);

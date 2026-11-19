@@ -1,24 +1,105 @@
-/** Icons used in more than one place. Drawn in currentColor; decorative, so each button names itself. */
-import type { ReactElement } from "react";
+/** Icons used across the page: 24-unit strokes in currentColor, decorative, so each button names itself. */
+import type { ReactElement, ReactNode } from "react";
+
+function Icon({ size = 18, children }: { size?: number; children: ReactNode }): ReactElement {
+  return (
+    <svg className="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
 
 /** Pick on the map. */
 export const Crosshair = (): ReactElement => (
-  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M8 1v3M8 12v3M1 8h3M12 8h3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
+  <Icon size={16}>
+    <circle cx="12" cy="12" r="6" />
+    <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+  </Icon>
 );
 
 /** Clear, close or remove. */
 export const Cross = (): ReactElement => (
-  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-    <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-  </svg>
+  <Icon size={16}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </Icon>
 );
 
-export const Search = ({ size = 16 }: { size?: number }): ReactElement => (
-  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.7" />
-    <path d="M10.6 10.6L14 14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-  </svg>
+export const Search = ({ size = 18 }: { size?: number }): ReactElement => (
+  <Icon size={size}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="M16 16l4.5 4.5" />
+  </Icon>
+);
+
+export const Undo = (): ReactElement => (
+  <Icon>
+    <path d="M9 14L4 9l5-5" />
+    <path d="M4 9h10a6 6 0 010 12h-3" />
+  </Icon>
+);
+
+export const Redo = (): ReactElement => (
+  <Icon>
+    <path d="M15 14l5-5-5-5" />
+    <path d="M20 9H10a6 6 0 000 12h3" />
+  </Icon>
+);
+
+export const Plus = ({ size = 18 }: { size?: number }): ReactElement => (
+  <Icon size={size}>
+    <path d="M12 5v14M5 12h14" />
+  </Icon>
+);
+
+export const More = (): ReactElement => (
+  <Icon>
+    <circle className="dot" cx="5" cy="12" r="1.4" />
+    <circle className="dot" cx="12" cy="12" r="1.4" />
+    <circle className="dot" cx="19" cy="12" r="1.4" />
+  </Icon>
+);
+
+/** A chevron pointing left; turned by CSS where it points elsewhere. */
+export const Chevron = ({ size = 18 }: { size?: number }): ReactElement => (
+  <Icon size={size}>
+    <path d="M15 6l-6 6 6 6" />
+  </Icon>
+);
+
+/** The panel, shown or folded away. */
+export const PanelIcon = (): ReactElement => (
+  <Icon>
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <path d="M9 4v16" />
+  </Icon>
+);
+
+/** A drag handle. */
+export const Grip = (): ReactElement => (
+  <Icon size={16}>
+    <path d="M5 9h14M5 15h14" />
+  </Icon>
+);
+
+/** Turn the route round. */
+export const Swap = (): ReactElement => (
+  <Icon>
+    <path d="M7 4v16M3 8l4-4 4 4" />
+    <path d="M17 20V4M13 16l4 4 4-4" />
+  </Icon>
+);
+
+/** Start over. */
+export const Restart = (): ReactElement => (
+  <Icon>
+    <path d="M4 4v6h6" />
+    <path d="M4.5 15a8 8 0 1 0 1.9-8.3L4 10" />
+  </Icon>
+);
+
+/** Save, kept in the saved list. */
+export const Bookmark = (): ReactElement => (
+  <Icon>
+    <path d="M6 3h12v18l-6-4-6 4z" />
+  </Icon>
 );

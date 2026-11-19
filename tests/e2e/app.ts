@@ -105,7 +105,7 @@ export async function planRoute(page: Page, start: string, destination: string):
   await page.getByRole("combobox", { name: "Destination" }).fill(destination);
   await page.getByRole("combobox", { name: "Destination" }).press("Enter");
   const planned = (await (await answer).json()) as PlannedRoute;
-  await expect(page.getByRole("region", { name: "Routes" }).getByRole("button").first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Route", exact: true })).toBeVisible();
   return planned;
 }
 

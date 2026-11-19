@@ -149,7 +149,7 @@ describe("routes on the real track", () => {
 });
 
 describe("pillAnchors", () => {
-  const route = (id: SceneRoute["id"], path: LngLat[]): SceneRoute => ({ id, legs: [{ railroad: "BNSF", path }], chevrons: [], interchanges: [] });
+  const route = (id: SceneRoute["id"], path: LngLat[]): SceneRoute => ({ id, legs: [{ railroad: "BNSF", path, index: 0 }], chevrons: [], interchanges: [] });
   const line = (from: number, to: number, lat: number): LngLat[] => Array.from({ length: 41 }, (_, i) => [from + ((to - from) * i) / 40, lat]);
 
   it("lands on the stretch only this route runs, where the routes part", () => {
@@ -285,8 +285,9 @@ describe("layers", () => {
     const square = routeScene.pins.find((p) => p.kind === "shop")!;
     expect(sceneTarget(pick(LAYER.pins, square))).toEqual({ kind: "place", ref: { kind: "shop", shopId: square.shopId }, position: square.position });
     expect(sceneTarget(pick(LAYER.pins, routeScene.pins.find((p) => p.kind === "start")))).toBe("inert");
-    expect(sceneTarget(pick(LAYER.interchanges, {}))).toBe("inert");
-    expect(sceneTarget(pick(LAYER.route, {}))).toBeNull();
+    // A leg of the selected route, or the ring where one leaves, picks that leg.
+    expect(sceneTarget(pick(LAYER.interchanges, { leg: 2 }))).toEqual({ kind: "leg", index: 2 });
+    expect(sceneTarget(pick(LAYER.route, { index: 1 }))).toEqual({ kind: "leg", index: 1 });
     expect(sceneTarget({ layer: null, object: null } as unknown as PickingInfo)).toBeNull();
   });
 

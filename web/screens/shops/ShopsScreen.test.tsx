@@ -20,21 +20,24 @@ afterEach(() => {
   clearQueryCache();
 });
 
-const table = () => screen.getByRole("table");
-const names = () =>
-  within(table())
-    .getAllByRole("row")
-    .slice(1)
-    .map((row) => row.querySelector(".shop-name")?.textContent);
+const list = () => screen.getByRole("region", { name: "Shop list" });
+const names = () => [...list().querySelectorAll(".shop-name")].map((name) => name.textContent);
+/** Import CSV, from the list's ⋯ menu: the menu item opens the file chooser. */
+async function importFile(user: ReturnType<typeof userEvent.setup>, file: File) {
+  await user.click(within(list()).getByRole("button", { name: "More actions" }));
+  await user.click(within(list()).getByRole("menuitem", { name: "Import CSV" }));
+  await waitFor(() => expect(within(list()).queryByRole("menuitem")).not.toBeInTheDocument());
+  await user.upload(within(list()).getByLabelText("Import CSV", { selector: "input" }), file);
+}
 
 describe("Shops screen", () => {
   it("lists each shop with its code and the railroads found from its node", async () => {
     openPage("/shops");
     expect(await screen.findByRole("heading", { name: "Your shops" })).toBeInTheDocument();
     expect(await screen.findByText("EX-NLR-01")).toBeInTheDocument();
-    const nlr = screen.getByText("EX-NLR-01").closest("tr")!;
+    const nlr = screen.getByText("EX-NLR-01").closest("li")!;
     expect(nlr).toHaveTextContent("North Little Rock, AREX-NLR-01");
-    expect(nlr).toHaveTextContent("BNSF, UP");
+    expect(within(nlr).getByRole("img", { name: "Carriers: BNSF, UP" })).toHaveAttribute("title", "Carriers: BNSF, UP");
     expect(screen.getByText("6 shops")).toBeInTheDocument();
     expect(screen.getByText("Map: 6 shops")).toBeInTheDocument();
   });
@@ -43,8 +46,9 @@ describe("Shops screen", () => {
     const user = userEvent.setup();
     openPage("/shops");
     await screen.findByText("EX-NLR-01");
-    await user.type(screen.getByRole("textbox", { name: "Search shops" }), "ex-c");
+    await user.type(screen.getByRole("combobox", { name: "Search shops and cities" }), "ex-c");
     expect(names()).toEqual(["Chicago, IL", "Calgary, AB"]);
+    expect(within(list()).getByText("2 of 6 shops")).toBeInTheDocument();
   });
 
   it("adds a shop: Save stays off until the location is on the network", async () => {
@@ -57,17 +61,24 @@ describe("Shops screen", () => {
     await user.type(within(form).getByRole("textbox", { name: "Name" }), "Temple yard shop");
     expect(save).toBeDisabled();
 
-    await user.type(within(form).getByRole("combobox", { name: "Location" }), "-140, 70");
-    expect(await within(form).findByText("No track near -140, 70.")).toBeInTheDocument();
+    // The location is set on the map: no box to type coordinates in. Where no track is near, the pin and the
+    // Location row turn red and say why on hover; the next click on the map puts the pin again.
+    const location = within(form).getByRole("status", { name: "Location" });
+    expect(location).toHaveTextContent("—");
+    setNextMapClick(-140, 70);
+    await user.click(screen.getByRole("button", { name: "Click the map" }));
+    await waitFor(() => expect(location).toHaveAttribute("title", "No track near -140, 70."));
+    expect(location).toHaveClass("is-wrong");
+    expect(screen.getByText("Handles: New shop")).toBeInTheDocument();
     expect(save).toBeDisabled();
 
-    const location = within(form).getByRole("combobox", { name: "Location" });
-    await user.clear(location);
-    await user.type(location, "-97.34, 31.10");
+    setNextMapClick(-97.34, 31.1);
+    await user.click(screen.getByRole("button", { name: "Click the map" }));
     // A location just given is wired at once to where its track most likely joins the network.
     expect(await within(form).findByText("Temple · FRA 600001")).toBeInTheDocument();
     expect(within(form).queryByText("Suggested")).not.toBeInTheDocument();
-    expect(within(form).getByText("On the network")).toBeInTheDocument();
+    expect(location).not.toHaveClass("is-wrong");
+    expect(location).not.toHaveTextContent("—");
     await waitFor(() => expect(save).toBeEnabled());
     await user.click(save);
 
@@ -76,21 +87,6 @@ describe("Shops screen", () => {
     expect(currentPath()).toBe("/shops");
     expect(fake.state.shops.map((s) => s.name)).toContain("Temple yard shop");
     expect(screen.queryByRole("region", { name: "Add shop" })).not.toBeInTheDocument();
-  });
-
-  it("Location suggests places as the planner does: a typed 'kansas' offers Kansas City, MO, and Enter takes it", async () => {
-    const user = userEvent.setup();
-    openPage("/shops/new");
-    const form = await screen.findByRole("region", { name: "Add shop" });
-    await user.type(within(form).getByRole("textbox", { name: "Name" }), "x");
-    const location = within(form).getByRole("combobox", { name: "Location" });
-    await user.type(location, "kansas");
-    expect(await within(form).findByRole("option", { name: /Kansas City, MO.*City/ })).toBeInTheDocument();
-    await user.keyboard("{Enter}");
-    expect(location).toHaveValue("Kansas City, MO");
-    expect(within(form).queryByRole("listbox")).not.toBeInTheDocument();
-    expect(await within(form).findByText(/^On the network/)).toBeInTheDocument();
-    await waitFor(() => expect(within(form).getByRole("button", { name: "Save shop" })).toBeEnabled());
   });
 
   it("edits a shop's name, and refuses a code another shop already has", async () => {
@@ -139,11 +135,11 @@ describe("Shops screen", () => {
     const user = userEvent.setup();
     openPage("/shops/new");
     const form = await screen.findByRole("region", { name: "Add shop" });
-    expect(within(form).getByRole("combobox", { name: "Location" })).toHaveAttribute("placeholder", "e.g. Kansas City, MO, or click the map");
+    expect(within(form).queryByRole("combobox", { name: "Location" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Pick on map/ })).not.toBeInTheDocument();
     setNextMapClick(-97.362, 31.121);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    expect(await within(form).findByDisplayValue("-97.362, 31.121")).toBeInTheDocument();
+    await waitFor(() => expect(within(form).getByRole("status", { name: "Location" })).not.toHaveTextContent("—"));
     expect(await within(form).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
     expect(screen.getByText("Map: 6 shops, link 1")).toBeInTheDocument();
     expect(screen.getByText("Handles: New shop, Move link 1, Add link")).toBeInTheDocument();
@@ -201,8 +197,10 @@ describe("Shops screen", () => {
       openPage("/shops/shop-ex-1");
       const form = await screen.findByRole("region", { name: "Edit shop" });
       await within(links()).findByText("Suggested");
+      const location = within(form).getByRole("status", { name: "Location" });
+      const before = location.textContent;
       await dragOnMap(user, "North Little Rock, AR", -97.362, 31.121);
-      expect(await within(form).findByDisplayValue("-97.362, 31.121")).toBeInTheDocument();
+      await waitFor(() => expect(location.textContent).not.toBe(before));
       expect(await within(links()).findByText("TEMPLE, TX wye · FRA 358070")).toBeInTheDocument();
       expect(within(links()).queryByText("Suggested")).not.toBeInTheDocument();
 
@@ -210,7 +208,7 @@ describe("Shops screen", () => {
       await tapMap(user, -97.346, 31.095);
       expect(await within(links()).findByText("Temple · FRA 357961")).toBeInTheDocument();
       await dragOnMap(user, "North Little Rock, AR", -97.35, 31.1);
-      expect(await within(form).findByDisplayValue("-97.35, 31.1")).toBeInTheDocument();
+      await waitFor(() => expect(fake.calls.some((call) => (JSON.stringify(call.body) ?? call.path).includes("-97.35"))).toBe(true));
       expect(within(links()).getByText("Temple · FRA 357961")).toBeInTheDocument();
       expect(rows()).toBe(1);
     });
@@ -291,11 +289,15 @@ describe("Shops screen", () => {
       expect(fake.calls.some((call) => call.path.startsWith("/api/places/links"))).toBe(false);
     });
 
-    it("a click on a shop square opens that shop", async () => {
+    it("a click on a shop square selects that shop, as its row does; Edit opens it", async () => {
       const user = userEvent.setup();
-      openPage("/shops/shop-ex-1");
-      await screen.findByRole("region", { name: "Edit shop" });
+      openPage("/shops");
+      await screen.findByText("EX-NLR-01");
       await user.click(screen.getByRole("button", { name: "Shop square Kansas City, MO" }));
+      const row = screen.getAllByText("Kansas City, MO")[0].closest("li")!;
+      expect(within(row).getByRole("button", { pressed: true })).toHaveTextContent("Kansas City, MO");
+      expect(currentPath()).toBe("/shops");
+      await user.click(within(row).getByRole("button", { name: "Edit Kansas City, MO" }));
       expect(currentPath()).toBe("/shops/shop-ex-2");
     });
 
@@ -345,9 +347,10 @@ describe("Shops screen", () => {
   it("the import preview lists the rows that will not be saved, with why; then saves the rest", async () => {
     const user = userEvent.setup();
     openPage("/shops");
-    const card = await screen.findByRole("region", { name: "Import shop list" });
+    await screen.findByText("EX-NLR-01");
     const csv = "name,lon,lat\nShop at Omaha,-95.94,41.26\nShop at Denver,-104.99,39.74\nShop in the sea,-140,10\n";
-    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([csv], "shops.csv", { type: "text/csv" }));
+    await importFile(user, new File([csv], "shops.csv", { type: "text/csv" }));
+    const card = await screen.findByRole("region", { name: "Import shop list" });
 
     const preview = await within(card).findByRole("region", { name: "Import preview" });
     expect(preview).toHaveTextContent("shops.csv · 2 ready · 1 not saved");
@@ -363,12 +366,13 @@ describe("Shops screen", () => {
   it("a second file that fails replaces the first file's preview, so Save cannot write the old file", async () => {
     const user = userEvent.setup();
     openPage("/shops");
-    const card = await screen.findByRole("region", { name: "Import shop list" });
+    await screen.findByText("EX-NLR-01");
     const csv = "name,lon,lat\nShop at Omaha,-95.94,41.26\n";
-    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([csv], "good.csv", { type: "text/csv" }));
+    await importFile(user, new File([csv], "good.csv", { type: "text/csv" }));
+    const card = await screen.findByRole("region", { name: "Import shop list" });
     expect(await within(card).findByRole("region", { name: "Import preview" })).toHaveTextContent("good.csv · 1 ready");
 
-    await user.upload(within(card).getByLabelText("Choose CSV file"), new File([""], "empty.csv", { type: "text/csv" }));
+    await importFile(user, new File([""], "empty.csv", { type: "text/csv" }));
     expect(await within(card).findByRole("alert")).toBeInTheDocument();
     expect(within(card).queryByRole("region", { name: "Import preview" })).not.toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();

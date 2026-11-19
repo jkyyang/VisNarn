@@ -1,153 +1,157 @@
 /** The Shops screen's parts. Views only. */
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import type { LngLat } from "../../../shared/geo.ts";
 import {
-  SHOP_LINKS_MAX, type FraId, type ImportReport, type ImportRequest, type PlaceRef, type PlaceSuggestion, type ResolvedPlace, type RowIssue, type ShopDraft, type ShopLink,
-  type ShopView,
+  SHOP_LINKS_MAX, type FraId, type ImportReport, type ImportRequest, type PlaceRef, type ResolvedPlace, type RowIssue, type ShopDraft, type ShopId,
+  type ShopLink, type ShopView,
 } from "../../../shared/places.ts";
-import { fresh, usePlace, usePlaceSuggestions } from "../../data/hooks.ts";
+import type { Railroad } from "../../../shared/railroads.ts";
+import { fresh, usePlace } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { PlacePin, RailroadChips } from "../../ui/badges.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
 import { readFileText } from "../../ui/files.ts";
-import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
-import { Cross, Search } from "../../ui/icons.tsx";
+import { HistoryButtons, type History } from "../../ui/history.tsx";
+import { Cross, Plus } from "../../ui/icons.tsx";
+import { Menu } from "../../ui/Menu.tsx";
+import { ownerOf, type Owner } from "../../owner.ts";
 import { lineColor } from "../../theme.ts";
 import { PHONE_QUERY } from "../../map/config.ts";
 import type { DistanceUnit } from "../../units.ts";
-import { clickToSet, errorText, linkText, placeHint, plural } from "../../words.ts";
+import { clickToSet, errorText, lineName, linkText, plural } from "../../words.ts";
 
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
 
-const ShopPin = () => (
-  <svg width="14" height="17" viewBox="0 0 18 22" aria-hidden="true">
-    <path d="M9 21c-4-5-7-8.5-7-12a7 7 0 0 1 14 0c0 3.5-3 7-7 12z" fill="var(--text)" />
-    <rect x="6.5" y="6.5" width="5" height="5" rx="1" fill="var(--surface-solid)" />
-  </svg>
-);
+/** The owner's mark: Procor a filled dot, UTLX a ring; an owner the name and code do not give, none. */
+export function OwnerGlyph({ owner }: { owner: Owner | null }): ReactElement {
+  return <span className={`owner-glyph${owner ? ` owner-glyph--${owner.toLowerCase()}` : ""}`} aria-hidden="true" />;
+}
 
-/** Search by name or code · Add shop · the table (Shop with its code, On lines, Edit) · the count line. Where a shop is, the map shows. */
-export function ShopTable(props: { shops: ShopView[]; editing: ShopView | "new" | null; onEdit: (shop: ShopView) => void; onAdd: () => void }): ReactElement {
-  const [query, setQuery] = useState("");
-  const searchId = useId();
-  const q = query.trim().toLowerCase();
-  const shown = q ? props.shops.filter((shop) => shop.name.toLowerCase().includes(q) || (shop.code ?? "").toLowerCase().includes(q)) : props.shops;
-  const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
-
+/** Up to three of the railroads at a shop as dots; the tooltip names them all. */
+function CarrierDots({ railroads }: { railroads: readonly Railroad[] }): ReactElement {
+  const names = `Carriers: ${railroads.map(lineName).join(", ")}`;
   return (
-    <section aria-label="Shop list">
-      <div className="shop-list-bar">
-        <label htmlFor={searchId} className="visually-hidden">
-          Search shops
-        </label>
-        <div className="input-box search-box">
-          <Search />
-          <input id={searchId} placeholder="Search by name or code" value={query} onChange={(e) => setQuery(e.target.value)} />
-        </div>
-        <button type="button" className="btn btn--primary" onClick={props.onAdd} aria-pressed={props.editing === "new"}>
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-          </svg>
+    <span className="carrier-dots" role="img" aria-label={names} title={names}>
+      {railroads.slice(0, 3).map((railroad) => (
+        <i key={railroad} style={{ background: lineColor(railroad) }} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * The shops: a count, Add shop and the ⋯ menu (Import CSV) over one row per shop (its owner's mark, name, code
+ * and carriers). A row's click selects the shop and the map flies there; Edit shows on the hovered or selected row.
+ */
+export function ShopList(props: {
+  shops: ShopView[];
+  /** Shown of all: the search narrows the list. */
+  total: number;
+  selected: ShopId | null;
+  editing: ShopView | "new" | null;
+  onSelect: (shop: ShopView) => void;
+  onEdit: (shop: ShopView) => void;
+  onAdd: () => void;
+  onImport: (file: File | undefined) => void;
+}): ReactElement {
+  const editingId = props.editing && props.editing !== "new" ? props.editing.id : null;
+  const count = props.shops.length === props.total ? plural(props.total, "shop") : `${props.shops.length} of ${plural(props.total, "shop")}`;
+  return (
+    <section className="shop-list" aria-label="Shop list">
+      <div className="list-bar">
+        <span className="list-count">{count}</span>
+        <button type="button" className="btn btn--primary btn--pill" onClick={props.onAdd} aria-pressed={props.editing === "new"}>
+          <Plus size={14} />
           Add shop
         </button>
+        <ShopMenu onImport={props.onImport} />
       </div>
-      <div className="group table-scroll">
-        <table className="shop-table">
-          <thead className="visually-hidden">
-            <tr>
-              <th scope="col">Shop</th>
-              <th scope="col">On lines</th>
-              <th scope="col">
-                <span className="visually-hidden">Edit</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((shop) => {
-              const editing = shop.id === editingId;
-              return (
-                <tr key={shop.id} className={editing ? "is-editing" : undefined}>
-                  <td>
-                    <span className={`shop-name${editing ? " strong" : ""}`}>
-                      <ShopPin />
-                      {shop.name}
-                    </span>
-                    {shop.code && <span className="shop-sub">{shop.code}</span>}
-                  </td>
-                  <td>
-                    {shop.place.ok ? (
-                      // The legend on the map says which colour is which railroad.
-                      <span className="rr-bars" title={shop.place.place.railroads.join(", ")}>
-                        {shop.place.place.railroads.map((railroad) => (
-                          <i key={railroad} style={{ background: lineColor(railroad) }} aria-hidden="true" />
-                        ))}
-                        <span className="visually-hidden">{shop.place.place.railroads.join(", ")}</span>
-                      </span>
-                    ) : (
-                      <span className="hint hint--bad">Not on the network</span>
-                    )}
-                  </td>
-                  <td className="right">
-                    <button type="button" className="link-btn" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => props.onEdit(shop)}>
-                      {editing ? "Editing" : "Edit"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {!shown.length && (
-              <tr>
-                <td colSpan={3} className="muted">
-                  {props.shops.length ? "No match" : "No shops yet"}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <p className="table-foot">{plural(props.shops.length, "shop")}</p>
+      <ul className="shop-rows">
+        {props.shops.map((shop) => {
+          const selected = shop.id === props.selected;
+          const editing = shop.id === editingId;
+          return (
+            <li key={shop.id} className={`shop-row${selected || editing ? " is-selected" : ""}${shop.place.ok ? "" : " is-off"}`} title={shop.place.ok ? undefined : "Not on the network"}>
+              <button type="button" className="shop-pick" aria-pressed={selected} onClick={() => props.onSelect(shop)}>
+                <OwnerGlyph owner={ownerOf(shop)} />
+                <span className="shop-text">
+                  <span className="shop-name">{shop.name}</span>
+                  <span className="shop-sub">{shop.code}</span>
+                </span>
+                {shop.place.ok && <CarrierDots railroads={shop.place.place.railroads} />}
+              </button>
+              <button type="button" className="btn btn--pill shop-edit" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => props.onEdit(shop)}>
+                {editing ? "Editing" : "Edit"}
+              </button>
+            </li>
+          );
+        })}
+        {!props.shops.length && <li className="list-empty">{props.total ? "No match" : "No shops yet"}</li>}
+      </ul>
     </section>
   );
 }
 
-/** What the location input shows for a saved location. */
-function locationInput(shop: ShopView | null): { text: string; ref: PlaceRef | null } {
-  if (!shop) return { text: "", ref: null };
-  if ("fraId" in shop.location) return { text: `FRA node ${shop.location.fraId}`, ref: { kind: "node", fraId: shop.location.fraId, railroad: shop.location.railroad } };
-  return { text: `${shop.location.lon}, ${shop.location.lat}`, ref: { kind: "coord", lon: shop.location.lon, lat: shop.location.lat } };
+/** ⋯: what else the list can do. Import CSV opens the file chooser; the preview shows above the list. */
+function ShopMenu(props: { onImport: (file: File | undefined) => void }): ReactElement {
+  const fileId = useId();
+  return (
+    <Menu
+      label="More actions"
+      items={(close) => (
+        <label role="menuitem" tabIndex={0} htmlFor={fileId} className="menu-item" onClick={() => requestAnimationFrame(close)} onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), e.currentTarget.click())}>
+          Import CSV
+        </label>
+      )}
+    >
+      <input
+        id={fileId}
+        type="file"
+        accept=".csv,text/csv"
+        className="visually-hidden"
+        tabIndex={-1}
+        aria-label="Import CSV"
+        onChange={(e) => {
+          props.onImport(e.target.files?.[0]);
+          e.target.value = "";
+        }}
+      />
+    </Menu>
+  );
+}
+
+/** A saved location as the place reference to resolve and save again. */
+function savedRef(shop: ShopView | null): PlaceRef | null {
+  if (!shop) return null;
+  return "fraId" in shop.location ? { kind: "node", fraId: shop.location.fraId, railroad: shop.location.railroad } : { kind: "coord", lon: shop.location.lon, lat: shop.location.lat };
 }
 
 /**
- * Name · Shop code · Location ("lon, lat", a city or an FRA node, or where the pin is put on the map) with
- * the live hint ("On the network · BNSF, UP") · the track links (`children`) · Cancel / Save shop / Delete.
+ * Edit shop / Add shop, with Undo and Redo of its link changes in its bar · Name · Shop code · Location, set on the map
+ * (a new shop's first click drops its pin; a pin is dragged to move it), shown as the place it is near · the track links
+ * (`children`) · Delete / Cancel / Save shop.
  *
- * A self-contained input widget: it keeps its own draft and asks the server what the typed
- * location means as the person types (usePlace), and says where that is (`onPlace`). Save is off
- * until the place is on the network.
+ * It asks the server what the location means (usePlace) and says where that is (`onPlace`). Save is off until the place
+ * is on the network; off it, the Location row's edge is red and its tooltip says why.
  */
 export function ShopForm(props: {
   shop: ShopView | null;
-  unit: DistanceUnit;
-  /** A spot just picked on the map, to take over as the location. */
+  /** The spot the pin was put on or dragged to on the map. */
   picked: LngLat | null;
-  /** The shop joins the network at its links: they name their railroads, so the location's hint does not. */
-  linked: boolean;
   /** Where the location resolves, each time it does. */
   onPlace: (place: ResolvedPlace | null) => void;
+  /** The pin is wrong where it is: why, for the map's pin. */
+  onProblem: (problem: string | null) => void;
   onSave: (draft: Omit<ShopDraft, "links">) => Promise<unknown>;
   onDelete: (() => Promise<unknown>) | null;
   onCancel: () => void;
+  /** Undo and redo of the link changes made in this form. */
+  history: History;
   children?: ReactNode;
 }): ReactElement {
-  const initial = locationInput(props.shop);
   const [name, setName] = useState(props.shop?.name ?? "");
   const [code, setCode] = useState(props.shop?.code ?? "");
-  const [locText, setLocText] = useState(initial.text);
-  const [locRef, setLocRef] = useState<PlaceRef | null>(initial.ref);
-  // The suggestions are open from a keystroke until one is chosen, Esc, or leaving the box. -1: none highlighted.
-  const [suggesting, setSuggesting] = useState(false);
-  const [active, setActive] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -163,47 +167,16 @@ export function ShopForm(props: {
     nameRef.current?.focus({ preventScroll: true });
   }, []);
 
-  useEffect(() => {
-    if (!props.picked) return;
-    const [lon, lat] = props.picked;
-    setLocText(`${lon}, ${lat}`);
-    setLocRef({ kind: "coord", lon, lat });
-  }, [props.picked]);
-
-  // The server reads the text as "lon, lat", a city or "FRA 358070".
-  const ref = useMemo<PlaceRef | null>(() => locRef ?? (locText.trim() ? { kind: "text", text: locText.trim() } : null), [locRef, locText]);
+  const saved = useMemo(() => savedRef(props.shop), [props.shop]);
+  const ref = useMemo<PlaceRef | null>(() => (props.picked ? { kind: "coord", lon: props.picked[0], lat: props.picked[1] } : saved), [props.picked, saved]);
   // "position", as the server saves a shop's own location: cities before Your shops.
   const resolution = usePlace(ref, "position");
-  const suggestions = usePlaceSuggestions(suggesting ? locText : "", "position");
-  // A stale list belongs to the text before the last keystroke.
-  const list: PlaceSuggestion[] = (suggesting && fresh(suggestions)) || [];
-  const listOpen = list.length > 0;
-  const closeList = () => {
-    setSuggesting(false);
-    setActive(-1);
-  };
-  const choose = (suggestion: PlaceSuggestion) => {
-    setLocText(suggestion.label);
-    setLocRef(suggestion.ref);
-    closeList();
-  };
-  const onLocKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (listOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      event.preventDefault();
-      setActive(moveActive(active, event.key, list.length));
-    } else if (listOpen && event.key === "Enter") {
-      // Enter takes the highlighted suggestion, else the first, instead of saving the form.
-      event.preventDefault();
-      choose(list[Math.max(active, 0)]);
-    } else if (listOpen && event.key === "Escape") {
-      closeList();
-    }
-  };
   const resolved = fresh(resolution);
+  const problem = resolved && !resolved.ok ? resolved.problem.message : resolution.status === "error" ? resolution.error.message : null;
   useEffect(() => {
     if (resolved) props.onPlace(resolved.ok ? resolved.place : null);
   }, [resolved]);
-  const hint = resolution.status === "ready" ? placeHint(resolution.data, props.unit, !props.linked) : resolution.status === "error" ? { ok: false, text: resolution.error.message } : null;
+  useEffect(() => props.onProblem(problem), [problem]);
   const canSave = !!name.trim() && !!resolved?.ok && !busy;
 
   const submit = async (event: FormEvent) => {
@@ -231,7 +204,10 @@ export function ShopForm(props: {
 
   return (
     <section className="group shop-form" aria-label={props.shop ? "Edit shop" : "Add shop"} ref={sectionRef}>
-      <h2>{props.shop ? "Edit shop" : "Add shop"}</h2>
+      <div className="field-head">
+        <h2>{props.shop ? "Edit shop" : "Add shop"}</h2>
+        <HistoryButtons history={props.history} />
+      </div>
       <form onSubmit={submit}>
         <div className="field">
           <label htmlFor={`${ids}-name`}>Name</label>
@@ -242,36 +218,13 @@ export function ShopForm(props: {
           <input id={`${ids}-code`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. NLR-01" />
         </div>
         <div className="field">
-          <label htmlFor={`${ids}-loc`}>Location</label>
-          <div className="place-field">
-            <input
-              id={`${ids}-loc`}
-              role="combobox"
-              aria-expanded={listOpen}
-              aria-controls={`${ids}-loc-list`}
-              aria-autocomplete="list"
-              aria-activedescendant={listOpen && active >= 0 ? `${ids}-loc-list-${active}` : undefined}
-              autoComplete="off"
-              value={locText}
-              aria-invalid={hint && !hint.ok ? true : undefined}
-              aria-describedby={hint ? `${ids}-hint` : undefined}
-              onChange={(e) => {
-                setLocText(e.target.value);
-                setLocRef(null);
-                setSuggesting(true);
-                setActive(-1);
-              }}
-              onKeyDown={onLocKeyDown}
-              onBlur={closeList}
-              placeholder="e.g. Kansas City, MO, or click the map"
-            />
-            {listOpen && <SuggestionList id={`${ids}-loc-list`} label="Suggestions for Location" list={list} active={active} onChoose={choose} />}
-          </div>
-          {hint && (
-            <span id={`${ids}-hint`} className={`hint ${hint.ok ? "hint--ok" : "hint--bad"}`}>
-              {hint.text}
-            </span>
-          )}
+          <span className="field-label" id={`${ids}-loc`}>
+            Location
+          </span>
+          <output className={`location${problem ? " is-wrong" : ""}`} aria-labelledby={`${ids}-loc`} title={problem ?? undefined}>
+            {resolved?.ok ? resolved.place.label : "—"}
+            {problem && <span className="visually-hidden">{problem}</span>}
+          </output>
         </div>
         {props.children}
         {error && (
@@ -315,7 +268,7 @@ function IssueList(props: { issues: RowIssue[] }): ReactElement | null {
 type Preview = { fileName: string; text: string; report: ImportReport<ShopView> };
 
 /** Choose a file, preview it (commit false), then save it (commit true). */
-function useImport(run: (request: ImportRequest) => Promise<ImportReport<ShopView>>) {
+export function useImport(run: (request: ImportRequest) => Promise<ImportReport<ShopView>>) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [saved, setSaved] = useState<ImportReport<ShopView> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -352,46 +305,19 @@ function useImport(run: (request: ImportRequest) => Promise<ImportReport<ShopVie
       setBusy(false);
     }
   };
-  return { preview, saved, error, busy, choose, commit, cancel: () => setPreview(null) };
-}
-
-function FileButton(props: { label: string; onFile: (file: File | undefined) => void; disabled?: boolean }): ReactElement {
-  const id = useId();
-  return (
-    <span className="file-button">
-      <input
-        id={id}
-        type="file"
-        accept=".csv,text/csv"
-        className="visually-hidden"
-        disabled={props.disabled}
-        onChange={(e) => {
-          props.onFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
-      />
-      <label htmlFor={id} className="btn">
-        {props.label}
-      </label>
-    </span>
-  );
+  return { preview, saved, error, busy, choose, commit, cancel: () => setPreview(null), dismiss: () => setSaved(null) };
 }
 
 /**
- * "Import shop list": choose a file, see a preview (how many rows are ready, and each row that
- * will not be saved, with why), then save. `run` is called with commit false for the preview, then true.
+ * A shop list being imported, from the ⋯ menu's Import CSV: how many rows are ready, and each row that will not be
+ * saved, with why; then Save. Afterwards, how many were saved, or why it failed.
  */
-export function ShopImportCard(props: { run: (request: ImportRequest) => Promise<ImportReport<ShopView>> }): ReactElement {
-  const flow = useImport(props.run);
+export function ImportPreview(props: { flow: ReturnType<typeof useImport> }): ReactElement | null {
+  const { flow } = props;
+  if (!flow.preview && !flow.saved && !flow.error && !flow.busy) return null;
   return (
     <section className="group import-card" aria-label="Import shop list">
-      <div className="import-row">
-        <div className="grow">
-          <h2>Import shop list</h2>
-          <div className="muted small">name, lon, lat</div>
-        </div>
-        <FileButton label={flow.busy ? "Reading…" : "Choose CSV file"} onFile={flow.choose} disabled={flow.busy} />
-      </div>
+      {flow.busy && !flow.preview && <p className="muted">Reading the file…</p>}
       {flow.preview && (
         <div className="import-preview" role="region" aria-label="Import preview">
           <p>
@@ -516,11 +442,10 @@ export function ShopLinks(props: {
           </li>
         )}
       </ul>
-      {props.refused ? (
-        <span className="hint hint--bad">{props.refused}</span>
-      ) : (
-        props.pressed !== null && <span className="hint-line">{clickToSet(`link ${props.pressed + 1}`)}</span>
-      )}
+      {/* On screen a pressed ring and the map's answer to the tap say it; screen readers hear it. */}
+      <span className="visually-hidden" role="status">
+        {props.refused ?? (props.pressed !== null ? clickToSet(`link ${props.pressed + 1}`) : "")}
+      </span>
     </div>
   );
 }

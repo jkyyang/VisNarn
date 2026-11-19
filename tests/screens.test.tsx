@@ -93,7 +93,11 @@ afterEach(() => {
 });
 
 const field = (name: "Start" | "Destination") => screen.getByRole("combobox", { name });
-const routeRows = () => within(screen.getByRole("region", { name: "Routes" })).getAllByRole("button");
+/** The routes found: a row each when there are two or more; with one, its result card alone. */
+const routeRows = () => {
+  const list = screen.queryByRole("region", { name: "Routes" });
+  return list ? within(list).getAllByRole("button") : screen.queryAllByRole("region", { name: "Route" });
+};
 
 /** Taylor, TX to the EXAMPLE shop at North Little Rock (by its code), both typed with Enter. */
 async function planExample(user: ReturnType<typeof userEvent.setup>) {
@@ -108,16 +112,15 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     await planExample(user);
     const rows = routeRows();
-    expect(rows.filter((row) => row.getAttribute("aria-pressed") === "true")).toHaveLength(1);
+    if (rows.length > 1) expect(rows.filter((row) => row.getAttribute("aria-pressed") === "true")).toHaveLength(1);
     for (const row of rows) expect(row).toHaveTextContent(/[\d,]+ km/);
-    const sections = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem");
-    expect(sections[0]).toHaveTextContent("Taylor");
-    expect(sections.at(-1)).toHaveTextContent("North Little Rock");
-    expect(sections.some((row) => /\b(BNSF|UP|CSXT|NS|CN|CPKC)\b [\d,]+ km/.test(row.textContent ?? ""))).toBe(true);
+    // A row per carrier leg, from the start to the destination.
+    const legs = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("button");
+    expect(legs[0]).toHaveTextContent(/^(BNSF|UP|CSXT|NS|CN|CPKC)Taylor → /);
+    expect(legs.at(-1)).toHaveTextContent(/→ North Little Rock[\d,]+ km$/);
 
     // The legend lists the selected route's railroads and no others.
-    const pressed = rows.find((row) => row.getAttribute("aria-pressed") === "true");
-    const onRoute = RAILROADS.filter((railroad) => within(pressed!).queryByText(railroad));
+    const onRoute = RAILROADS.filter((railroad) => legs.some((leg) => leg.textContent?.startsWith(railroad)));
     const legend = within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
     expect(legend.filter((item) => item !== "↩Turn-back")).toEqual(onRoute);
   });
@@ -133,21 +136,24 @@ describe("Route planner", () => {
     });
   });
 
-  it("a place that cannot be found shows its one line at its field, and no routes", async () => {
+  it("a place that cannot be found marks its row, and no routes", async () => {
     const user = userEvent.setup();
     openPage("/route");
     await user.type(field("Start"), "Nowhere Junction XYZ{Enter}");
     await user.type(field("Destination"), "EX-NLR-01{Enter}");
     await waitFor(() => expect(field("Start")).toHaveAttribute("aria-invalid", "true"), { timeout: ROUTING_MS });
-    expect(screen.getByText(/Nowhere Junction XYZ/, { selector: ".place-problem" })).toBeInTheDocument();
+    // No sentence on screen: the row's edge, with the reason on hover and for screen readers.
+    expect(field("Start").closest(".place-box")).toHaveAttribute("title", expect.stringMatching(/Nowhere Junction XYZ/));
+    expect(field("Start")).toHaveAccessibleDescription(/Nowhere Junction XYZ/);
     expect(screen.queryByRole("region", { name: "Routes" })).not.toBeInTheDocument();
   });
 
   it("saves the plan, and the saved route is listed", async () => {
     const user = userEvent.setup();
     await planExample(user);
-    await user.click(within(screen.getByRole("form", { name: "Save route" })).getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("button", { name: "Saved" }, { timeout: ROUTING_MS })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Route actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save route" }));
+    await waitFor(() => expect(window.location.pathname).toMatch(/^\/route\/saved\//), { timeout: ROUTING_MS });
     const [saved] = await api("GET /api/saved-routes");
     expect(saved.name).toBe("Taylor → North Little Rock");
     expect(saved.plan.places).toHaveLength(2);
@@ -159,12 +165,12 @@ describe("Route planner", () => {
 describe("Shops", () => {
   it("lists each shop with its code and the railroads found from its node", async () => {
     openPage("/shops");
-    const table = await screen.findByRole("table");
+    const list = await screen.findByRole("region", { name: "Shop list" });
     const shops = await api("GET /api/shops");
     for (const shop of shops) {
-      const row = within(table).getByText(shop.name).closest("tr")!;
+      const row = (await within(list).findByText(shop.name)).closest("li")!;
       if (shop.code) expect(row).toHaveTextContent(shop.code);
-      if (shop.place.ok) expect(row).toHaveTextContent(shop.place.place.railroads.join(", "));
+      if (shop.place.ok) expect(within(row).getByRole("img", { name: `Carriers: ${shop.place.place.railroads.join(", ")}` })).toBeInTheDocument();
     }
   });
 });

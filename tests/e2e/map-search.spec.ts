@@ -1,6 +1,6 @@
 /**
- * The search box on the map: find a place by name, the map flies there and pins it, and the pin's card
- * hands the place to the planner. Only our own server is asked.
+ * The panel's search: find a place by name, the map flies there and pins it, and the pin's card hands the
+ * place to the planner. Only our own server is asked.
  */
 import type { Page } from "@playwright/test";
 import { expect, expectMapCanvas, expectNoSideScroll, freeMapCentre, keepScreenshot, mapRegion, PHONE, test } from "./app.ts";
@@ -9,7 +9,7 @@ import { expect, expectMapCanvas, expectNoSideScroll, freeMapCentre, keepScreens
 async function findCity(page: Page, name: string) {
   await page.goto("/route");
   await expectMapCanvas(page);
-  const box = page.getByRole("combobox", { name: "Search the map" });
+  const box = page.getByRole("combobox", { name: "Search shops and cities" });
   await box.fill(name);
   const city = page.getByRole("option", { name: new RegExp(`^${name}, \\w\\w\\s*City`) });
   await expect(city).toContainText("BNSF");
@@ -47,18 +47,15 @@ test("Search Kansas City: the map centres on it, and Start makes it the planner'
 test.describe("on a phone", () => {
   test.use(PHONE);
 
-  test("the box runs across the top of the map, clear of the layers button and the legend", async ({ page }) => {
+  test("the search runs across the top of the sheet under the map, and the found card stays on the map", async ({ page }) => {
     const card = await findCity(page, "Kansas City");
-    // The found card takes the legend's room on a phone: the legend is back once the card is closed.
-    await card.getByRole("button", { name: "Close" }).click();
-    const search = await page.locator(".map-search").boundingBox();
+    const search = await page.locator(".panel-search").boundingBox();
     const map = await mapRegion(page).boundingBox();
-    const layers = await page.getByRole("button", { name: /^Map layers/ }).boundingBox();
-    const legend = await page.getByRole("list", { name: "Railroad colors" }).boundingBox();
-    if (!search || !map || !layers || !legend) throw new Error("Something is not on the page.");
+    const found = await card.boundingBox();
+    if (!search || !map || !found) throw new Error("Something is not on the page.");
     expect(search.width).toBeGreaterThan(map.width * 0.7);
-    expect(search.x + search.width).toBeLessThanOrEqual(layers.x);
-    expect(search.y + search.height).toBeLessThanOrEqual(legend.y);
+    expect(search.y).toBeGreaterThanOrEqual(map.y + map.height - 40);
+    expect(found.y + found.height).toBeLessThanOrEqual(map.y + map.height);
     await expectNoSideScroll(page);
     await keepScreenshot(page, "map-search-phone");
   });

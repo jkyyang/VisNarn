@@ -21,7 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import type { LngLat } from "../../shared/geo.ts";
-import type { ResolvedPlace } from "../../shared/places.ts";
+import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
 import type { TrackIncluded } from "../../shared/railroads.ts";
 import type { RouteStrategy } from "../../shared/route.ts";
 import { canDrawMaps, type Mainline } from "../data/basemap.ts";
@@ -45,17 +45,23 @@ export interface MapContentProps {
   onSelect?: (target: SceneTarget) => void;
   /** Things on the map a person drags or taps: on Shops, the edited shop's pin and its links' rings. */
   handles?: MapHandle[];
-  /** Undo / redo, shown with the map controls when given. */
-  history?: MapHistory;
-  /** What a place found with the map's search box can become here: "Start", "Add stop". */
+  /** The last click on the map, answered where it landed. */
+  flash?: MapFlash;
+  /** What a place found with the panel's search can become here: "Start", "Add stop". */
   placeActions?: PlaceAction[];
 }
 
-/** Undo and redo of the screen's changes; `what` names them on the buttons ("Undo route change"). */
-export interface MapHistory {
-  what: string;
-  undo: (() => void) | null;
-  redo: (() => void) | null;
+/** A click on the map answered where it landed: "hit", a ring that pulses; "miss", a red ✕ that fades. `key` tells two clicks apart. */
+export interface MapFlash {
+  at: LngLat;
+  kind: "hit" | "miss";
+  key: number;
+}
+
+/** A place chosen in the panel's search, and where it is. */
+export interface Found {
+  suggestion: PlaceSuggestion;
+  place: ResolvedPlace;
 }
 
 export interface PlaceAction {
@@ -148,7 +154,7 @@ const nothing = () => null;
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
  * `coveredLeft`: how many px of the map the panel covers from the left; the camera works in the rest.
  */
-export function MapStage(props: { coveredLeft: number }): ReactElement {
+export function MapStage(props: { coveredLeft: number; found: Found | null; onCloseFound: () => void }): ReactElement {
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
@@ -172,6 +178,8 @@ export function MapStage(props: { coveredLeft: number }): ReactElement {
               now={now}
               onCentre={setCentre}
               coveredLeft={props.coveredLeft}
+              found={props.found}
+              onCloseFound={props.onCloseFound}
             />
           </Suspense>
         </ErrorBoundary>

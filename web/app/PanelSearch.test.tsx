@@ -8,7 +8,7 @@ import type { PlaceSuggestion } from "../../shared/places.ts";
 import { clearQueryCache } from "../data/query.ts";
 import { installFakeServer, type FakeServer } from "../testing/fakeServer.ts";
 import { moveActive } from "../ui/combobox.tsx";
-import { MapSearch } from "./MapSearch.tsx";
+import { PanelSearch } from "./PanelSearch.tsx";
 
 describe("moveActive", () => {
   it("goes round the list; from no row, ↓ takes the first and ↑ the last", () => {
@@ -21,7 +21,7 @@ describe("moveActive", () => {
   });
 });
 
-describe("the map's search box", () => {
+describe("the panel's search", () => {
   let fake: FakeServer;
   beforeEach(() => {
     fake = installFakeServer();
@@ -34,10 +34,13 @@ describe("the map's search box", () => {
   const chosen: (PlaceSuggestion | null)[] = [];
   function Search() {
     const [value, setValue] = useState<PlaceSuggestion | null>(null);
+    const [text, setText] = useState<string | null>(null);
     return (
-      <MapSearch
+      <PanelSearch
         chosen={value}
         problem={null}
+        text={text}
+        onText={setText}
         onChoose={(suggestion) => {
           chosen.push(suggestion);
           setValue(suggestion);
@@ -50,7 +53,7 @@ describe("the map's search box", () => {
     chosen.length = 0;
     const user = userEvent.setup();
     render(<Search />);
-    const box = screen.getByRole("combobox", { name: "Search the map" });
+    const box = screen.getByRole("combobox", { name: "Search shops and cities" });
     // Plain words only: no FRA node id jargon, and short enough for a 360 px phone.
     expect(box).toHaveAttribute("placeholder", "Search shops and cities");
 
@@ -82,5 +85,23 @@ describe("the map's search box", () => {
 
     await user.type(box, "atlantis");
     expect(await screen.findByText("No shop, code or city called “atlantis”.")).toBeInTheDocument();
+  });
+
+  it("groups what it finds: Your shops, then cities", async () => {
+    const user = userEvent.setup();
+    render(<Search />);
+    await user.type(screen.getByRole("combobox", { name: "Search shops and cities" }), "kansas");
+    const groups = await screen.findAllByRole("group");
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toEqual(["Shops", "Cities"]);
+    expect(within(groups[0]).getAllByRole("option")[0]).toHaveTextContent("Kansas City, MO");
+    expect(within(groups[1]).getAllByRole("option")[0]).toHaveTextContent(/Kansas City.*City/);
+  });
+
+  it('"/" outside a text field puts the cursor in the search', async () => {
+    const user = userEvent.setup();
+    render(<Search />);
+    await user.keyboard("/");
+    expect(screen.getByRole("combobox", { name: "Search shops and cities" })).toHaveFocus();
+    expect(screen.getByRole("combobox", { name: "Search shops and cities" })).toHaveValue("");
   });
 });

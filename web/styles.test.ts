@@ -60,9 +60,4 @@ describe("styles.css", () => {
     }
   });
 
-  // jsdom has no layout: the Location input is a block child of .place-field, so without a width it stayed about 196 px and cut the picked place.
-  it("makes the shop form's Location input fill the card like Name and Shop code", () => {
-    const rule = /\.shop-form \.place-field > input\s*\{([^}]*)\}/.exec(css);
-    expect(rule?.[1]).toMatch(/width:\s*100%/);
-  });
 });

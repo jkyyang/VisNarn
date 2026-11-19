@@ -126,9 +126,19 @@ type AltLeg = Leg & { option: SceneRoute["id"] };
 const legWidth = (leg: Leg) => (isClassI(leg.railroad) ? ROUTE_PX.classI : ROUTE_PX.other);
 
 /** The selected route: a white casing so it stands out, each section in its line's colour, and chevrons for the direction of travel. */
-function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: number): LayersList {
+function selectedRouteLayers(route: SceneRoute, focus: number | null, colors: ThemeColors, zoom: number): LayersList {
+  // The picked leg's edge is ink, so it stands out of the route.
+  const focused = (leg: Leg) => leg.index === focus;
   return [
-    new PathLayer<Leg>({ id: LAYER.routeCasing, data: route.legs, getPath: (leg) => leg.path, getColor: colors.casing, getWidth: (leg) => legWidth(leg) + ROUTE_PX.casing, ...ROUND, updateTriggers: { getColor: colors } }),
+    new PathLayer<Leg>({
+      id: LAYER.routeCasing,
+      data: route.legs,
+      getPath: (leg) => leg.path,
+      getColor: (leg) => (focused(leg) ? colors.fg : colors.casing),
+      getWidth: (leg) => legWidth(leg) + ROUTE_PX.casing,
+      ...ROUND,
+      updateTriggers: { getColor: [colors, focus] },
+    }),
     new PathLayer<Leg>({
       id: LAYER.route,
       data: route.legs,
@@ -136,8 +146,10 @@ function selectedRouteLayers(route: SceneRoute, colors: ThemeColors, zoom: numbe
       getColor: (leg) => colors.rail[leg.railroad],
       getWidth: legWidth,
       ...ROUND,
-      // Picked so a click on it reaches the map (a stop there) instead of the grey route underneath.
+      // A click on a leg picks it, in the panel too; hovering one lights it.
       pickable: true,
+      autoHighlight: true,
+      highlightColor: fade(colors.fg, 70),
       updateTriggers: { getColor: colors },
     }),
     new IconLayer<Chevron>({
@@ -259,7 +271,7 @@ export function sceneLayers(scene: MapScene, colors: ThemeColors, zoom: number):
       highlightColor: fade(colors.fg, 140),
       updateTriggers: { getColor: colors },
     }),
-    ...(scene.selected ? selectedRouteLayers(scene.selected, colors, zoom) : []),
+    ...(scene.selected ? selectedRouteLayers(scene.selected, scene.leg, colors, zoom) : []),
     ...pinLayers(scene.pins, colors),
   ];
 }
@@ -292,14 +304,15 @@ export function sceneTooltip(info: PickingInfo): { text: string; style: Partial<
 }
 
 /**
- * What a click on a picked object means. A shop square: that shop as a place. The plan's own pins and
- * the interchange rings: nothing ("inert"), so a click on them adds no stop. Anything else (a route,
- * the network, an empty spot): null, a click on the map.
+ * What a click on a picked object means. A shop square: that shop as a place. A leg of the selected route: that leg;
+ * an interchange ring: the leg that leaves it. The plan's own pins: nothing ("inert"), so a click on them adds no stop.
+ * Anything else (a grey route, the network, an empty spot): null, a click on the map.
  */
 export function sceneTarget(info: PickingInfo): SceneTarget | "inert" | null {
   const { layer, object } = info;
   if (!layer || !object) return null;
-  if (layer.id === LAYER.interchanges) return "inert";
+  if (layer.id === LAYER.route) return { kind: "leg", index: (object as Leg).index };
+  if (layer.id === LAYER.interchanges) return { kind: "leg", index: (object as Interchange).leg };
   if (layer.id === LAYER.pins) {
     const pin = object as ScenePin;
     return pin.shopId ? { kind: "place", ref: { kind: "shop", shopId: pin.shopId }, position: pin.position } : "inert";

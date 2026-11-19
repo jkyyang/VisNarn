@@ -22,7 +22,7 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["tests/setup-dom.ts"],
     // tests/e2e/ belongs to Playwright (npm run test:e2e).
-    exclude: ["node_modules", "dist", ".tsbuild", "tests/e2e/**"],
+    exclude: ["node_modules", "dist", ".tsbuild", "tests/e2e/**", ".claude/**"],
     // For web/map/layers: deck.gl only loads through Vite's resolver. Under plain Node, luma.gl's
     // import of wgsl_reflect fails (that package ships CommonJS marked as ESM).
     server: { deps: { inline: [/deck\.gl/, /luma\.gl/, /wgsl_reflect/] } },

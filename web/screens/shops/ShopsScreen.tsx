@@ -1,18 +1,18 @@
-/** The Shops screen: Your shops, the form for one with its track links, and the shop list import. */
+/** The Shops screen: Your shops (one selected, the map on it), the form for one with its track links, and the shop list import. */
 import { useEffect, useState, type ReactElement } from "react";
 import { roundLngLat, type LngLat } from "../../../shared/geo.ts";
-import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopLink } from "../../../shared/places.ts";
+import { resolvedOf, SHOP_LINKS_MAX, type FraId, type LinkEnd, type ResolvedPlace, type ShopId, type ShopLink } from "../../../shared/places.ts";
 import { useEscape } from "../../ui/useEscape.ts";
 import { go, type Screen } from "../../app/routes.ts";
 import { fresh, importShops, removeShop, saveShop, shopLinkAt, useShopLinks, useShops } from "../../data/hooks.ts";
-import { SHOP_ZOOM } from "../../map/config.ts";
+import { SELECTED_SHOP_ZOOM, SHOP_ZOOM } from "../../map/config.ts";
 import type { MapHandle } from "../../map/MapHandles.tsx";
-import { MapContent } from "../../map/MapStage.tsx";
+import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
 import { shopsScene, type SceneLink } from "../../map/scene.ts";
 import { useDistanceUnit } from "../../units.ts";
 import { linkJoinsThere, NO_TRACK_NEAR } from "../../words.ts";
 import type { History } from "../route/session.ts";
-import { ShopForm, ShopImportCard, ShopLinks, ShopTable } from "./ShopsPage.tsx";
+import { ImportPreview, ShopForm, ShopLinks, ShopList, useImport } from "./ShopsPage.tsx";
 
 /** A link being dragged: which (0-based, the next free one for a new link), and where its ring is. */
 type Drag = { slot: number; at: LngLat };
@@ -20,8 +20,16 @@ type Drag = { slot: number; at: LngLat };
 /** Links nobody has changed here: the shop's saved ones. */
 const UNCHANGED: History<FraId[] | null> = { past: [], present: null, future: [] };
 
-export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops" }> }): ReactElement {
+export function ShopsScreen(props: {
+  screen: Extract<Screen, { name: "shops" }>;
+  /** What is typed in the panel's search: the list keeps the shops whose name or code has it. */
+  query: string;
+  selected: ShopId | null;
+  onSelect: (id: ShopId) => void;
+}): ReactElement {
+  const { screen } = props;
   const shops = useShops();
+  const flow = useImport(importShops);
   const [unit] = useDistanceUnit();
   // View state of this screen, for the form it was made in: the links with their undo history (null: the saved ones),
   // the link whose ring is pressed (the next map tap sets it), a link being dragged, where the shop's pin is while it
@@ -35,6 +43,9 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
   const [picked, setPicked] = useState<{ at: LngLat; dragged: boolean } | null>(null);
   const [placed, setPlaced] = useState<ResolvedPlace | null>(null);
   const [camera, setCamera] = useState<LngLat | null>(null);
+  const [flash, setFlash] = useState<MapFlash | undefined>(undefined);
+  // Why the pin cannot stay where it was put (no track near): its edge turns red.
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     setLinks(UNCHANGED);
@@ -56,6 +67,9 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
   useEscape(pressed !== null, () => setPressed(null));
 
   const list = shops.status === "ready" ? shops.data : [];
+  const q = props.query.trim().toLowerCase();
+  const listed = q ? list.filter((shop) => shop.name.toLowerCase().includes(q) || (shop.code ?? "").toLowerCase().includes(q)) : list;
+  const selectedAt = resolvedOf(list.find((shop) => shop.id === props.selected)?.place);
   const editing = screen.edit === "new" ? "new" : (list.find((shop) => shop.id === screen.edit) ?? null);
   const shop = editing === "new" ? null : editing;
   const saved = shop && resolvedOf(shop.place);
@@ -127,7 +141,11 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     const link = await shopLinkAt(point, { lon: at[0], lat: at[1] }).catch(() => null);
     const other = link ? takenBy(link, slot) : -1;
     setDrag(null);
-    if (!link || other >= 0) return setRefused(link ? linkJoinsThere(other + 1) : NO_TRACK_NEAR);
+    if (!link || other >= 0) {
+      setFlash({ at, kind: "miss", key: Date.now() });
+      return setRefused(link ? linkJoinsThere(other + 1) : NO_TRACK_NEAR);
+    }
+    setFlash({ at: [link.lon, link.lat], kind: "hit", key: Date.now() });
     setPressed(null);
     change(current.toSpliced(slot, 1, link.fraId));
   };
@@ -154,22 +172,27 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
   // The map: the shop's pin, each link's ring and line, the ＋ for the next one; while a link is dragged, where it would join.
   const handles: MapHandle[] = [];
   const lines: SceneLink[] = [];
+  // A pin put where no track is near stays there, red, until it is moved.
+  const wrongAt = problem && picked ? picked.at : null;
+  const pin = (at: LngLat): MapHandle => ({
+    id: "shop",
+    at,
+    face: "shop",
+    glyph: "",
+    label: shop?.name ?? "New shop",
+    wrong: problem,
+    onDrag: (to) => setPinAt(to),
+    onDrop: (to) => {
+      setPinAt(to);
+      if (to) setPicked({ at: roundLngLat(...to), dragged: true });
+    },
+  });
+  if (editing && !point && wrongAt) handles.push(pin(pinAt ?? wrongAt));
   if (editing && point) {
-    const shopAt = pinAt ?? point;
     // While the pin moves, a link runs straight to its node; then along its own track again, from wherever the shop is now.
     const pathOf = (link: ShopLink): LngLat[] => (pinAt ? [pinAt, [link.lon, link.lat]] : [point, ...link.path.slice(1)]);
-    handles.push({
-      id: "shop",
-      at: shopAt,
-      face: "shop",
-      glyph: "",
-      label: shop?.name ?? "New shop",
-      onDrag: (at) => setPinAt(at),
-      onDrop: (at) => {
-        setPinAt(at);
-        if (at) setPicked({ at: roundLngLat(...at), dragged: true });
-      },
-    });
+    const shopAt = pinAt ?? wrongAt ?? point;
+    handles.push(pin(shopAt));
     current.forEach((fraId, slot) => {
       const link = linkOf(fraId);
       if (!link) return;
@@ -196,14 +219,24 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
     <div className="shops-screen">
       {header}
       <div className={`shops-body${editing ? " has-form" : ""}`}>
-        <ShopTable shops={list} editing={editing} onEdit={(shop) => go({ name: "shops", edit: shop.id })} onAdd={() => go({ name: "shops", edit: "new" })} />
+        <ShopList
+          shops={listed}
+          total={list.length}
+          selected={props.selected}
+          editing={editing}
+          onSelect={(shop) => props.onSelect(shop.id)}
+          onEdit={(shop) => go({ name: "shops", edit: shop.id })}
+          onAdd={() => go({ name: "shops", edit: "new" })}
+          onImport={flow.choose}
+        />
+        <ImportPreview flow={flow} />
         {editing && (
           <ShopForm
             key={shop?.id ?? "new"}
             shop={shop}
-            unit={unit}
             picked={picked?.at ?? null}
-            linked={current.length > 0}
+            onProblem={setProblem}
+            history={{ what: "link change", undo: links.past.length ? () => travel("undo") : null, redo: links.future.length ? () => travel("redo") : null }}
             onPlace={(next) => {
               setPlaced(next);
               setPinAt(null);
@@ -227,14 +260,19 @@ export function ShopsScreen({ screen }: { screen: Extract<Screen, { name: "shops
           </ShopForm>
         )}
       </div>
-      <ShopImportCard run={importShops} />
       <MapContent
         scene={shopsScene(list, editing && point && { shopId: shop?.id ?? null, at: pinAt ?? point, links: lines })}
-        focus={camera ? { kind: "place", lon: camera[0], lat: camera[1], zoom: SHOP_ZOOM } : { kind: "fit" }}
+        focus={
+          camera
+            ? { kind: "place", lon: camera[0], lat: camera[1], zoom: SHOP_ZOOM }
+            : selectedAt
+              ? { kind: "place", lon: selectedAt.lon, lat: selectedAt.lat, zoom: SELECTED_SHOP_ZOOM }
+              : { kind: "fit" }
+        }
         onPick={picking ? onPick : undefined}
-        onSelect={picking ? undefined : (target) => target.kind === "place" && target.ref.kind === "shop" && go({ name: "shops", edit: target.ref.shopId })}
+        onSelect={picking ? undefined : (target) => target.kind === "place" && target.ref.kind === "shop" && props.onSelect(target.ref.shopId)}
         handles={handles}
-        history={editing && point ? { what: "link change", undo: links.past.length ? () => travel("undo") : null, redo: links.future.length ? () => travel("redo") : null } : undefined}
+        flash={flash}
       />
     </div>
   );

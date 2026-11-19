@@ -12,16 +12,16 @@ import { EXAMPLE_SHOPS } from "../fixtures.ts";
 const EXAMPLES = EXAMPLE_SHOPS.length;
 
 test.describe("Shops", () => {
-  test("add a shop, refuse a spot off the network, edit it, refuse a taken code, delete it", async ({ page }) => {
+  test("add a shop on the map, refuse a spot off the network, edit it, refuse a taken code, delete it", async ({ page }) => {
     await page.goto("/shops");
     await expect(page.getByRole("heading", { name: "Your shops", level: 1 })).toBeVisible();
-    const table = page.getByRole("table");
-    const names = table.locator(".shop-name");
+    const list = page.getByRole("region", { name: "Shop list", exact: true });
+    const row = (text: string) => list.getByRole("listitem").filter({ hasText: text });
+    const names = list.locator(".shop-name");
     await expect(names).toHaveCount(EXAMPLES);
     await expect(page.getByText(`${EXAMPLES} shops`, { exact: true })).toBeVisible();
-    const nlr = table.getByRole("row").filter({ hasText: "EX-NLR-01" });
-    await expect(nlr).toContainText("North Little Rock, AR");
-    await expect(nlr).toContainText("BNSF, UP");
+    await expect(row("EX-NLR-01")).toContainText("North Little Rock, AR");
+    await expect(row("EX-NLR-01").getByRole("img", { name: "Carriers: BNSF, UP" })).toBeVisible();
     await expectMapCanvas(page);
     await keepScreenshot(page, "shops");
 
@@ -31,25 +31,36 @@ test.describe("Shops", () => {
     const save = form.getByRole("button", { name: "Save shop" });
     await form.getByRole("textbox", { name: "Name", exact: true }).fill("Temple test shop");
     await expect(save).toBeDisabled();
-    const location = form.getByRole("combobox", { name: "Location" });
-    await location.fill("-140, 70");
-    await expect(form).toContainText("No track near -140, 70.");
+    // No box to type the location in: it is set on the map. Out in the Pacific there is no track: the Location row turns red.
+    await expect(form.getByRole("combobox", { name: "Location" })).toHaveCount(0);
+    const location = form.getByRole("status", { name: "Location" });
+    const map = await mapRegion(page).boundingBox();
+    if (!map) throw new Error("No map on the page.");
+    // Just right of the panel at the foot of the map: the Pacific off Mexico.
+    await page.mouse.click(map.x + 420, map.y + map.height - 30);
+    await expect(location).toHaveClass(/is-wrong/);
+    await expect(location).toHaveAttribute("title", /^No track near/);
     await expect(save).toBeDisabled();
-    await location.fill("-97.34, 31.10");
-    await expect(form).toContainText("On the network");
+    // The search flies the map to Temple; a click there puts the pin.
+    await page.getByRole("combobox", { name: "Search shops and cities" }).fill("Temple, TX");
+    await page.getByRole("option", { name: /^Temple, TX/ }).first().click();
+    await page.locator(".found-card").getByRole("button", { name: "Close" }).click();
+    const centre = await freeMapCentre(page);
+    await page.mouse.click(centre.x, centre.y);
+    await expect(location).not.toHaveClass(/is-wrong/);
+    await expect(location).toContainText("Temple");
     // Linked at once to where its track most likely joins the network, and said in a row: no sentence about it.
     await expect(form.getByRole("group", { name: "Track links" })).toContainText(/Temple · FRA \d+/);
     await expect(form.getByRole("group", { name: "Track links" })).not.toContainText(/cars|Suggested/);
     await expect(save).toBeEnabled();
     await save.click();
     await expect(page).toHaveURL(/\/shops$/);
-    const added = table.getByRole("row").filter({ hasText: "Temple test shop" });
-    await expect(added).toContainText("BNSF");
+    await expect(row("Temple test shop").getByRole("img", { name: /^Carriers: .*BNSF/ })).toBeVisible();
     await expect(names).toHaveCount(EXAMPLES + 1);
 
     // The server owns the shops: a reload shows the same list.
     await page.reload();
-    await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Temple test shop" })).toBeVisible();
+    await expect(row("Temple test shop")).toBeVisible();
 
     await page.getByRole("button", { name: "Edit Temple test shop" }).click();
     const edit = page.getByRole("region", { name: "Edit shop" });
@@ -60,49 +71,52 @@ test.describe("Shops", () => {
     await code.fill("TEST-TPL-01");
     await edit.getByRole("textbox", { name: "Name", exact: true }).fill("Temple test shop, renamed");
     await edit.getByRole("button", { name: "Save shop" }).click();
-    const renamed = page.getByRole("table").getByRole("row").filter({ hasText: "Temple test shop, renamed" });
-    await expect(renamed).toContainText("TEST-TPL-01");
+    await expect(row("Temple test shop, renamed")).toContainText("TEST-TPL-01");
 
     await page.getByRole("button", { name: "Edit Temple test shop, renamed" }).click();
     await page.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("group", { name: "Delete this shop?" }).getByRole("button", { name: "Delete" }).click();
-    await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Temple test shop" })).toHaveCount(0);
-    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(EXAMPLES);
+    await expect(row("Temple test shop")).toHaveCount(0);
+    await expect(names).toHaveCount(EXAMPLES);
     await page.reload();
-    await expect(page.getByRole("table").locator(".shop-name")).toHaveCount(EXAMPLES);
+    await expect(names).toHaveCount(EXAMPLES);
   });
 
   test("a shop CSV with a row that matches no node: the preview lists it to fix, and only the good rows are saved", async ({ page }) => {
     await page.goto("/shops");
-    await expect(page.getByRole("table").locator(".shop-name").first()).toBeVisible();
-    const before = await page.getByRole("table").locator(".shop-name").count();
-    const card = page.getByRole("region", { name: "Import shop list" });
+    const list = page.getByRole("region", { name: "Shop list", exact: true });
+    const row = (text: string) => list.getByRole("listitem").filter({ hasText: text });
+    await expect(list.locator(".shop-name").first()).toBeVisible();
+    const before = await list.locator(".shop-name").count();
     const csv = "name,lon,lat\nOmaha test shop,-95.94,41.26\nDenver test shop,-104.99,39.74\nShop in the sea,-140,10\n";
-    await card.getByLabel("Choose CSV file").setInputFiles({ name: "test-shops.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+    // ⋯ → Import CSV opens the file chooser.
+    await list.getByRole("button", { name: "More actions" }).click();
+    const chooser = page.waitForEvent("filechooser");
+    await list.getByRole("menuitem", { name: "Import CSV" }).click();
+    await (await chooser).setFiles({ name: "test-shops.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
 
+    const card = page.getByRole("region", { name: "Import shop list" });
     const preview = card.getByRole("region", { name: "Import preview" });
     await expect(preview).toContainText("test-shops.csv · 2 ready · 1 not saved");
     await expect(preview.getByRole("list", { name: "Rows to fix before saving" })).toHaveText("Line 4: No track near -140, 10.");
     // A preview saves nothing.
-    await expect(page.getByRole("table").getByRole("row").filter({ hasText: "Omaha test shop" })).toHaveCount(0);
+    await expect(row("Omaha test shop")).toHaveCount(0);
 
     await preview.getByRole("button", { name: "Save 2 shops" }).click();
     await expect(card.getByText("Saved 2 shops.")).toBeVisible();
-    const table = page.getByRole("table");
-    await expect(table.getByRole("row").filter({ hasText: "Omaha test shop" })).toBeVisible();
-    await expect(table.getByRole("row").filter({ hasText: "Denver test shop" })).toBeVisible();
-    await expect(table.getByRole("row").filter({ hasText: "Shop in the sea" })).toHaveCount(0);
-
-    await expect(table.locator(".shop-name")).toHaveCount(before + 2);
+    await expect(row("Omaha test shop")).toBeVisible();
+    await expect(row("Denver test shop")).toBeVisible();
+    await expect(row("Shop in the sea")).toHaveCount(0);
+    await expect(list.locator(".shop-name")).toHaveCount(before + 2);
 
     // Imported shops are ordinary shops, deleted the same way.
     for (const name of ["Omaha test shop", "Denver test shop"]) {
       await page.getByRole("button", { name: `Edit ${name}` }).click();
       await page.getByRole("button", { name: "Delete" }).click();
       await page.getByRole("group", { name: "Delete this shop?" }).getByRole("button", { name: "Delete" }).click();
-      await expect(table.getByRole("row").filter({ hasText: name })).toHaveCount(0);
+      await expect(row(name)).toHaveCount(0);
     }
-    await expect(table.locator(".shop-name")).toHaveCount(before);
+    await expect(list.locator(".shop-name")).toHaveCount(before);
   });
 
   test("Sarnia's suggestion follows the plant's lead to the main line, and a route arrives over it", async ({ page }) => {
@@ -184,18 +198,18 @@ test.describe("Shops", () => {
     await keepScreenshot(page, "shop-links-oakville-tracks");
 
     // The shop's own pin is dragged too: the location follows it and the links are drawn again from there.
-    const location = form.getByRole("combobox", { name: "Location" });
     const redrawn = page.waitForResponse((r) => isLinks(r.url()) && (r.request().postDataJSON() as LinksBody).lon !== OAKVILLE.lon);
     await drag(page, "Oakville test plant", { lon: -79.7198, lat: 43.4177 });
-    await expect(location).not.toHaveValue(`${OAKVILLE.lon}, ${OAKVILLE.lat}`);
-    await expect(location).toHaveValue(/^-79\.719\d*, 43\.41\d*$/);
-    await redrawn;
+    const moved = (await (await redrawn).request().postDataJSON()) as LinksBody;
+    expect(moved.lon).toBeCloseTo(-79.7198, 3);
+    expect(moved.lat).toBeCloseTo(43.4177, 3);
     await expect(links).toContainText("Hamilton · FRA 633683");
 
     await form.getByRole("button", { name: "Save shop" }).click();
     await expect(page).toHaveURL(/\/shops$/);
     const saved = ((await (await page.request.get("/api/shops")).json()) as ShopView[]).find((s) => s.id === shop.id)!;
     expect(saved.links).toEqual([633683, 633604]);
+    expect(saved.location).toMatchObject({ lon: expect.closeTo(-79.7198, 3), lat: expect.closeTo(43.4177, 3) });
     await page.goto(`/shops/${shop.id}`);
     await expect(page.getByRole("group", { name: "Track links" })).toContainText("FRA 633683");
     await expect(page.getByRole("group", { name: "Track links" })).toContainText("FRA 633604");

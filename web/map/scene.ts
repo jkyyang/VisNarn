@@ -25,10 +25,12 @@ export interface ScenePin {
 /** One route as drawn: a path per leg with its line colour, and chevrons along it for the direction of travel. */
 export interface SceneRoute {
   id: RouteStrategy;
-  legs: { railroad: Line; path: LngLat[] }[];
+  /** `index`: the leg's place in the route's own legs, which the panel's rows go by. */
+  legs: { railroad: Line; path: LngLat[]; index: number }[];
   /** Arrowheads at a few zoom spacings: position and bearing. */
   chevrons: { position: LngLat; bearingDeg: number; minZoom: number }[];
-  interchanges: { position: LngLat; from: Line; to: Line; place: string }[];
+  /** `leg`: the leg (by `index`) that leaves the interchange. */
+  interchanges: { position: LngLat; from: Line; to: Line; place: string; leg: number }[];
 }
 
 /** A small rounded label on the map for one route: click to select it. */
@@ -46,6 +48,8 @@ export type MapScene =
   | {
       kind: "route";
       selected: SceneRoute | null;
+      /** The leg of the selected route picked in the panel or on the map (its `index`), drawn over the rest. */
+      leg: number | null;
       /** The other routes, drawn thin and grey underneath; a click on one adds a stop on it. */
       alternatives: SceneRoute[];
       /** Empty unless there are two or more routes. */
@@ -82,8 +86,8 @@ export interface EditedShop {
   links: SceneLink[];
 }
 
-/** Something in the scene the user clicked: a route to select, or a place to put in the plan. */
-export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "place"; ref: PlaceRef; position: LngLat };
+/** Something in the scene the user clicked: a route to select, a leg of the selected one (by its `index`), or a place to put in the plan. */
+export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "leg"; index: number } | { kind: "place"; ref: PlaceRef; position: LngLat };
 
 /** The Class I network end to end: where a scene with nothing in it is framed. */
 export const NETWORK_BOUNDS: Bounds = [-125, 24, -66, 55];
@@ -123,13 +127,13 @@ function chevronsAlong(path: LngLat[]): SceneRoute["chevrons"] {
 }
 
 function sceneRoute(route: RoutePath): SceneRoute {
-  const legs = route.legs.filter((leg) => leg.path.length >= 2).map((leg) => ({ railroad: leg.railroad, path: leg.path }));
+  const legs = route.legs.flatMap((leg, index) => (leg.path.length >= 2 ? [{ railroad: leg.railroad, path: leg.path, index }] : []));
   const interchanges: SceneRoute["interchanges"] = [];
   const changes = route.steps.filter((step) => step.kind === "interchange");
   for (let i = 1, c = 0; i < legs.length; i++) {
     if (legs[i].railroad === legs[i - 1].railroad) continue;
     const step = changes[c++];
-    interchanges.push({ position: legs[i].path[0], from: legs[i - 1].railroad, to: legs[i].railroad, place: step && step.kind === "interchange" ? step.at : "" });
+    interchanges.push({ position: legs[i].path[0], from: legs[i - 1].railroad, to: legs[i].railroad, place: step && step.kind === "interchange" ? step.at : "", leg: legs[i].index });
   }
   return { id: route.strategies[0], legs, chevrons: legs.flatMap((leg) => chevronsAlong(leg.path)), interchanges };
 }
@@ -262,7 +266,7 @@ const inPlaces = (shop: ResolvedPlace, places: (ResolvedPlace | null)[]) => plac
  * turn-backs, a pin for each place as soon as it resolves, and every other saved shop as a small square
  * to click.
  */
-export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; shops: ShopView[]; unit: DistanceUnit }): MapScene {
+export function planScene(input: { planned: PlannedRoute | null; option: RouteStrategy | null; leg?: number | null; shops: ShopView[]; unit: DistanceUnit }): MapScene {
   const { planned, option, shops, unit } = input;
   const routes = planned?.outcome === "routed" ? planned.routes : null;
   const chosen = routes ? chosenRoute(routes, option) : null;
@@ -288,7 +292,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
     pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null });
   });
 
-  if (!routes || !chosen) return { kind: "route", selected: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
+  if (!routes || !chosen) return { kind: "route", selected: null, leg: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
 
   const selected = sceneRoute(chosen);
   const others = routes.filter((route) => route !== chosen);
@@ -312,6 +316,7 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   return {
     kind: "route",
     selected,
+    leg: input.leg ?? null,
     alternatives,
     pills,
     turnBacks: chosen.turnBacks.map((turnBack) => ({ position: [turnBack.at.lon, turnBack.at.lat], turnBack })),

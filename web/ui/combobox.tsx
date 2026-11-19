@@ -12,7 +12,7 @@ export function moveActive(active: number, key: "ArrowDown" | "ArrowUp", count: 
   return active < 0 ? (step > 0 ? 0 : count - 1) : (active + step + count) % count;
 }
 
-/** The listbox under a combobox. Option ids are `${id}-${i}`, for aria-activedescendant. */
+/** The listbox under a combobox. Option ids are `${id}-${i}`, for aria-activedescendant. With `groups`, the list (already in group order) is shown under a heading per group. */
 export function SuggestionList(props: {
   id: string;
   label: string;
@@ -21,29 +21,48 @@ export function SuggestionList(props: {
   onChoose: (suggestion: PlaceSuggestion) => void;
   /** Default: the label, then the detail in muted small text. */
   item?: (suggestion: PlaceSuggestion) => ReactNode;
+  /** The heading of the group a suggestion is in. */
+  groupOf?: (suggestion: PlaceSuggestion) => string;
 }): ReactElement {
+  const option = (suggestion: PlaceSuggestion, i: number) => (
+    <li
+      key={`${suggestion.source}-${suggestion.label}-${i}`}
+      id={`${props.id}-${i}`}
+      role="option"
+      aria-selected={i === props.active}
+      onMouseDown={(event) => {
+        // The input keeps focus, so its blur does not close the list first.
+        event.preventDefault();
+        props.onChoose(suggestion);
+      }}
+    >
+      {props.item?.(suggestion) ?? (
+        <>
+          <span>{suggestion.label}</span>
+          <span className="muted small">{suggestion.detail}</span>
+        </>
+      )}
+    </li>
+  );
+  const { groupOf } = props;
+  if (!groupOf) {
+    return (
+      <ul className="suggestions" role="listbox" id={props.id} aria-label={props.label}>
+        {props.list.map(option)}
+      </ul>
+    );
+  }
+  const groups = [...new Set(props.list.map(groupOf))];
   return (
-    <ul className="suggestions" role="listbox" id={props.id} aria-label={props.label}>
-      {props.list.map((suggestion, i) => (
-        <li
-          key={`${suggestion.source}-${suggestion.label}-${i}`}
-          id={`${props.id}-${i}`}
-          role="option"
-          aria-selected={i === props.active}
-          onMouseDown={(event) => {
-            // The input keeps focus, so its blur does not close the list first.
-            event.preventDefault();
-            props.onChoose(suggestion);
-          }}
-        >
-          {props.item?.(suggestion) ?? (
-            <>
-              <span>{suggestion.label}</span>
-              <span className="muted small">{suggestion.detail}</span>
-            </>
-          )}
-        </li>
+    <div className="suggestions" role="listbox" id={props.id} aria-label={props.label}>
+      {groups.map((group) => (
+        <ul key={group} role="group" aria-label={group}>
+          <li role="presentation" className="suggestion-group">
+            {group}
+          </li>
+          {props.list.map((suggestion, i) => (groupOf(suggestion) === group ? option(suggestion, i) : null))}
+        </ul>
       ))}
-    </ul>
+    </div>
   );
 }

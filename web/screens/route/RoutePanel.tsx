@@ -2,10 +2,10 @@
  * The route planner's panel: the places in travel order, the routes found, the sections of the chosen
  * one, and saving it. Views take props and return markup; PlaceField also fetches its own suggestions.
  */
-import { useId, useState, type FormEvent, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
+import { useId, useState, type KeyboardEvent, type ReactElement, type ReactNode } from "react";
 import { resolvedOf, type PlaceRef, type PlaceSuggestion, type ResolvedPlace } from "../../../shared/places.ts";
 import { placeKind, type PlaceKind, type Plan, type PlannedRoute, type SavedRoute, type SavedRouteId } from "../../../shared/plans.ts";
-import { RAILROADS, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
+import { RAILROADS, type Line, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
@@ -13,11 +13,15 @@ import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { chosenRoute } from "../../map/scene.ts";
 import { lineColor } from "../../theme.ts";
-import { PlacePin, RailroadChips, TurnBadge } from "../../ui/badges.tsx";
+import { PlacePin, TurnBadge } from "../../ui/badges.tsx";
 import { moveActive, SuggestionList } from "../../ui/combobox.tsx";
 import { ConfirmDelete } from "../../ui/ConfirmDelete.tsx";
-import { Cross, Crosshair } from "../../ui/icons.tsx";
+import { HistoryButtons, type History } from "../../ui/history.tsx";
+import { Accordion } from "../../ui/Accordion.tsx";
+import { Cross, Crosshair, Grip, Plus } from "../../ui/icons.tsx";
+import { Menu, MenuItem } from "../../ui/Menu.tsx";
 import { useReorder } from "../../ui/reorder.ts";
+import { Switch } from "../../ui/Switch.tsx";
 import type { DistanceUnit } from "../../units.ts";
 import { BACK_OUT, clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
 import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
@@ -38,18 +42,15 @@ export interface RoutePanelProps {
   onRemoveSaved: (id: SavedRouteId) => Promise<void>;
   onNew: () => void;
   unit: DistanceUnit;
+  /** Undo and redo of the plan's changes. */
+  history: History;
+  /** The leg of the chosen route picked here or on the map. */
+  leg: number | null;
+  onLeg: (leg: number | null) => void;
 }
 
 /** Shorter railroad stretches are left out of the sections. */
 const MIN_SECTION_KM = 0.5;
-
-// ---- small marks ----
-
-const Grip = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-    <path d="M2 4.5h10M2 7h10M2 9.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
 
 // ---- places ----
 
@@ -131,12 +132,14 @@ function PlaceField(props: {
 
   return (
     <div className={`place-field${props.picking ? " is-picking" : ""}`}>
-      <div className="input-box place-box">
-        <label htmlFor={id} className="visually-hidden">
-          {props.label}
-        </label>
-        <input
+      <div className="input-box place-box" title={props.problem ?? undefined}>
+        <span className="place-value">
+          <span className="place-label" aria-hidden="true">
+            {props.label}
+          </span>
+          <input
           id={id}
+          aria-label={props.label}
           role="combobox"
           aria-expanded={open}
           aria-controls={listId}
@@ -146,7 +149,7 @@ function PlaceField(props: {
           aria-describedby={props.problem ? problemId : undefined}
           autoComplete="off"
           enterKeyHint="go"
-          placeholder={props.label}
+          placeholder="Shop or city, or click the map"
           value={draft ?? props.committed.label}
           onChange={(e) => {
             setDraft(e.target.value);
@@ -157,19 +160,20 @@ function PlaceField(props: {
             setDraft(null);
             setActive(-1);
           }}
-        />
+          />
+        </span>
         <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
           <Crosshair />
         </button>
         {props.remove && (
-          <button type="button" className="icon-btn" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
+          <button type="button" className="icon-btn remove-btn" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
             <Cross />
           </button>
         )}
       </div>
       {open && <SuggestionList id={listId} label={`Suggestions for ${props.label}`} list={list} active={active} onChoose={(suggestion) => done(suggestion.ref)} />}
       {props.problem && (
-        <span id={problemId} className="place-problem">
+        <span id={problemId} className="visually-hidden">
           {props.problem}
         </span>
       )}
@@ -177,21 +181,31 @@ function PlaceField(props: {
   );
 }
 
-/** "Next carrier: Router's pick | BNSF | UP": the railroad that takes the car on at a place where several meet. */
-function LineChips(props: { label: string; railroads: Railroad[]; line: Railroad | null; onChoose: (railroad: Railroad | null) => void }): ReactElement {
-  const choices: (Railroad | null)[] = [null, ...RAILROADS.filter((railroad) => props.railroads.includes(railroad))];
+/** A place where several railroads meet, and which of them takes the car on there (null: the router's pick). */
+export interface CarrierChoice {
+  at: number;
+  place: string;
+  railroads: Railroad[];
+  line: Railroad | null;
+}
+
+/**
+ * "Carrier from Temple · Router's pick": the railroad that takes the car on at a place where several meet. A click moves
+ * to the next choice, round to the router's pick again.
+ */
+function CarrierRow(props: { choice: CarrierChoice; onChoose: (railroad: Railroad | null) => void }): ReactElement {
+  const { choice } = props;
+  const choices: (Railroad | null)[] = [null, ...RAILROADS.filter((railroad) => choice.railroads.includes(railroad))];
+  const next = choices[(choices.indexOf(choice.line) + 1) % choices.length] ?? null;
+  const word = choice.line ?? "Router's pick";
   return (
-    <span className="chips line-chips" role="radiogroup" aria-label={`Next carrier at ${props.label}`}>
-      <span className="line-chips-label" aria-hidden="true">
-        Next carrier
+    <button type="button" className="switch-row" aria-label={`Carrier from ${choice.place}: ${word}`} title={`Next: ${next ?? "Router's pick"}`} onClick={() => props.onChoose(next)}>
+      <span>Carrier from {choice.place}</span>
+      <span className={choice.line ? "carrier-value" : "muted"}>
+        {choice.line && <span className="rr-swatch" style={{ background: lineColor(choice.line) }} aria-hidden="true" />}
+        {word}
       </span>
-      {choices.map((railroad) => (
-        <button key={railroad ?? "any"} type="button" role="radio" aria-checked={props.line === railroad} className="chip" onClick={() => props.onChoose(railroad)}>
-          {railroad && <span className="rr-swatch" style={{ background: lineColor(railroad) }} aria-hidden="true" />}
-          {railroad ?? "Router's pick"}
-        </button>
-      ))}
-    </span>
+    </button>
   );
 }
 
@@ -205,6 +219,8 @@ function PlaceList(props: {
   current: PlannedRoute | null;
   /** Null while a row is still empty: that row is where the next stop goes. */
   onAddStop: (() => void) | null;
+  /** Why the plan went nowhere: the card's edge turns red, and says why on hover. */
+  notice: string | null;
 }): ReactElement {
   const { session, dispatch, named, current } = props;
   const { places } = session.plan.present;
@@ -224,13 +240,11 @@ function PlaceList(props: {
 
   return (
     <>
-      <div className="group place-group">
+      <div className={`group place-group${props.notice ? " is-wrong" : ""}`} title={props.notice ?? undefined}>
         <ol className="place-list" ref={reorder.listRef}>
           {places.map((ref, at) => {
             const kind = placeKind(at, count);
             const name = rowName(at, count);
-            const place = ref ? (named.get(spotKey(ref)) ?? null) : null;
-            const lines = ref?.kind === "node" && kind !== "destination" && place && place.railroads.length > 1 ? place.railroads : null;
             const problem = problemAt(at);
             return (
               // By position: a row keeps its typed draft while the place in it changes.
@@ -252,7 +266,6 @@ function PlaceList(props: {
                 <button type="button" className="icon-btn drag-handle" aria-label={`Move ${name}`} aria-describedby={hintId} {...reorder.handleProps(at)}>
                   <Grip />
                 </button>
-                {lines && ref?.kind === "node" && <LineChips label={name} railroads={lines} line={ref.railroad} onChoose={(railroad) => dispatch({ type: "setLine", at, railroad })} />}
               </li>
             );
           })}
@@ -260,7 +273,7 @@ function PlaceList(props: {
         {props.onAddStop && (
           <button type="button" className="add-stop" onClick={props.onAddStop}>
             <span className="add-stop-icon" aria-hidden="true">
-              +
+              <Plus size={14} />
             </span>
             Add stop
           </button>
@@ -278,63 +291,60 @@ function PlaceList(props: {
 
 // ---- track ----
 
-const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; tip: string }[] = [
-  { key: "regional", label: "Regional", tip: "Regional: mid-size railroads" },
-  { key: "shortLine", label: "Short lines", tip: "Short line: small local railroads, often the last mile to a plant" },
-  { key: "passenger", label: "Passenger", tip: "Passenger: lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
+const SMALLER_TRACK: { key: keyof TrackIncluded; label: string; short: string; tip: string }[] = [
+  { key: "regional", label: "Regional lines", short: "Regional", tip: "Mid-size railroads" },
+  { key: "shortLine", label: "Short lines", short: "Short lines", tip: "Small local railroads, often the last mile to a plant" },
+  { key: "passenger", label: "Passenger lines", short: "Passenger", tip: "Lines owned by Amtrak, VIA or commuter agencies; freight runs on some" },
 ];
 
-/** Which track the route may use (Class I always, the rest when ticked), and whether it may turn at a stop. */
-function RouteOptions(props: { plan: Plan; dispatch: (action: PlanAction) => void }): ReactElement {
+/** What is on, folded into one line: "Class I · Regional", or "Class I only"; a carrier chosen at a place, after it. */
+export function optionsSummary(plan: Pick<Plan, "include" | "turnAtStops">, carriers: readonly CarrierChoice[] = []): string {
+  const on = [...SMALLER_TRACK.filter(({ key }) => plan.include[key]).map(({ short }) => short), ...(plan.turnAtStops ? ["Turn at stops"] : [])];
+  const chosen = carriers.flatMap((choice) => (choice.line ? [`${choice.line} from ${choice.place}`] : []));
+  return [on.length ? ["Class I", ...on].join(" · ") : "Class I only", ...chosen].join(" · ");
+}
+
+/** "Route options", folded to what is on: which track the route may use (Class I always, the rest when on), and whether it may turn at a stop. */
+function RouteOptions(props: { plan: Plan; carriers: CarrierChoice[]; dispatch: (action: PlanAction) => void }): ReactElement {
   const { include, turnAtStops } = props.plan;
   return (
-    <div className="chips" role="group" aria-label="Route options">
-      <label className="chip" title={`Class I: the ${RAILROADS.length} big railroads`}>
-        <input type="checkbox" checked disabled />
-        Class I
-      </label>
+    <Accordion title="Route options" summary={optionsSummary(props.plan, props.carriers)}>
+      <div className="switch-row" title={`The ${RAILROADS.length} big railroads`}>
+        <span>Class I lines</span>
+        <span className="muted">Always on</span>
+      </div>
       {SMALLER_TRACK.map(({ key, label, tip }) => (
-        <label key={key} className="chip" title={tip}>
-          <input type="checkbox" checked={include[key]} onChange={(event) => props.dispatch({ type: "setInclude", include: { ...include, [key]: event.target.checked } })} />
-          {label}
-        </label>
+        <Switch key={key} label={label} title={tip} on={include[key]} onChange={(on) => props.dispatch({ type: "setInclude", include: { ...include, [key]: on } })} />
       ))}
-      <label className="chip" title="Turn at stops: the route may leave a stop in either direction">
-        <input type="checkbox" checked={turnAtStops} onChange={(event) => props.dispatch({ type: "setTurnAtStops", turnAtStops: event.target.checked })} />
-        Turn at stops
-      </label>
-    </div>
+      <Switch label="Turn at stops" title="The route may leave a stop in either direction" on={turnAtStops} onChange={(on) => props.dispatch({ type: "setTurnAtStops", turnAtStops: on })} />
+      {props.carriers.map((choice) => (
+        <CarrierRow key={choice.at} choice={choice} onChoose={(railroad) => props.dispatch({ type: "setLine", at: choice.at, railroad })} />
+      ))}
+    </Accordion>
   );
 }
 
 // ---- routes ----
 
-/** One row per route: its length over its railroads, then ⇄ interchanges and ↩ turn-backs. Click to select. */
+/** Why the router offers a route: the strategy that found it. */
+const STRATEGY_WORDS: Record<RouteStrategy, string> = { pick: "recommended", shortest: "shortest", "fewest-interchanges": "fewest interchanges", "no-turn-backs": "no turn-backs" };
+
+/**
+ * The routes found, when there are two or more: a row each, as in the Shops list (its carriers; its interchanges and
+ * turn-backs, and why it is offered; its length). Click to select; the map's pills do the same.
+ */
 function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (id: RouteStrategy) => void; unit: DistanceUnit }): ReactElement {
   return (
     <section className="group route-rows" aria-label="Routes">
       {props.routes.map((route) => {
-        const selected = route === props.chosen;
         const turns = route.turnBacks.length;
         return (
-          <button key={route.strategies[0]} type="button" className={`route-row${selected ? " is-selected" : ""}`} aria-pressed={selected} onClick={() => props.onSelect(route.strategies[0])}>
-            <span className="route-row-text">
-              <span className="route-row-km">{fmtDistance(route.km, props.unit)}</span>
-              <RailroadChips railroads={route.railroads} />
+          <button key={route.strategies[0]} type="button" className="route-row" aria-pressed={route === props.chosen} onClick={() => props.onSelect(route.strategies[0])}>
+            <span className="shop-text">
+              <span className="shop-name">{route.railroads.map(lineName).join(" · ")}</span>
+              <span className="shop-sub">{[interchangesWord(route.interchanges), ...(turns ? [plural(turns, "turn-back")] : []), ...route.strategies.map((id) => STRATEGY_WORDS[id])].join(" · ")}</span>
             </span>
-            {route.interchanges > 0 && (
-              // A short count; the word is for screen readers and the tooltip.
-              <span className="ix-chip" title={interchangesWord(route.interchanges)}>
-                <span aria-hidden="true">⇄{route.interchanges}</span>
-                <span className="visually-hidden">{interchangesWord(route.interchanges)}</span>
-              </span>
-            )}
-            {turns > 0 && (
-              <span title={route.turnBacks.map((t) => t.at.near).join(", ")}>
-                <TurnBadge count={turns} />
-                <span className="visually-hidden">{plural(turns, "turn-back")}</span>
-              </span>
-            )}
+            <span className="leg-km">{fmtDistance(route.km, props.unit)}</span>
           </button>
         );
       })}
@@ -342,143 +352,141 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
   );
 }
 
-type SectionRow = { key: string; mark: ReactNode; text: ReactNode; kind: "place" | "leg" | "interchange" | "turn-back" | "back-out" };
-
-/** "· you chose" or "· router's pick". */
-function JunctionWord({ junction }: { junction: RouteString["junctions"][number] }): ReactElement {
-  return (
-    <>
-      {" · "}
-      <span className={`junction${junction.chosen ? " is-chosen" : ""}`}>{junction.chosen ? "you chose" : "router's pick"}</span>
-    </>
-  );
-}
+type CardRow =
+  | { kind: "leg"; key: string; leg: number; railroad: Railroad | Line; km: number; from: string; to: string }
+  | { kind: "stop" | "turn-back" | "back-out"; key: string; mark: ReactNode; text: string };
 
 /**
- * The chosen route read top to bottom: start, each railroad's stretch with its km, railroad changes,
- * stops (and backing out of a shop's own track), turn-backs, destination. `rows` are the place rows the route runs through, so a stop shows its row's number.
+ * The chosen route as rows: one per carrier leg (from where to where, how far), and between them, smaller, each stop,
+ * turn-back and backing out of a shop's own track.
+ * `rows` are the place rows the route runs through, so a stop shows its row's number.
  */
-function Sections(props: { route: RoutePath; string: RouteString; places: ResolvedPlace[]; rows: number[]; unit: DistanceUnit }): ReactElement {
+function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: number[] }): CardRow[] {
   const { route, places } = props;
-  const junctionAt = new Map(props.string.junctions.map((junction) => [junction.step, junction]));
-  const rows: SectionRow[] = [{ key: "start", mark: <PlacePin kind="start" n={0} />, text: shortPlace(places[0]?.label ?? ""), kind: "place" }];
+  const rows: CardRow[] = [];
+  let here = shortPlace(places[0]?.label ?? "");
+  // A leg's end is the next place the route names after it.
+  const arrive = (place: string) => {
+    for (const row of rows) if (row.kind === "leg" && !row.to) row.to = place;
+    here = place;
+  };
   route.steps.forEach((step, i) => {
     const key = `${step.kind}-${i}`;
     switch (step.kind) {
       case "leg": {
         const leg = route.legs[step.leg];
-        if (!leg || leg.km < MIN_SECTION_KM) return;
-        rows.push({
-          key,
-          mark: <span className="section-bar" style={{ background: lineColor(leg.railroad) }} />,
-          text: (
-            <>
-              <span className="strong">{lineName(leg.railroad)}</span> <span className="section-km">{fmtDistance(leg.km, props.unit)}</span>
-            </>
-          ),
-          kind: "leg",
-        });
+        if (leg && leg.km >= MIN_SECTION_KM) rows.push({ kind: "leg", key, leg: step.leg, railroad: leg.railroad, km: leg.km, from: here, to: "" });
         return;
       }
-      case "interchange": {
-        const junction = junctionAt.get(i);
-        rows.push({
-          key,
-          mark: <span className="section-ring" />,
-          text: (
-            <>
-              {lineName(step.from)} → {lineName(step.to)} · {shortPlace(step.at)}
-              {junction && <JunctionWord junction={junction} />}
-            </>
-          ),
-          kind: "interchange",
-        });
+      case "interchange":
+        arrive(shortPlace(step.at));
         return;
-      }
       case "stop":
-        rows.push({ key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: shortPlace(step.label), kind: "place" });
+        arrive(shortPlace(step.label));
+        rows.push({ kind: "stop", key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: shortPlace(step.label) });
         return;
       case "turn-back": {
         const turnBack = route.turnBacks[step.turnBack];
-        rows.push({ key, mark: <TurnBadge />, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back", kind: "turn-back" });
+        if (turnBack) arrive(shortPlace(turnBack.at.near));
+        rows.push({ kind: "turn-back", key, mark: <TurnBadge />, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back" });
         return;
       }
       case "back-out":
-        rows.push({ key, mark: <span className="section-ring" />, text: BACK_OUT, kind: "back-out" });
+        rows.push({ kind: "back-out", key, mark: null, text: BACK_OUT });
         return;
       case "destination":
-        rows.push({ key, mark: <PlacePin kind="destination" n={0} />, text: shortPlace(places.at(-1)?.label ?? ""), kind: "place" });
+        arrive(shortPlace(places.at(-1)?.label ?? ""));
         return;
     }
   });
-  return (
-    <ol className="sections" aria-label="Sections">
-      {rows.map((row) => (
-        <li key={row.key} className={`section section--${row.kind}`}>
-          <span className="section-mark">{row.mark}</span>
-          <span className="section-text">{row.text}</span>
-        </li>
-      ))}
-    </ol>
-  );
+  return rows;
 }
 
-/** "BNSF – [Kansas City, MO] – UP"; on a saved route, also the string it was saved with when the router now gives another. */
-function RouteStringRow(props: { string: RouteString; saved: string | null }): ReactElement {
+/**
+ * The result: the chosen route's length, its carriers and interchanges (and turn-backs), then a row per carrier leg
+ * with the stops and turn-backs between them; "Saved as" when the route string it was saved with differs from today's.
+ * A leg's row and the leg on the map pick each other.
+ */
+function ResultCard(props: {
+  route: RoutePath;
+  string: RouteString;
+  places: ResolvedPlace[];
+  rows: number[];
+  unit: DistanceUnit;
+  /** The route string it was saved with, when the router now gives another. */
+  saved: string | null;
+  leg: number | null;
+  onLeg: (leg: number | null) => void;
+}): ReactElement {
+  const { route } = props;
+  const carriers = new Set(route.legs.map((leg) => leg.railroad)).size;
+  const turns = route.turnBacks.length;
   const compact = compactRouteString(props.string);
   return (
-    <section className="group-title route-string" aria-label="Route string">
-      <span className="route-string-text">{shownRouteString(props.string)}</span>
-      {props.saved && props.saved !== compact && <span className="caption">Saved as {props.saved}</span>}
+    <section className="group result" aria-label="Route">
+      <div className="result-head">
+        <span className="result-km">{fmtDistance(route.km, props.unit)}</span>
+        <span className="muted">{[plural(carriers, "carrier"), interchangesWord(route.interchanges), ...(turns ? [plural(turns, "turn-back")] : [])].join(" · ")}</span>
+      </div>
+      <ol className="sections" aria-label="Sections">
+        {cardRows(props).map((row) =>
+          row.kind === "leg" ? (
+            <li key={row.key} className="section section--leg">
+              <button type="button" className="leg-row" aria-pressed={props.leg === row.leg} onClick={() => props.onLeg(props.leg === row.leg ? null : row.leg)}>
+                <span className="section-bar" style={{ background: lineColor(row.railroad) }} aria-hidden="true" />
+                <span className="leg-carrier">{lineName(row.railroad)}</span>
+                <span className="leg-way">
+                  {row.from} → {row.to}
+                </span>
+                <span className="leg-km">{fmtDistance(row.km, props.unit)}</span>
+              </button>
+            </li>
+          ) : (
+            <li key={row.key} className={`section section--${row.kind}`}>
+              <span className="section-mark">{row.mark}</span>
+              <span className="section-text">{row.text}</span>
+            </li>
+          ),
+        )}
+      </ol>
+      {props.saved && props.saved !== compact && <p className="saved-as">Saved as {props.saved}</p>}
     </section>
   );
 }
 
 // ---- saving ----
 
-function SaveBar(props: { initial: string; canSave: boolean; changed: (name: string) => boolean; onSave: (name: string) => Promise<void> }): ReactElement {
-  const id = useId();
+/** The open route's name, to rename it: Enter or leaving the box saves a changed name; Esc puts it back. */
+function RouteName(props: { name: string; onRename: (name: string) => Promise<void>; onError: (message: string | null) => void }): ReactElement {
   const [typed, setTyped] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const name = typed ?? props.initial;
-  const dirty = props.changed(name.trim());
-  const save = async () => {
-    if (!props.canSave || !name.trim() || !dirty || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await props.onSave(name.trim());
-    } catch (e) {
-      setError(errorText(e, "Could not save the route."));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    void save();
+  const commit = () => {
+    const name = typed?.trim();
+    setTyped(null);
+    if (name && name !== props.name) props.onRename(name).then(() => props.onError(null), (e: unknown) => props.onError(errorText(e, "Could not save the route.")));
   };
   return (
-    <form className="save-bar" aria-label="Save route" onSubmit={submit}>
-      <label htmlFor={id} className="visually-hidden">
-        Route name
-      </label>
-      <input id={id} value={name} onChange={(e) => setTyped(e.target.value)} />
-      <button type="submit" className="btn btn--primary" disabled={!props.canSave || !name.trim() || !dirty || busy}>
-        {busy ? "Saving…" : dirty ? "Save" : "Saved"}
-      </button>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-    </form>
+    <input
+      className="saved-name"
+      aria-label="Route name"
+      value={typed ?? props.name}
+      onChange={(e) => setTyped(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") setTyped(null);
+      }}
+    />
   );
 }
 
-function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; unfolded: boolean; onRemove: (id: SavedRouteId) => Promise<void> }): ReactElement {
-  const [shown, setShown] = useState<boolean | null>(null);
+/** Saved routes: folded to how many; open, a row each to open it (the open one renamed in place), with a delete on the hovered row. */
+function SavedList(props: {
+  saved: SavedRoute[];
+  current: SavedRouteId | null;
+  unfolded: boolean;
+  onRename: (name: string) => Promise<void>;
+  onRemove: (id: SavedRouteId) => Promise<void>;
+}): ReactElement {
   const [confirming, setConfirming] = useState<SavedRouteId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const remove = (id: SavedRouteId) =>
@@ -487,29 +495,22 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
       (e: unknown) => setError(errorText(e, "Could not delete the route.")),
     );
   return (
-    // Open while the plan is empty, folded while one is open, until the person opens or folds it.
-    // The summary's click is handled here: the toggle event also fires when React sets `open`.
-    <details className="saved-list" open={shown ?? props.unfolded}>
-      <summary
-        className="group-title"
-        onClick={(event) => {
-          event.preventDefault();
-          setShown(!(shown ?? props.unfolded));
-        }}
-      >
-        Saved routes ({props.saved.length})
-      </summary>
-      <ul className="group" aria-label="Saved routes">
+    <Accordion title="Saved routes" summary={`${props.saved.length} saved`} initiallyOpen={props.unfolded}>
+      <ul className="saved-list" aria-label="Saved routes">
         {props.saved.map((route) => (
-          <li key={route.id} className={route.id === props.current ? "is-current" : undefined}>
+          <li key={route.id} className={`saved-row${route.id === props.current ? " is-current" : ""}`}>
             {confirming === route.id ? (
               <ConfirmDelete question="Delete this route?" label={`Delete ${route.name}`} onConfirm={() => void remove(route.id)} onKeep={() => setConfirming(null)} />
             ) : (
               <>
-                <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })} aria-current={route.id === props.current ? "page" : undefined}>
-                  {route.name}
-                </a>
-                <button type="button" className="icon-btn" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
+                {route.id === props.current ? (
+                  <RouteName name={route.name} onRename={props.onRename} onError={setError} />
+                ) : (
+                  <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })}>
+                    {route.name}
+                  </a>
+                )}
+                <button type="button" className="icon-btn remove-btn" aria-label={`Delete ${route.name}`} onClick={() => setConfirming(route.id)}>
                   <Cross />
                 </button>
               </>
@@ -522,13 +523,13 @@ function SavedList(props: { saved: SavedRoute[]; current: SavedRouteId | null; u
           {error}
         </p>
       )}
-    </details>
+    </Accordion>
   );
 }
 
 // ---- the panel ----
 
-/** Places and what a click does next · routes · sections · save · saved routes. */
+/** Route with Undo / Redo · the places and what a click does next · options · the routes · the result · save · saved routes. */
 export function RoutePanel(props: RoutePanelProps): ReactElement {
   const { session, dispatch, planned, open } = props;
   const plan = session.plan.present;
@@ -550,7 +551,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
     (session.missed
       ? `${NO_TRACK_NEAR}.`
       : session.pick !== null
-        ? `${clickToSet(word(session.pick))}.`
+        ? `${clickToSet(rowName(session.pick, plan.places.length))} · Esc to cancel`
         : empty
           ? "Click the start on the map, or type it."
           : target !== null
@@ -568,8 +569,40 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
   const changed = (name: string) =>
     !open || !routes || !full || name !== open.name || !samePlan(full, open.plan) || chosenRoute(routes, open.option) !== chosen || compact !== open.routeString;
 
+  const name = open?.name ?? (result ? routeName(result.places) : "");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const save = (as: string) => (string ? props.onSave(as, compactRouteString(string)) : Promise.resolve());
+  const saveNow = () => {
+    setSaveError(null);
+    save(name).catch((e: unknown) => setSaveError(errorText(e, "Could not save the route.")));
+  };
+  const placesSet = plan.places.filter(Boolean).length;
+  const dirty = !!routes && !!string && !!full && changed(name);
+  // A place where several railroads meet (not the destination): which one takes the car on there.
+  const carriers: CarrierChoice[] = plan.places.flatMap((ref, at) => {
+    const place = ref?.kind === "node" ? named.get(spotKey(ref)) : undefined;
+    return ref?.kind === "node" && place && place.railroads.length > 1 && placeKind(at, plan.places.length) !== "destination"
+      ? [{ at, place: shortPlace(place.label), railroads: place.railroads, line: ref.railroad }]
+      : [];
+  });
+
   return (
     <div className={`route-panel${planned?.stale ? " is-stale" : ""}`} aria-busy={planned?.stale || undefined}>
+      <div className="list-bar">
+        <h2 className="list-count">Route</h2>
+        <HistoryButtons history={props.history} />
+        <Menu
+          label="Route actions"
+          items={(close) => (
+            <>
+              <MenuItem label="Reverse route" disabled={placesSet < 2} onSelect={() => (close(), dispatch({ type: "reverse" }))} />
+              <MenuItem label={dirty || !routes ? "Save route" : "Saved"} disabled={!dirty} onSelect={() => (close(), saveNow())} />
+              <MenuItem label="Copy route string" disabled={!string} onSelect={() => (close(), string && void navigator.clipboard?.writeText(shownRouteString(string)))} />
+              <MenuItem label="New route" disabled={empty} onSelect={() => (close(), props.onNew())} />
+            </>
+          )}
+        />
+      </div>
       <section className="plan" aria-label="Places">
         <PlaceList
           session={session}
@@ -577,45 +610,29 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
           named={named}
           current={current}
           onAddStop={plan.places.includes(null) ? null : () => dispatch({ type: "insert", at: plan.places.length - 1, ref: null })}
+          notice={saveError ?? props.error}
         />
-        {!empty && (
-          <div className="plan-actions">
-            <button type="button" className="link-btn" onClick={() => dispatch({ type: "reverse" })}>
-              Reverse route
-            </button>
-            <button type="button" className="link-btn" onClick={props.onNew}>
-              New
-            </button>
-          </div>
-        )}
-        <RouteOptions plan={plan} dispatch={dispatch} />
-        <p className="hint-line" role="status">
+        <RouteOptions plan={plan} carriers={carriers} dispatch={dispatch} />
+        <p className="visually-hidden" role="status">
           {hint}
         </p>
       </section>
 
+      {routes && chosen && routes.length > 1 && <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />}
       {routes && chosen && string && (
-        <>
-          <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />
-          <div>
-            <RouteStringRow string={string} saved={open?.routeString || null} />
-            <div className="group sections-group">
-              <Sections route={chosen} string={string} places={resolved.filter((place) => place !== null)} rows={routedRows} unit={props.unit} />
-            </div>
-          </div>
-          {result && (
-            <SaveBar
-              key={open?.id ?? "new"}
-              initial={open?.name ?? routeName(result.places)}
-              canSave={full !== null}
-              changed={changed}
-              onSave={(name) => props.onSave(name, compactRouteString(string))}
-            />
-          )}
-        </>
+        <ResultCard
+          route={chosen}
+          string={string}
+          places={resolved.filter((place) => place !== null)}
+          rows={routedRows}
+          unit={props.unit}
+          saved={open?.routeString || null}
+          leg={props.leg}
+          onLeg={props.onLeg}
+        />
       )}
 
-      {props.saved.length > 0 && <SavedList saved={props.saved} current={open?.id ?? null} unfolded={empty} onRemove={props.onRemoveSaved} />}
+      {props.saved.length > 0 && <SavedList saved={props.saved} current={open?.id ?? null} unfolded={empty} onRename={save} onRemove={props.onRemoveSaved} />}
     </div>
   );
 }

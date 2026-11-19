@@ -15,6 +15,11 @@ export function RailroadChip(props: { railroad: Line }): ReactElement {
   );
 }
 
+/** The railroads with track at a place, or that it has none. */
+export function Railroads({ place }: { place: { railroads: readonly Line[] } }): ReactElement {
+  return place.railroads.length ? <RailroadChips railroads={place.railroads} /> : <span>No Class I track</span>;
+}
+
 export function RailroadChips(props: { railroads: readonly Line[] }): ReactElement {
   return (
     <span className="rr-list">

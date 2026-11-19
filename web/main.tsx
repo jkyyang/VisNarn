@@ -5,6 +5,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles.css";
 import App from "./app/App.tsx";
 
+// Focus rings are for the keyboard: a press with a mouse, a finger or a pen hides them until the next key (styles.css).
+const input = (kind: "pointer" | "keys") => () => void (document.documentElement.dataset.input = kind);
+window.addEventListener("pointerdown", input("pointer"), true);
+window.addEventListener("keydown", input("keys"), true);
+
 const root = document.getElementById("root");
 if (!root) throw new Error("index.html has no #root element.");
 

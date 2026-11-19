@@ -232,10 +232,10 @@ export interface PlanSessionHandle {
   dispatch: (action: PlanAction) => void;
   /**
    * Snap, then place it at nextTarget: to a node of `route` (the legs' paths of the line clicked) when
-   * the click is on it, else to the nearest node. Ignored while a previous snap is in flight. Rejects when the
-   * server cannot be reached.
+   * the click is on it, else to the nearest node. Ignored while a previous snap is in flight (undefined). Resolves
+   * to where it snapped, or null when no track is near; rejects when the server cannot be reached.
    */
-  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<void>;
+  clickMap: (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => Promise<LngLat | null | undefined>;
   /** A shop square: place that ref at nextTarget. */
   clickPlace: (ref: PlaceRef, at: LngLat, places: PlanPlaces | null) => void;
 }
@@ -314,13 +314,17 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
 
   const clickMap = useCallback(
     async (lon: number, lat: number, toleranceKm: number, places: PlanPlaces | null, route: readonly LngLat[][] | null) => {
-      if (snapping.current) return;
+      if (snapping.current) return undefined;
       snapping.current = true;
       try {
         const vertex = route ? routeNodeNear(route, { lon, lat }, (toleranceKm * ON_ROUTE_PX) / PICK_RADIUS_PX) : null;
         const node = (vertex && (await snapToNetwork(vertex[0], vertex[1], VERTEX_KM))) ?? (await snapToNetwork(lon, lat, toleranceKm));
-        if (!node) dispatch({ type: "missed" });
-        else place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
+        if (!node) {
+          dispatch({ type: "missed" });
+          return null;
+        }
+        place({ kind: "node", fraId: node.fraId, railroad: null }, { lon: node.lon, lat: node.lat }, places);
+        return [node.lon, node.lat] as LngLat;
       } finally {
         snapping.current = false;
       }

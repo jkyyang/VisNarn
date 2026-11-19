@@ -19,7 +19,7 @@ test("Phone: map on top, then the places, the routes and the sections in one col
 
   await planRoute(page, "Taylor, TX", "North Little Rock, AR");
   await expect(page.getByRole("combobox", { name: "Start" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Routes" }).getByRole("button", { pressed: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Route", exact: true })).toBeVisible();
   await expect(page.getByRole("list", { name: "Sections" })).toBeVisible();
   const undo = page.getByRole("button", { name: "Undo route change" });
   await expect(undo).toBeVisible();

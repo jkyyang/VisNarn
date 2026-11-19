@@ -9,3 +9,4 @@ data/processed/
 test-results/
 playwright-report/
 *.log
+.claude/

@@ -1,33 +1,33 @@
 /**
  * The heavy half of the map: MapLibre, the deck.gl overlay, the route pills, the layer card, zoom,
- * fit, legend, the search box. Loaded lazily by ./MapStage.tsx, which is the only importer.
+ * fit, legend, the place found with the panel's search. Loaded lazily by ./MapStage.tsx, which is the only importer.
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
-import { NEAREST_MAX_KM, type PlaceSuggestion } from "../../shared/places.ts";
+import { NEAREST_MAX_KM } from "../../shared/places.ts";
 import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
-import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
+import { fresh, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
 import { BasemapStyle, NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
+import { Flash } from "./Flash.tsx";
 import { FoundPin } from "./FoundPin.tsx";
 import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
 import { Legend, legendFor } from "./Legend.tsx";
 import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
-import { MapSearch } from "./MapSearch.tsx";
 import {
   AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES,
   TILE_CACHE_MAX_TILES,
 } from "./config.ts";
-import type { MapContentProps, MapFocus } from "./MapStage.tsx";
+import type { Found, MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
 import { NETWORK_BOUNDS, routePaths, withRoutePaths } from "./scene.ts";
@@ -57,6 +57,9 @@ export interface MapCanvasProps {
    * canvas only, so a padded camera would show past them beside the panel.
    */
   coveredLeft: number;
+  /** The place chosen in the panel's search: its pin and card, and the camera flies there. */
+  found: Found | null;
+  onCloseFound: () => void;
 }
 
 const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
@@ -141,7 +144,7 @@ function FreeSpareTextures() {
 /** The controls need the map instance for zoom, so they live inside the map. */
 function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactElement {
   const map = useMap().current;
-  const { content, layers, onLayers } = props.canvas;
+  const { layers, onLayers } = props.canvas;
   return (
     <MapControls
       layers={layers}
@@ -149,7 +152,6 @@ function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactEl
       look={props.canvas.look}
       onZoom={(step) => (step > 0 ? map?.zoomIn() : map?.zoomOut())}
       onFit={props.onFit}
-      history={content?.history ?? null}
     />
   );
 }
@@ -159,9 +161,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const root = useRef<HTMLDivElement>(null);
   const colors = useThemeColors(root, look.base);
   const [zoom, setZoom] = useState(3);
-  const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
-  const resolution = usePlace(chosen?.ref ?? null, "shop");
-  const found = chosen && fresh(resolution);
+  const { found } = props;
   const [fitNonce, setFitNonce] = useState(0);
   const given = content?.scene ?? null;
   // With Real tracks on, the routes follow the surveyed track and the real lines replace the
@@ -243,13 +243,13 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} coveredLeft={props.coveredLeft} />}
         <FlyTo focus={content?.focus} coveredLeft={props.coveredLeft} />
-        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />
+        <FlyTo focus={found ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />
         <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
         {content?.handles && <MapHandles handles={content.handles} />}
-        {chosen && found?.ok && <FoundPin chosen={chosen} place={found.place} actions={content?.placeActions ?? []} onClose={() => setChosen(null)} />}
+        {content?.flash && <Flash key={content.flash.key} flash={content.flash} />}
+        {found && <FoundPin chosen={found.suggestion} place={found.place} actions={content?.placeActions ?? []} onClose={props.onCloseFound} />}
       </MapGL>
-      <MapSearch chosen={chosen} problem={found && !found.ok ? found.problem.message : null} onChoose={setChosen} />
     </div>
   );
 }

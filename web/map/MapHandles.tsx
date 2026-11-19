@@ -24,6 +24,8 @@ export interface MapHandle {
   label: string;
   faint?: boolean;
   pressed?: boolean;
+  /** Why it cannot stay where it is: its edge is red and this is its tooltip. */
+  wrong?: string | null;
   /** Each move of a drag: where the face is. */
   onDrag?: (at: LngLat) => void;
   /** Where it was let go; null when Esc ended the drag. */
@@ -115,9 +117,9 @@ function Handle({ handle }: { handle: MapHandle }): ReactElement {
         ref={button}
         type="button"
         tabIndex={-1}
-        className={`map-handle map-handle--${handle.face}${handle.faint ? " is-faint" : ""}${held ? " is-dragging" : ""}`}
+        className={`map-handle map-handle--${handle.face}${handle.faint ? " is-faint" : ""}${handle.wrong ? " is-wrong" : ""}${held ? " is-dragging" : ""}`}
         aria-label={handle.label}
-        title={handle.label}
+        title={handle.wrong ?? handle.label}
         aria-pressed={handle.pressed ?? undefined}
       >
         <Face handle={handle} />

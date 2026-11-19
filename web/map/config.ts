@@ -35,6 +35,9 @@ export const FIT_MAX_ZOOM = 11;
  */
 export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 72 };
 
+/** A shop picked in the list or on the map is shown this close: the lines that reach it and the towns round it. */
+export const SELECTED_SHOP_ZOOM = 8;
+
 /** A place found with the search box is shown this close: its yard and the lines through it. */
 export const FOUND_ZOOM = 12;
 

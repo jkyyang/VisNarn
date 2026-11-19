@@ -1,13 +1,13 @@
 /**
- * Where a place found with the search box (./MapSearch.tsx) is: a pin, and a card with the place, what
+ * Where a place found with the panel's search (web/app/PanelSearch.tsx) is: a pin, and a card with the place, what
  * it is, the railroads there, and what the screen can do with it (the planner's "Start", "Add stop", "Destination").
  */
 import { useRef, type ReactElement } from "react";
 import { Marker } from "react-map-gl/maplibre";
 import type { PlaceSuggestion, ResolvedPlace } from "../../shared/places.ts";
+import { Railroads } from "../ui/badges.tsx";
 import { Cross } from "../ui/icons.tsx";
 import { PLACE_SOURCE_WORDS } from "../words.ts";
-import { Railroads } from "./MapSearch.tsx";
 import type { PlaceAction } from "./MapStage.tsx";
 import { useNativeClick } from "./RouteMarkFaces.tsx";
 

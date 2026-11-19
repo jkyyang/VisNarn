@@ -28,6 +28,15 @@ afterEach(() => {
 const field = (name: "Start" | "Destination") => screen.getByRole("combobox", { name });
 const hint = () => screen.getByRole("status", { name: "" });
 const routeRows = () => within(screen.getByRole("region", { name: "Routes" })).getAllByRole("button");
+/** How many routes were found: a row each when there are two or more, else the one result card. */
+const routeCount = () => (screen.queryByRole("region", { name: "Routes" }) ? routeRows().length : screen.queryByRole("region", { name: "Route" }) ? 1 : 0);
+/** Route options folds; open it to reach its switches. */
+async function routeOptions(user: ReturnType<typeof userEvent.setup>) {
+  const options = screen.getByRole("region", { name: "Route options" });
+  const head = within(options).getByRole("button", { name: /^Route options/ });
+  if (head.getAttribute("aria-expanded") !== "true") await user.click(head);
+  return options;
+}
 const placeRows = () => within(screen.getByRole("region", { name: "Places" })).getAllByRole("listitem");
 const stopRows = () => placeRows().slice(1, -1);
 /** What each place row shows, in order. */
@@ -73,10 +82,10 @@ describe("Route planner", () => {
     const [pick, shortest] = routeRows();
     expect(pick).toHaveAttribute("aria-pressed", "true");
     expect(pick).toHaveTextContent("1,046 km");
-    // The length over the railroads, then a short ⇄ count; the word is only for screen readers and the tooltip.
-    expect(shortest).toHaveAccessibleName("839 km BNSF UP 1 interchange");
-    expect(within(shortest).queryByText(/interchange/, { ignore: ".visually-hidden, script, style" })).toBeNull();
-    expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
+    // A row per route, as in the Shops list: its carriers; its interchanges, turn-backs and why it is offered; its length.
+    expect(shortest).toHaveAccessibleName("BNSF · UP 1 interchange · shortest · no turn-backs 839 km");
+    // The result card under them is the selected route: its length, carriers and interchanges.
+    expect(screen.getByRole("region", { name: "Route" })).toHaveTextContent(/1,046 km1 carrier · 0 interchanges · 1 turn-back/);
     expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
     expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE, turnAtStops: false });
@@ -88,41 +97,47 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Click the map" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
     expect(await within(stopRows()[0]).findByDisplayValue("TEMPLE, TX wye")).toBeInTheDocument();
-    await waitFor(() => expect(routeRows()).toHaveLength(1));
+    await waitFor(() => expect(routeCount()).toBe(1));
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
     expect(stopRows()).toHaveLength(0);
-    await waitFor(() => expect(routeRows()).toHaveLength(2));
+    await waitFor(() => expect(routeCount()).toBe(2));
     await user.click(screen.getByRole("button", { name: "Redo route change" }));
     await waitFor(() => expect(stopRows()).toHaveLength(1));
   });
 
-  it("where two railroads meet, the stop offers the next carrier: Router's pick | BNSF | UP; the choice is sent, and Undo puts Router's pick back", async () => {
+  it("where two railroads meet, Route options offers the carrier from there: a click goes Router's pick → BNSF → UP → Router's pick; the choice is sent and summed up, and Undo puts it back", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    const lines = await screen.findByRole("radiogroup", { name: "Next carrier at Stop 1" });
-    expect(within(lines).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Router's pick", "BNSF", "UP"]);
-    expect(within(lines).getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+    await waitFor(() => expect(stopRows()).toHaveLength(1));
+    const options = await routeOptions(user);
+    const carrier = () => within(options).getByRole("button", { name: /^Carrier from TEMPLE, TX wye/ });
+    expect(await within(options).findByRole("button", { name: "Carrier from TEMPLE, TX wye: Router's pick" })).toBeInTheDocument();
 
-    await user.click(within(lines).getByRole("radio", { name: "UP" }));
+    await user.click(carrier());
+    expect(carrier()).toHaveAccessibleName("Carrier from TEMPLE, TX wye: BNSF");
+    await user.click(carrier());
+    expect(carrier()).toHaveAccessibleName("Carrier from TEMPLE, TX wye: UP");
     await waitFor(() => expect(fake.state.lastPlan?.places[1]).toEqual({ kind: "node", fraId: 358070, railroad: "UP" }));
-    expect(screen.getByRole("radio", { name: "UP" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("button", { name: /^Route options/ }));
+    expect(screen.getByRole("button", { name: /^Route options/ })).toHaveTextContent("Class I · Passenger · UP from TEMPLE, TX wye");
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(screen.getByRole("radio", { name: "Router's pick" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: /^Route options/ })).toHaveTextContent("Class I · Passenger · BNSF from TEMPLE, TX wye");
   });
 
-  it("shows the chosen route as a route string, carriers and junctions only", async () => {
+  it("shows the chosen route as a row per carrier, from where to where; Copy route string copies its carriers and junctions", async () => {
     const user = userEvent.setup();
+    const copied: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => void copied.push(text) }, configurable: true });
     await planTempleToLittleRock(user);
-    const string = screen.getByRole("region", { name: "Route string" });
-    expect(string).toHaveTextContent("BNSF");
-    expect(string).not.toHaveTextContent("–");
-
     await user.click(routeRows()[1]);
-    await waitFor(() => expect(screen.getByRole("region", { name: "Route string" })).toHaveTextContent("BNSF – [Fort Worth, TX] – UP"));
-    expect(within(screen.getByRole("list", { name: "Sections" })).getByText("router's pick")).toBeInTheDocument();
+    const legs = () => within(screen.getByRole("list", { name: "Sections" })).getAllByRole("button");
+    await waitFor(() => expect(legs().map((leg) => leg.textContent)).toEqual([expect.stringMatching(/^BNSFTemple → Fort Worth/), expect.stringMatching(/^UPFort Worth → North Little Rock/)]));
+    await user.click(screen.getByRole("button", { name: "Route actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Copy route string" }));
+    expect(copied).toEqual(["BNSF – [Fort Worth, TX] – UP"]);
   });
 
   it("Save saves a route with a railroad change; Reverse route flips the ends", async () => {
@@ -130,16 +145,15 @@ describe("Route planner", () => {
     openPage("/route");
     await user.type(field("Start"), "Kansas City, MO{Enter}");
     await user.type(field("Destination"), "Chicago, IL{Enter}");
-    const string = await screen.findByRole("region", { name: "Route string" });
-    expect(string).toHaveTextContent(/^BNSF – \[\d+ km from [^\]]+\] – CN/);
-
-    const save = screen.getByRole("form", { name: "Save route" });
-    await user.click(within(save).getByRole("button", { name: "Save" }));
+    await screen.findByRole("region", { name: "Route" });
+    await user.click(screen.getByRole("button", { name: "Route actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Save route" }));
     await waitFor(() => expect(fake.state.savedRoutes).toHaveLength(1));
     expect(fake.state.savedRoutes[0].routeString).toMatch(/^BNSF-\[\d+ km from [^\]]+\]-CN$/);
 
     const there = fake.state.lastPlan;
-    await user.click(screen.getByRole("button", { name: "Reverse route" }));
+    await user.click(screen.getByRole("button", { name: "Route actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Reverse route" }));
     expect(field("Start")).toHaveValue("Chicago, IL");
     expect(field("Destination")).toHaveValue("Kansas City, MO");
     await waitFor(() => expect(fake.state.lastPlan?.places).toEqual(there?.places.toReversed()));
@@ -148,32 +162,35 @@ describe("Route planner", () => {
   it("Class I is always on; ticking Short lines plans again with short lines included, and Undo unticks it", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
-    const track = screen.getByRole("group", { name: "Route options" });
-    expect(within(track).getAllByRole("checkbox").map((box) => [box.parentElement?.textContent, (box as HTMLInputElement).checked])).toEqual([
-      ["Class I", true],
-      ["Regional", false],
-      ["Short lines", false],
-      ["Passenger", true],
-      ["Turn at stops", false],
+    // Folded, the card says what is on.
+    expect(screen.getByRole("button", { name: /^Route options/ })).toHaveTextContent("Route optionsClass I · Passenger");
+    const track = await routeOptions(user);
+    expect(track).toHaveTextContent(/Class I linesAlways on/);
+    expect(within(track).getAllByRole("switch").map((on) => [on.textContent, on.getAttribute("aria-checked")])).toEqual([
+      ["Regional lines", "false"],
+      ["Short lines", "false"],
+      ["Passenger lines", "true"],
+      ["Turn at stops", "false"],
     ]);
-    expect(within(track).getByRole("checkbox", { name: "Class I" })).toBeDisabled();
 
-    await user.click(within(track).getByRole("checkbox", { name: "Short lines" }));
+    await user.click(within(track).getByRole("switch", { name: "Short lines" }));
     await waitFor(() => expect(fake.state.lastPlan?.include).toEqual({ regional: false, shortLine: true, passenger: true }));
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(within(track).getByRole("checkbox", { name: "Short lines" })).not.toBeChecked();
+    expect(within(track).getByRole("switch", { name: "Short lines" })).toHaveAttribute("aria-checked", "false");
   });
 
   it("Turn at stops plans again with turning at stops, and Undo unticks it", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
-    const turn = within(screen.getByRole("group", { name: "Route options" })).getByRole("checkbox", { name: "Turn at stops" });
-    expect(turn.parentElement).toHaveAttribute("title", "Turn at stops: the route may leave a stop in either direction");
+    const turn = within(await routeOptions(user)).getByRole("switch", { name: "Turn at stops" });
+    expect(turn).toHaveAttribute("title", "The route may leave a stop in either direction");
     await user.click(turn);
     await waitFor(() => expect(fake.state.lastPlan?.turnAtStops).toBe(true));
+    await user.click(screen.getByRole("button", { name: /^Route options/ }));
+    expect(screen.getByRole("button", { name: /^Route options/ })).toHaveTextContent("Class I · Passenger · Turn at stops");
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
-    expect(turn).not.toBeChecked();
+    expect(screen.getByRole("button", { name: /^Route options/ })).toHaveTextContent(/Class I · Passenger$/);
   });
 
   it("Distances in the layers card shows every distance in miles, and back in km; this browser keeps the choice", async () => {
@@ -186,8 +203,8 @@ describe("Route planner", () => {
 
     await user.click(within(distances).getByRole("radio", { name: "mi" }));
     expect(localStorage.getItem("visnarn.distance-unit")).toBe("mi");
-    expect(routeRows()[0]).toHaveTextContent(/^650 mi/);
-    expect(routeRows()[1]).toHaveTextContent(/^521 mi/);
+    expect(routeRows()[0]).toHaveTextContent(/650 mi$/);
+    expect(routeRows()[1]).toHaveTextContent(/521 mi$/);
     expect(screen.getByRole("button", { name: "Route 650 mi, selected" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Route −129 mi · 1 more interchange" })).toBeInTheDocument();
     const sections = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem");
@@ -195,7 +212,7 @@ describe("Route planner", () => {
     expect(sections.filter((row) => /\d km$/.test(row.textContent ?? ""))).toHaveLength(0);
 
     await user.click(within(distances).getByRole("radio", { name: "km" }));
-    expect(routeRows()[0]).toHaveTextContent(/^1,046 km/);
+    expect(routeRows()[0]).toHaveTextContent(/1,046 km$/);
     expect(localStorage.getItem("visnarn.distance-unit")).toBe("km");
 
     // The card is a popover: Escape closes it.
@@ -242,8 +259,8 @@ describe("Route planner", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    await waitFor(() => expect(routeRows()).toHaveLength(1));
-    expect(routeRows()[0]).not.toHaveTextContent("turn-back");
+    await waitFor(() => expect(routeCount()).toBe(1));
+    expect(screen.getByRole("region", { name: "Route" })).not.toHaveTextContent("turn-back");
     expect(screen.queryByRole("button", { name: /^Turn-back at/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Undo route change" }));
@@ -280,32 +297,41 @@ describe("Route planner", () => {
   it("saves a route, lists it, saves a change, reopens it from the list and deletes it after a confirm", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
-    const save = screen.getByRole("form", { name: "Save route" });
-    expect(within(save).getByRole("textbox", { name: "Route name" })).toHaveValue("Temple → North Little Rock");
-    await user.click(within(save).getByRole("button", { name: "Save" }));
+    const menu = async (item: string) => {
+      await user.click(screen.getByRole("button", { name: "Route actions" }));
+      return screen.getByRole("menuitem", { name: item });
+    };
+    await user.click(await menu("Save route"));
 
     await waitFor(() => expect(currentPath()).toBe("/route/saved/route-1"));
-    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
-    expect(screen.getByRole("link", { name: "Temple → North Little Rock" })).toHaveAttribute("aria-current", "page");
+    expect(fake.state.savedRoutes[0].name).toBe("Temple → North Little Rock");
+    await waitFor(async () => expect(await menu("Saved")).toBeDisabled());
+    await user.keyboard("{Escape}");
+    // The open route is renamed in the saved list.
+    await user.click(screen.getByRole("button", { name: /^Saved routes/ }));
+    const name = screen.getByRole("textbox", { name: "Route name" });
+    expect(name).toHaveValue("Temple → North Little Rock");
+    await user.clear(name);
+    await user.type(name, "Temple run{Enter}");
+    await waitFor(() => expect(fake.state.savedRoutes[0].name).toBe("Temple run"));
 
     // A change to the plan makes it worth saving again.
     await user.click(screen.getByRole("button", { name: "Click the map" }));
-    await waitFor(() => expect(routeRows()).toHaveLength(1));
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(routeCount()).toBe(1));
+    await user.click(await menu("Save route"));
     await waitFor(() => expect(fake.state.savedRoutes[0].plan.places).toHaveLength(3));
-    expect(await screen.findByRole("button", { name: "Saved" })).toBeDisabled();
 
     // New starts an empty plan; the list opens the saved one again, stops and all.
-    await user.click(screen.getByRole("button", { name: "New" }));
+    await user.click(await menu("New route"));
     expect(currentPath()).toBe("/route");
     await waitFor(() => expect(field("Start")).toHaveValue(""));
-    await user.click(screen.getByRole("link", { name: "Temple → North Little Rock" }));
+    await user.click(screen.getByRole("link", { name: "Temple run" }));
     expect(currentPath()).toBe("/route/saved/route-1");
     await waitFor(() => expect(stopRows()).toHaveLength(1));
     expect(field("Start")).toHaveValue("Temple, TX");
 
-    await user.click(screen.getByRole("button", { name: "Delete Temple → North Little Rock" }));
-    const confirm = screen.getByRole("group", { name: "Delete Temple → North Little Rock" });
+    await user.click(screen.getByRole("button", { name: "Delete Temple run" }));
+    const confirm = screen.getByRole("group", { name: "Delete Temple run" });
     expect(within(confirm).getByRole("button", { name: "Keep" })).toHaveFocus();
     await user.click(within(confirm).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(fake.state.savedRoutes).toEqual([]));
@@ -332,7 +358,9 @@ describe("Route planner", () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: "Pick on the map: Start" }));
-    expect(hint()).toHaveTextContent("Click the map to set the start.");
+    expect(hint()).toHaveTextContent("Click the map to set Start · Esc to cancel");
+    // On screen the pressed ⌖ shows it, and the crosshair on the map.
+    expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "true");
     await user.keyboard("{Escape}");
     expect(screen.getByRole("button", { name: "Pick on the map: Start" })).toHaveAttribute("aria-pressed", "false");
     await user.click(screen.getByRole("button", { name: "Pick on the map: Start" }));
@@ -383,7 +411,7 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Add stop" }));
     expect(placeRows()).toHaveLength(4);
     expect(screen.getByRole("button", { name: "Pick on the map: Stop 2" })).toHaveAttribute("aria-pressed", "true");
-    expect(hint()).toHaveTextContent("Click the map to set stop 2.");
+    expect(hint()).toHaveTextContent("Click the map to set Stop 2 · Esc to cancel");
     await user.click(screen.getByRole("button", { name: "Remove Stop 2" }));
     expect(placeRows()).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Remove Stop 1" }));
