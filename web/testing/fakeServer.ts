@@ -21,6 +21,8 @@ export interface FakeState {
   lastPlan: Plan | null;
   /** Answer every request with this error instead (the server is down). */
   down: boolean;
+  /** The public site: the page shows no control that changes stored data. */
+  readOnly: boolean;
   nextId: number;
 }
 
@@ -267,7 +269,7 @@ class HttpError extends Error {
 const json = (status: number, body: unknown) => new Response(body === undefined ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 export function createFakeState(options: { seed?: "example" | "empty" } = {}): FakeState {
-  const state: FakeState = { shops: [], savedRoutes: [], lastPlan: null, down: false, nextId: 1 };
+  const state: FakeState = { shops: [], savedRoutes: [], lastPlan: null, down: false, readOnly: false, nextId: 1 };
   if (options.seed === "empty") return state;
   for (const [i, shop] of EXAMPLE_SHOPS.entries()) {
     const view = shopView(state, `shop-ex-${i + 1}`, { name: shop.name, code: shop.code, location: { kind: "coord", lon: shop.at[0], lat: shop.at[1] }, links: [] });
@@ -286,6 +288,7 @@ function handle(state: FakeState, method: string, url: URL, body: unknown): unkn
   const route = `${method} ${path}`;
   const anyBody = body as Record<string, unknown>;
 
+  if (route === "GET /api/site") return { readOnly: state.readOnly };
   if (route === "GET /api/places/suggest") return suggest(state, q.get("q") ?? "", (q.get("role") ?? "position") as PlaceRole);
   if (route === "POST /api/places/resolve") return resolve(state, anyBody.ref as PlaceRef, anyBody.role as PlaceRole);
   if (route === "GET /api/places/nearest") return nearestNode(Number(q.get("lon")), Number(q.get("lat")), Number(q.get("withinKm")));

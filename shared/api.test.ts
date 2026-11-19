@@ -1,25 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { routeMatcher, urlFor, type Route } from "./api.ts";
+import { CHANGES_DATA, routeMatcher, urlFor, type Route } from "./api.ts";
 
-/** Every route of the contract; a route added to `Api` and missing here does not compile. */
-const EVERY_ROUTE: Record<Route, true> = {
-  "GET /api/places/suggest": true,
-  "POST /api/places/resolve": true,
-  "GET /api/places/nearest": true,
-  "POST /api/places/links": true,
-  "GET /api/shops": true,
-  "POST /api/shops": true,
-  "PUT /api/shops/:shopId": true,
-  "DELETE /api/shops/:shopId": true,
-  "POST /api/shops/import": true,
-  "POST /api/route": true,
-  "GET /api/saved-routes": true,
-  "POST /api/saved-routes": true,
-  "PUT /api/saved-routes/:routeId": true,
-  "DELETE /api/saved-routes/:routeId": true,
-  "POST /api/track": true,
-};
-const ROUTES = Object.keys(EVERY_ROUTE) as Route[];
+/** Every route of the contract: CHANGES_DATA names each one, or does not compile. */
+const ROUTES = Object.keys(CHANGES_DATA) as Route[];
 
 /** Awkward values on purpose: a slash, a space, a percent sign and non-ASCII letters must survive the trip. */
 const PARAM_VALUES: Record<string, string> = { shopId: "EX/NLR 01", routeId: "r%7 é" };

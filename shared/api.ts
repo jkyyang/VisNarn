@@ -18,6 +18,9 @@ import type { Plan, PlannedRoute, SavedRoute, SavedRouteDraft } from "./plans.ts
 type Endpoint<Res, Body = undefined, Query = undefined> = { res: Res; body: Body; query: Query };
 
 export interface Api {
+  /** Where the page runs: on the public site (`readOnly`) nothing stored can be changed without the owner's token. */
+  "GET /api/site": Endpoint<{ readOnly: boolean }>;
+
   /** Autocomplete for a place input: Your shops and city names that match. */
   "GET /api/places/suggest": Endpoint<PlaceSuggestion[], undefined, { q: string; role: PlaceRole }>;
   /** What one place means on the network: "Found on the network · served by BNSF and UP". */
@@ -54,6 +57,32 @@ export interface Api {
 
 export type Route = keyof Api;
 export type Res<R extends Route> = Api[R]["res"];
+
+/**
+ * Whether each route changes stored data. The others only read or compute: four of them are POSTs because their
+ * input is a document. On the public site a change needs the owner's token.
+ */
+export const CHANGES_DATA = {
+  "GET /api/site": false,
+  "GET /api/places/suggest": false,
+  "POST /api/places/resolve": false,
+  "GET /api/places/nearest": false,
+  "POST /api/places/links": false,
+  "GET /api/shops": false,
+  "POST /api/shops": true,
+  "PUT /api/shops/:shopId": true,
+  "DELETE /api/shops/:shopId": true,
+  "POST /api/shops/import": true,
+  "POST /api/route": false,
+  "GET /api/saved-routes": false,
+  "POST /api/saved-routes": true,
+  "PUT /api/saved-routes/:routeId": true,
+  "DELETE /api/saved-routes/:routeId": true,
+  "POST /api/track": false,
+} as const satisfies Record<Route, boolean>;
+
+export type WriteRoute = { [R in Route]: (typeof CHANGES_DATA)[R] extends true ? R : never }[Route];
+export type ReadRoute = Exclude<Route, WriteRoute>;
 
 type PathOf<R> = R extends `${string} ${infer Path}` ? Path : never;
 type ParamNames<Path> = Path extends `${string}:${infer Name}/${infer Rest}`

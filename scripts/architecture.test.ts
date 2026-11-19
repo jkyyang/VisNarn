@@ -76,7 +76,7 @@ describe("import rules", () => {
 
   it("only server/store/postgres.ts talks to the database, and only server/http/serve.ts speaks HTTP", () => {
     expect(importers((_t, specifier) => ["pg", "@electric-sql/pglite"].includes(specifier), (path) => path === "server/store/postgres.ts" || isTest(path))).toEqual([]);
-    expect(importers((_t, specifier) => specifier === "node:http", (path) => path === "server/http/serve.ts")).toEqual([]);
+    expect(importers((_t, specifier) => specifier === "node:http", (path) => path === "server/http/serve.ts" || isTest(path))).toEqual([]);
   });
 
   it("only server/http and web/data know the HTTP contract", () => {

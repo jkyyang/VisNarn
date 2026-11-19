@@ -100,6 +100,7 @@ describe("server", () => {
       const draft: SavedRouteDraft = { name: "EXAMPLE smoke", plan: { places: [text("Taylor, TX"), text("Waco, TX")], include: DEFAULT_INCLUDE, turnAtStops: false }, option: null, routeString: "BNSF" };
       // Keyed by Route: a route added to the contract without a call here does not compile.
       const calls: { [R in Route]: () => Promise<Res<R>> } = {
+        "GET /api/site": () => s.api("GET /api/site"),
         "GET /api/places/suggest": () => s.api("GET /api/places/suggest", { query: { q: "temple", role: "position" } }),
         "POST /api/places/resolve": () => s.api("POST /api/places/resolve", { body: { ref: text("Temple, TX"), role: "position" } }),
         "GET /api/places/nearest": () => s.api("GET /api/places/nearest", { query: { lon: -97.34, lat: 31.09, withinKm: 5 } }),

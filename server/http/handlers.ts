@@ -14,11 +14,15 @@ export interface HandlerContext {
   app: App;
   /** Aborted when the browser gives up on the request (a newer plan replaced it). */
   signal: AbortSignal;
+  /** On the public site: nothing stored changes without the owner's token. */
+  readOnly: boolean;
 }
 
 export type Handlers = { [R in Route]: (request: Request<R>, context: HandlerContext) => Res<R> | Promise<Res<R>> };
 
 export const handlers: Handlers = {
+  "GET /api/site": (_request, { readOnly }) => ({ readOnly }),
+
   "GET /api/places/suggest": ({ query }, { app }) => app.places.suggest(query.q, query.role, SUGGESTIONS_SHOWN),
   "POST /api/places/resolve": ({ body }, { app }) => app.places.resolve(body.ref, body.role),
   "GET /api/places/nearest": ({ query }, { app }) => app.places.nearest(query.lon, query.lat, query.withinKm),

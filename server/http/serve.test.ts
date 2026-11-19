@@ -3,14 +3,15 @@
  * Host and Origin headers can be anything a hostile page could send.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { connect } from "node:net";
+import { createServer } from "node:http";
+import { connect, type AddressInfo } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import type { App } from "../app.ts";
-import { serve, type Server } from "./serve.ts";
+import { handler, serve, type Server } from "./serve.ts";
 
 interface Answer {
   status: number;
@@ -135,6 +136,40 @@ describe("serve: local only", () => {
     for (const answer of [await raw(port, "GET", "/api/shops"), await raw(port, "GET", "/api/nothing"), await raw(port, "DELETE", "/api/shops/gone")]) {
       expect(answer.headers["cache-control"]).toBe("no-store");
     }
+  });
+});
+
+describe("handler: the public site", () => {
+  const TOKEN = "EXAMPLE-write-token";
+  const site = createServer(handler(fakeApp, { writeToken: TOKEN }));
+  let sitePort: number;
+  beforeAll(() => new Promise<void>((done) => site.listen(0, "127.0.0.1", () => ((sitePort = (site.address() as AddressInfo).port), done()))));
+  afterAll(() => new Promise<void>((done) => site.close(() => done())));
+
+  it("says it is read-only; the laptop says it is not", async () => {
+    expect(JSON.parse((await raw(sitePort, "GET", "/api/site")).body)).toEqual({ readOnly: true });
+    expect(JSON.parse((await raw(port, "GET", "/api/site")).body)).toEqual({ readOnly: false });
+  });
+
+  it("reads freely, and lets a change in only with the owner's token", async () => {
+    const body = JSON.stringify(DRAFT);
+    expect((await raw(sitePort, "GET", "/api/shops")).status).toBe(200);
+    for (const token of [{}, { "x-visnarn-write-token": "wrong" }, { "x-visnarn-write-token": "" }] as Record<string, string>[]) {
+      const refused = await raw(sitePort, "POST", "/api/saved-routes", json(token), body);
+      expect(refused.status).toBe(403);
+      expect(JSON.parse(refused.body).error.message).toBe("This site is read-only.");
+      expect((await raw(sitePort, "DELETE", "/api/shops/gone", token)).status).toBe(403);
+    }
+    expect((await raw(sitePort, "POST", "/api/saved-routes", json({ "x-visnarn-write-token": TOKEN }), body)).status).toBe(200);
+    expect((await raw(sitePort, "DELETE", "/api/shops/gone", { "x-visnarn-write-token": TOKEN })).status).toBe(404);
+  });
+
+  it("with no token set, lets no change in", async () => {
+    const closed = createServer(handler(fakeApp, { writeToken: "" }));
+    await new Promise<void>((done) => closed.listen(0, "127.0.0.1", () => done()));
+    const answer = await raw((closed.address() as AddressInfo).port, "DELETE", "/api/shops/gone", { "x-visnarn-write-token": "" });
+    await new Promise<void>((done) => closed.close(() => done()));
+    expect(answer.status).toBe(403);
   });
 });
 

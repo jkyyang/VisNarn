@@ -11,13 +11,9 @@
  *   one arrives, and the superseded request is aborted (the server then drops the routing work).
  */
 import { useCallback, useRef, useSyncExternalStore } from "react";
-import { urlFor, type ApiErrorBody, type Request, type RequestArgs, type Res, type Route } from "../../shared/api.ts";
+import { urlFor, type ApiErrorBody, type ReadRoute, type Request, type RequestArgs, type Res, type Route, type WriteRoute } from "../../shared/api.ts";
 import { APP_ERROR_KINDS, AppError } from "../../shared/app.ts";
 import { createCache } from "../../shared/cache.ts";
-
-/** Routes that change nothing on the server. Four of them are POSTs because their input is a document. */
-export type ReadRoute = Extract<Route, `GET ${string}` | "POST /api/route" | "POST /api/places/resolve" | "POST /api/places/links" | "POST /api/track">;
-export type WriteRoute = Exclude<Route, ReadRoute>;
 
 export type QueryState<T> =
   /** Nothing asked: the request is null. */

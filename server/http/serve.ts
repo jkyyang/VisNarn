@@ -7,10 +7,13 @@
  *   marks as sent from another site is refused unless it opens the page in a window: this covers every
  *   path, /api and the rest, because in development Vite serves any file it can read (the database too);
  * - a body must be sent as application/json, which a form or a plain cross-site request cannot do;
- * - answers are never cached and request bodies are never logged.
+ * - answers are never cached and request bodies are never logged;
+ * - given a `writeToken` (the public site, ../vercel.ts), a request that changes stored data must carry it in the
+ *   `x-visnarn-write-token` header; everything else stays open.
  * On this laptop, where there is no login, `serve` also wants the Host header to name the loopback address and
  * this port (a page on another site cannot reach the server by pointing its own domain name at 127.0.0.1: "DNS rebinding").
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -18,7 +21,7 @@ import type { AddressInfo, Socket } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ViteDevServer } from "vite";
-import { routeMatcher, STATUS_OF, type ApiErrorBody, type Route } from "../../shared/api.ts";
+import { CHANGES_DATA, routeMatcher, STATUS_OF, type ApiErrorBody, type Route } from "../../shared/api.ts";
 import { AppError } from "../../shared/app.ts";
 import type { App } from "../app.ts";
 import { LOOPBACK } from "../config.ts";
@@ -81,9 +84,22 @@ function fromAnotherPage(req: IncomingMessage): boolean {
   return site !== undefined && site !== "same-origin" && site !== "none" && req.headers["sec-fetch-mode"] !== "navigate";
 }
 
-/** The API, and `page` for every other path. A crash is answered with 500 and logged, never the request body. */
-export function handler(app: App, page: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void> = apiOnly): Respond {
+/** The same text, compared in constant time. An empty secret matches nothing. */
+function sameSecret(given: unknown, secret: string): boolean {
+  const hash = (text: string) => createHash("sha256").update(text).digest();
+  return secret !== "" && typeof given === "string" && timingSafeEqual(hash(given), hash(secret));
+}
+
+/**
+ * The API, and `page` for every other path. A crash is answered with 500 and logged, never the request body.
+ * `writeToken`: on the public site, what a change to stored data must carry ("" when none is set: no change is let in).
+ */
+export function handler(
+  app: App,
+  { page = apiOnly, writeToken = null }: { page?: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void>; writeToken?: string | null } = {},
+): Respond {
   const match = routeMatcher(Object.keys(handlers) as Route[]);
+  const readOnly = writeToken !== null;
 
   async function respond(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -109,6 +125,10 @@ export function handler(app: App, page: (req: IncomingMessage, res: ServerRespon
       req.resume();
       return sendJson(res, 404, envelope("not-found", `There is no ${method} ${url.pathname}.`));
     }
+    if (readOnly && CHANGES_DATA[found.route] && !sameSecret(req.headers["x-visnarn-write-token"], writeToken)) {
+      req.resume();
+      return sendJson(res, 403, envelope("invalid", "This site is read-only."));
+    }
     const controller = new AbortController();
     res.on("close", () => {
       if (!res.writableFinished) controller.abort(new Error("The browser stopped waiting for this answer."));
@@ -121,7 +141,7 @@ export function handler(app: App, page: (req: IncomingMessage, res: ServerRespon
       if (readBody) request.body = readBody(await jsonBody(req));
       else req.resume();
       const handler = handlers[found.route] as (request: unknown, context: HandlerContext) => unknown;
-      const answer = await handler(request, { app, signal: controller.signal });
+      const answer = await handler(request, { app, signal: controller.signal, readOnly });
       sendJson(res, 200, answer ?? null);
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -164,7 +184,7 @@ export async function serve(app: App, options: { port: number; webDir: string | 
     if (webRoot) return staticFile(req, res, pathname, webRoot);
     return apiOnly(req, res);
   };
-  const respond = handler(app, page);
+  const respond = handler(app, { page });
 
   const port = () => (server.address() as AddressInfo).port;
   const loopbackHost = (host: string | undefined) => {
