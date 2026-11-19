@@ -47,7 +47,8 @@ test("the map pans a margin past North America and no further, and stops zooming
 
   // Pulled towards the South Atlantic: the bottom edge stops at 5° N, the right edge at 20° W.
   await zoomOutAndDrag(page, -3000, -3000);
-  const southEast = await placeAt(page, 0.98, 0.98);
+  // The bottom row, just left of the credits button in the corner.
+  const southEast = await placeAt(page, 0.955, 0.98);
   expect(southEast.lat).toBeGreaterThanOrEqual(SOUTH - SLACK_DEG);
   expect(southEast.lon).toBeLessThanOrEqual(EAST + SLACK_DEG);
   // Fully zoomed out the screen spans at most the side limits: the world stays big.

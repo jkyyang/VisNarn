@@ -23,7 +23,7 @@ async function openMap(now: Date) {
   vi.setSystemTime(now);
   render(
     <MapStageProvider network={null}>
-      <MapStage coveredLeft={0} />
+      <MapStage cameraLeft={16} />
     </MapStageProvider>,
   );
   const layersButton = await screen.findByRole("button", { name: /^Map layers/ });

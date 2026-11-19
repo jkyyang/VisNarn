@@ -6,14 +6,15 @@
 import type { Locator, Page } from "@playwright/test";
 import type { NetworkNode } from "../../shared/places.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
-import { DEFAULT_INCLUDE, RAILROADS } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
 import { clickMapCentre, expect, expectMapCanvas, freeMapCentre, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
 
 const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).getByRole("button");
 /** Every place is a row: start, stops, destination. */
 const placeRows = (page: Page): Locator => page.getByRole("region", { name: "Places" }).getByRole("listitem");
-const legend = (page: Page): Locator => page.getByRole("list", { name: "Railroad colors" }).getByRole("listitem");
 const pressedRow = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).locator('[aria-pressed="true"]');
+/** The railroads the selected route's row names, each with its colour. */
+const selectedRailroads = (page: Page): Locator => pressedRow(page).locator("[data-railroad]");
 
 /** The next routing answer the page gets. */
 const nextRoute = (page: Page) =>
@@ -30,7 +31,7 @@ async function clickTemple(page: Page): Promise<PlannedRoute> {
 }
 
 test.describe("Route planner", () => {
-  test("a typed start and destination give a route and its legend", async ({ page }) => {
+  test("a typed start and destination give a route, its row naming its railroads", async ({ page }) => {
     await page.goto("/route");
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
     await expect(page.getByRole("status").filter({ hasText: "Click the start on the map, or type it." })).toBeVisible();
@@ -41,7 +42,7 @@ test.describe("Route planner", () => {
     await expect(routeRows(page)).toHaveCount(planned.outcome === "routed" ? planned.routes.length : 0);
     await expect(routeRows(page).first()).toHaveAttribute("aria-pressed", "true");
     const railroads = planned.outcome === "routed" ? planned.routes[0].railroads : [];
-    await expect(legend(page)).toHaveText(RAILROADS.filter((railroad) => railroads.includes(railroad)));
+    await expect(selectedRailroads(page)).toHaveText(railroads.map((railroad) => new RegExp(`^${railroad}$`, "i")));
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("Taylor");
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("North Little Rock");
   });
@@ -84,21 +85,25 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     await planRoute(page, "Taylor, TX", "North Little Rock, AR");
     const withStop = await clickTemple(page);
-    await page.getByRole("button", { name: "Fit whole route" }).click();
+    // Out of Temple, where the search box took the camera, back to the whole network.
+    await page.getByRole("button", { name: "Reset view to the whole network" }).click();
     await expect(placeRows(page)).toHaveCount(3);
     await expect(placeRows(page).nth(1).getByRole("combobox")).toHaveValue(/Temple/i);
     expect(withStop.outcome).toBe("routed");
 
-    // Every visible pill is clear of the others and of the turn-back discs.
-    const pills = page.locator(".route-pill");
-    await expect.poll(async () => pills.count()).toBeGreaterThan(1);
-    const boxes = (await Promise.all((await pills.all()).map((p) => p.boundingBox()))).filter((b) => b !== null);
-    const discs = (await Promise.all((await page.locator(".turn-mark").all()).map((p) => p.boundingBox()))).filter((b) => b !== null);
-    const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-    for (const [i, a] of boxes.entries()) {
-      for (const b of boxes.slice(i + 1)) expect(overlap(a, b)).toBe(false);
-      for (const d of discs) expect(overlap(a, d)).toBe(false);
-    }
+    // Once the marks have placed themselves for the new view (the frame after the camera's move ends),
+    // there are pills, and every one is clear of the others and of the turn-back discs. The boxes are
+    // read in one go, so a placement cannot slip in between.
+    const placement = () =>
+      page.evaluate(() => {
+        const shown = (selector: string) => [...document.querySelectorAll(selector)].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+        const pills = shown(".route-pill");
+        const discs = shown(".turn-mark");
+        const overlap = (a: DOMRect, b: DOMRect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+        const overlaps = pills.flatMap((a, i) => [...pills.slice(i + 1), ...discs].filter((b) => overlap(a, b))).length;
+        return { pills: pills.length > 1, overlaps };
+      });
+    await expect.poll(placement).toEqual({ pills: true, overlaps: 0 });
     await keepScreenshot(page, "route");
 
     // A pill click selects that route; it must not also reach the map and place a stop.
@@ -171,7 +176,7 @@ test.describe("Route planner", () => {
     await expect(network).toHaveAttribute("data-network-classes", "class_i short_line passenger");
     await expect(routeRows(page).first()).toContainText("Short line");
     await expect(page.getByRole("list", { name: "Sections" })).toContainText("UP → Short line");
-    await expect(legend(page)).toHaveText(["UP", "Short line"]);
+    await expect(selectedRailroads(page)).toHaveText(["UP", "Short line"]);
 
     await page.getByRole("textbox", { name: "Route name" }).fill("EXAMPLE Baton Rouge → Ville Platte");
     const save = page.getByRole("form", { name: "Save route" });
@@ -201,7 +206,6 @@ test.describe("Route planner", () => {
     await mark.hover();
     await expect(page.getByRole("tooltip")).toContainText(/yard track/);
     await expect(page.getByRole("tooltip")).toContainText(/ (N|NE|E|SE|S|SW|W|NW) → /);
-    await expect(legend(page).last()).toHaveText("↩Turn-back");
     await request.delete(`/api/saved-routes/${saved.id}`);
   });
 

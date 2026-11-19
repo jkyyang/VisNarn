@@ -47,18 +47,17 @@ test("Search Kansas City: the map centres on it, and Start makes it the planner'
 test.describe("on a phone", () => {
   test.use(PHONE);
 
-  test("the box runs across the top of the map, clear of the layers button and the legend", async ({ page }) => {
+  test("the box runs across the top of the map, clear of the layers button and the credits", async ({ page }) => {
     const card = await findCity(page, "Kansas City");
-    // The found card takes the legend's room on a phone: the legend is back once the card is closed.
     await card.getByRole("button", { name: "Close" }).click();
     const search = await page.locator(".map-search").boundingBox();
     const map = await mapRegion(page).boundingBox();
     const layers = await page.getByRole("button", { name: /^Map layers/ }).boundingBox();
-    const legend = await page.getByRole("list", { name: "Railroad colors" }).boundingBox();
-    if (!search || !map || !layers || !legend) throw new Error("Something is not on the page.");
+    const credits = await page.getByRole("button", { name: "Map credits" }).boundingBox();
+    if (!search || !map || !layers || !credits) throw new Error("Something is not on the page.");
     expect(search.width).toBeGreaterThan(map.width * 0.7);
     expect(search.x + search.width).toBeLessThanOrEqual(layers.x);
-    expect(search.y + search.height).toBeLessThanOrEqual(legend.y);
+    expect(search.y + search.height).toBeLessThanOrEqual(credits.y);
     await expectNoSideScroll(page);
     await keepScreenshot(page, "map-search-phone");
   });

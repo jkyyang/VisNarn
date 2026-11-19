@@ -1,31 +1,30 @@
 /**
- * The heavy half of the map: MapLibre, the deck.gl overlay, the route pills, the layer card, zoom,
- * fit, legend, the search box. Loaded lazily by ./MapStage.tsx, which is the only importer.
+ * The heavy half of the map: MapLibre, the deck.gl overlay, the route pills, the map controls and
+ * their Layers card, the credits, the search box. Loaded lazily by ./MapStage.tsx, which is the only importer.
  */
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { createPortal } from "react-dom";
-import MapGL, { AttributionControl, useControl, useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
+import MapGL, { useMap, type ViewStateChangeEvent } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
 import { NEAREST_MAX_KM, type PlaceSuggestion } from "../../shared/places.ts";
-import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, drawnClasses, type Railroad } from "../../shared/railroads.ts";
 import type { Mainline } from "../data/basemap.ts";
 import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
+import { Credits } from "./Credits.tsx";
 import { BasemapStyle, NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
 import { FoundPin } from "./FoundPin.tsx";
 import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
-import { Legend, legendFor } from "./Legend.tsx";
 import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
 import {
-  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES,
-  TILE_CACHE_MAX_TILES,
+  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM,
+  SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
 } from "./config.ts";
 import type { MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
@@ -38,6 +37,8 @@ export interface MapLayerChoice {
   tracks: boolean;
   /** Auto follows the clock at the map centre; Day and Night stay put. */
   light: LightMode;
+  /** The one carrier shown alone (Carriers in the Layers card); null: all of them. */
+  carrier: Railroad | null;
 }
 
 export interface MapCanvasProps {
@@ -52,22 +53,23 @@ export interface MapCanvasProps {
   /** Where the map centre is after each move, for the sun's position. */
   onCentre: (centre: LngLat) => void;
   /**
-   * How many px of the map the panel covers from the left: every fit and flight frames the rest. Given
+   * How many px of the map every fit, flight and reset keeps clear on the left, for the panel. Given
    * to each camera move, never set as the camera's padding: MapLibre keeps PAN_BOUNDS on the whole
    * canvas only, so a padded camera would show past them beside the panel.
    */
-  coveredLeft: number;
+  cameraLeft: number;
 }
 
-const NETWORK_ATTRIBUTION = "Rail network: BTS NTAD North American Rail Network";
-/** The whole network, in the part of the map the panel leaves free. */
-const initialView = (coveredLeft: number) => ({
+/** The whole network, right of `cameraLeft`: where the map opens, and where Reset view goes back to. */
+const networkView = (cameraLeft: number) => ({
   bounds: [
     [NETWORK_BOUNDS[0], NETWORK_BOUNDS[1]],
     [NETWORK_BOUNDS[2], NETWORK_BOUNDS[3]],
   ] as [[number, number], [number, number]],
-  fitBoundsOptions: { padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: INITIAL_PADDING_PX, left: INITIAL_PADDING_PX + coveredLeft } },
+  fitBoundsOptions: { padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: INITIAL_PADDING_PX, left: cameraLeft } },
 });
+
+const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Half-zoom steps: enough for the chevron spacings, without rebuilding layers on every frame of a zoom. */
 const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
@@ -76,48 +78,16 @@ const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
 /** Flies to one place when the screen asks for it, into the middle of the free map. Renders nothing; must be a child of the map. */
-function FlyTo({ focus, coveredLeft }: { focus: MapFocus | undefined; coveredLeft: number }) {
+function FlyTo({ focus, cameraLeft }: { focus: MapFocus | undefined; cameraLeft: number }) {
   const map = useMap().current;
   const key = focus?.kind === "place" ? `${focus.lon},${focus.lat},${focus.zoom}` : null;
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     // `essential`: the duration already follows reduced motion, and MapLibre's own fallback for it would drop the offset.
-    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [coveredLeft / 2, 0], duration: still ? 0 : FLY_MS, essential: true });
+    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [cameraLeft / 2, 0], duration: still() ? 0 : FLY_MS, essential: true });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
   }, [map, key]);
   return null;
-}
-
-/**
- * MapLibre opens a compact attribution at first and folds it only after the first drag. Open, it
- * lifts the legend above it, so it starts folded; the (i) button opens it.
- */
-function FoldAttribution() {
-  const map = useMap().current;
-  useEffect(() => {
-    if (!map) return;
-    const tryFold = () => {
-      const open = map.getContainer().querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show");
-      if (!open) return;
-      open.classList.remove("maplibregl-compact-show");
-      map.off("idle", tryFold);
-    };
-    map.on("idle", tryFold);
-    tryFold();
-    return () => void map.off("idle", tryFold);
-  }, [map]);
-  return null;
-}
-
-/**
- * The legend as a control in the map's bottom-left corner, added after the credits: MapLibre stacks
- * the controls of a corner, so the legend sits above the credits and the two never overlap.
- */
-function CornerLegend(props: Parameters<typeof Legend>[0]) {
-  const [box] = useState(() => Object.assign(document.createElement("div"), { className: "maplibregl-ctrl" }));
-  useControl(() => ({ onAdd: () => box, onRemove: () => box.remove() }), { position: "bottom-left" });
-  return createPortal(<Legend {...props} />, box);
 }
 
 /**
@@ -138,18 +108,22 @@ function FreeSpareTextures() {
   return null;
 }
 
-/** The controls need the map instance for zoom, so they live inside the map. */
-function Controls(props: { canvas: MapCanvasProps; onFit: () => void }): ReactElement {
+/** The controls need the map instance for zoom and reset, so they live inside the map. */
+function Controls(props: { canvas: MapCanvasProps; onPreview: (carrier: Railroad | null) => void }): ReactElement {
   const map = useMap().current;
-  const { content, layers, onLayers } = props.canvas;
+  const { layers, onLayers, cameraLeft } = props.canvas;
+  const reset = () => {
+    const { bounds, fitBoundsOptions } = networkView(cameraLeft);
+    map?.fitBounds(bounds, { ...fitBoundsOptions, duration: still() ? 0 : FIT_MS });
+  };
   return (
     <MapControls
       layers={layers}
       onLayers={onLayers}
       look={props.canvas.look}
+      onPreview={props.onPreview}
       onZoom={(step) => (step > 0 ? map?.zoomIn() : map?.zoomOut())}
-      onFit={props.onFit}
-      history={content?.history ?? null}
+      onReset={reset}
     />
   );
 }
@@ -162,7 +136,9 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
   const resolution = usePlace(chosen?.ref ?? null, "shop");
   const found = chosen && fresh(resolution);
-  const [fitNonce, setFitNonce] = useState(0);
+  const [preview, setPreview] = useState<Railroad | null>(null);
+  // The carrier in colour: the one the pointer rests on in the Carriers list, else the one shown alone; null: all alike.
+  const carrier = preview ?? layers.carrier;
   const given = content?.scene ?? null;
   // With Real tracks on, the routes follow the surveyed track and the real lines replace the
   // network where the tiles have them; with it off, both are drawn node to node, like the network layer.
@@ -174,6 +150,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const include = content?.include ?? DEFAULT_INCLUDE;
   const networkClasses = useMemo(() => (networkShown ? drawnClasses(include) : []), [networkShown, include]);
   const picking = !!content?.onPick;
+  const dragging = useRef(false);
   const latest = useRef(content);
   latest.current = content;
 
@@ -197,9 +174,15 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const [firstStyle] = useState(style);
 
   return (
-    <div className="map-canvas" ref={root} data-network={networkShown ? "shown" : "hidden"} data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}>
+    <div
+      className="map-canvas"
+      ref={root}
+      data-network={networkShown ? "shown" : "hidden"}
+      data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}
+      data-carrier={carrier ?? undefined}
+    >
       <MapGL
-        initialViewState={initialView(props.coveredLeft)}
+        initialViewState={networkView(props.cameraLeft)}
         maxBounds={PAN_BOUNDS}
         mapStyle={firstStyle}
         maxTileCacheSize={TILE_CACHE_MAX_TILES}
@@ -207,6 +190,8 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         // Every click places something, so a double click must not also zoom.
         doubleClickZoom={false}
         onMoveEnd={onMoveEnd}
+        onDragStart={() => (dragging.current = true)}
+        onDragEnd={() => (dragging.current = false)}
         onLoad={(event) => {
           setZoom(halfZoom(event.target.getZoom()));
           watchCamera(event.target);
@@ -216,9 +201,10 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <DeckOverlay
           layers={deckLayers}
           getTooltip={sceneTooltip}
-          // deck.gl sets the cursor of the map's canvas on every frame: a crosshair while a click places
-          // something, else none of its own, so MapLibre's grab and grabbing show through.
-          getCursor={() => (picking ? "crosshair" : "")}
+          // deck.gl sets the cursor of the map's canvas on every frame: grabbing while the map is dragged, a
+          // crosshair while a click places something, a pointer on what a click selects, else none of its
+          // own, so MapLibre's grab shows through.
+          getCursor={({ isHovering }) => (dragging.current ? "grabbing" : picking ? "crosshair" : isHovering ? "pointer" : "")}
           pickingRadius={DECK_PICK_RADIUS_PX}
           onClick={(info) => {
             const target = sceneTarget(info);
@@ -236,15 +222,13 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
         <BasemapStyle style={style} />
         <FreeSpareTextures />
-        <AttributionControl compact customAttribution={NETWORK_ATTRIBUTION} position="bottom-left" />
-        <CornerLegend {...legendFor(scene, networkClasses)} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
-        <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
-        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} coveredLeft={props.coveredLeft} />}
-        <FlyTo focus={content?.focus} coveredLeft={props.coveredLeft} />
-        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />
-        <Controls canvas={props} onFit={() => setFitNonce((n) => n + 1)} />
+        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} cameraLeft={props.cameraLeft} />}
+        <FlyTo focus={content?.focus} cameraLeft={props.cameraLeft} />
+        <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} cameraLeft={props.cameraLeft} />
+        <Controls canvas={props} onPreview={setPreview} />
+        <Credits />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}
         {content?.handles && <MapHandles handles={content.handles} />}
         {chosen && found?.ok && <FoundPin chosen={chosen} place={found.place} actions={content?.placeActions ?? []} onClose={() => setChosen(null)} />}

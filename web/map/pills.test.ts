@@ -26,7 +26,7 @@ describe("placePills", () => {
     expect(edge.box.left).toBeGreaterThanOrEqual(VIEW.left);
   });
 
-  it("keeps clear of pins and the legend", () => {
+  it("keeps clear of pins and the cards over the map", () => {
     const pin: Box = { left: 335, top: 260, right: 365, bottom: 340 };
     const [placed] = placePills([ask("a", [320, 300])], [pin], VIEW);
     expect(overlap(placed.box, pin)).toBe(false);

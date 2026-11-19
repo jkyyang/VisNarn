@@ -1,6 +1,6 @@
 /**
  * Where the route pills go on screen, as plain geometry: each pill takes the first of its anchors and
- * corners that keeps it on the map and clear of the route lines, the pins, the legend and the pills
+ * corners that keeps it on the map and clear of the route lines, the pins, the cards over the map and the pills
  * placed before it. A pill with no room is left out; its line and its row in the panel still select
  * the route. Also where a turn-back disc steps off a pin it would hide.
  */
@@ -40,7 +40,7 @@ export interface PillPlace {
 
 /** From the anchor to the pill's near corner, across and down, so the pill sits beside its line. Matches --pill-offset in styles.css. */
 const OFFSET_PX = 8;
-/** Air kept between a pill and a pin, the legend or another pill. */
+/** Air kept between a pill and a pin, a card over the map or another pill. */
 const CLEAR_PX = 4;
 /** Air kept between a pill and a route line's centre: half the selected route's 11 px casing, and a little. */
 const LINE_CLEAR_PX = 7;

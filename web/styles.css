@@ -549,6 +549,10 @@ input[aria-invalid="true"] {
 .app-header .segmented {
   flex: 0 1 180px;
 }
+.history-btns {
+  display: flex;
+  gap: 4px;
+}
 .server-note {
   margin-bottom: 12px;
 }
@@ -1196,7 +1200,7 @@ input[aria-invalid="true"] {
 .map:has(.map-handle.is-dragging) .maplibregl-canvas-container {
   cursor: grabbing;
 }
-/* Above the route pills and turn-back marks (z-index 3 to 5): an open layers card covers them. */
+/* Top right, one column: Layers, zoom, Reset view, Fullscreen. Over the route pills and turn-back marks (z-index 3 to 5). */
 .map-controls {
   position: absolute;
   z-index: 6;
@@ -1204,100 +1208,252 @@ input[aria-invalid="true"] {
   right: var(--inset);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 8px;
 }
+/* Inside the map, which has MapLibre's own font. */
+.map-controls,
+.layers-card,
+.credits-card {
+  font-family: var(--font);
+  font-size: var(--text-lg);
+  line-height: 1.35;
+}
+.map-glyph {
+  display: block;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.map-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--ctl);
+  height: var(--ctl);
+  padding: 0;
+  border-radius: var(--radius-ctl);
+  color: var(--text);
+  cursor: pointer;
+}
+/* Zoom in over zoom out in one glass group, a hairline between. */
 .ctl-group {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border-radius: var(--radius-ctl);
 }
-.map-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--ctl);
-  height: var(--ctl);
-  padding: 0;
+.ctl-group .map-btn {
+  width: 100%;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--text);
-  cursor: pointer;
 }
-.map-btn + .map-btn {
+.ctl-group .map-btn + .map-btn {
   border-top: var(--stroke-w) solid var(--stroke);
 }
-.map-btn:disabled {
-  cursor: default;
+/* A glass button keeps its glass under the hover tint. */
+@media (hover: hover) and (pointer: fine) {
+  .map-btn.glass:not([aria-expanded="true"]):hover,
+  .credits-btn:hover {
+    background: linear-gradient(var(--surface-2), var(--surface-2)), var(--surface);
+  }
+  .carrier-row:hover,
+  .show-all:hover {
+    background: var(--surface-2);
+  }
 }
-.map-btn:disabled svg {
-  opacity: 0.4;
-}
-.map-btn[aria-expanded="true"] {
+.map-controls .map-btn.glass[aria-expanded="true"] {
   background: var(--accent);
   color: var(--on-accent);
 }
-/* A popover under the search box and left of the buttons: opening it moves nothing and covers no button. */
+/* On Layers while one carrier is shown alone. */
+.layers-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease);
+}
+[data-filtered] > .layers-badge {
+  opacity: 1;
+}
+/* The Layers popover: left of its button, the top edges in line. Popovers lie over every other card on the map. */
 .layers-card {
   position: absolute;
-  top: calc(var(--ctl) + var(--inset));
-  right: calc(var(--ctl) + var(--inset));
+  z-index: 7;
+  top: var(--inset);
+  right: calc(var(--inset) + var(--ctl) + 8px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: 280px;
-  max-width: calc(var(--free-w) - var(--ctl) - var(--inset));
+  gap: 14px;
+  width: 264px;
+  max-width: calc(100% - 80px);
+  max-height: calc(100% - 2 * var(--inset));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
   transform-origin: top right;
+}
+.layers-label {
+  padding: 0 4px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
 }
 .choice-row {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.choice-row-label {
-  font-size: var(--text-sm);
-  color: var(--text-2);
-}
-/* A MapLibre control in the bottom-left corner, stacked above the credits (web/map/MapCanvas.tsx); both clear of the panel. */
-.maplibregl-ctrl-bottom-left {
-  left: calc(var(--panel-w) + var(--inset));
-}
-.maplibregl-ctrl-attrib {
-  font-size: var(--text-sm);
-}
-.legend {
-  padding: 8px 10px;
-  border-radius: var(--radius-ctl);
-  font-size: var(--text-sm);
-  font-weight: var(--weight);
-}
-/* As wide as what it lists: one railroad is one short row; all six wrap to three a row. */
-.legend-rr {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  max-width: 220px;
-}
-.legend-rr span {
-  display: flex;
-  align-items: center;
   gap: 6px;
 }
-.legend-line {
-  width: 14px;
-  height: 3px;
+.layers-card .segmented {
+  height: calc(var(--ctl) - var(--space));
+}
+.layers-card .segmented > * {
+  font-size: var(--text-md);
+  font-weight: var(--weight);
+}
+.layers-card .segmented > [aria-checked="true"] {
+  font-weight: var(--weight-strong);
+}
+.layers-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.carriers-head {
+  display: flex;
+  align-items: center;
+  height: 28px;
+}
+.show-all {
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
   border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  cursor: pointer;
 }
-/* Regional and short-line sections are drawn thinner than Class I. */
-.legend-line.is-thin {
-  height: 2px;
+.carrier-row,
+.layers-switch {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: var(--ctl);
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
 }
-.legend .turn-badge {
-  height: 16px;
-  min-width: 16px;
+.carrier-row {
+  gap: 10px;
+  padding: 0 10px 0 8px;
+  transition:
+    background-color var(--motion) var(--ease),
+    color var(--motion) var(--ease);
+}
+.carrier-row[aria-pressed="true"] {
+  background: var(--surface-2);
+  font-weight: var(--weight-strong);
+}
+.carrier-line {
+  flex: none;
+  width: 18px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  transition: opacity var(--motion) var(--ease);
+}
+[data-filtered] > .carrier-row[aria-pressed="false"] {
+  color: var(--text-2);
+}
+[data-filtered] > .carrier-row[aria-pressed="false"] .carrier-line {
+  opacity: 0.35;
+}
+.carrier-only {
+  font-size: var(--text-sm);
+  font-weight: var(--weight);
+  color: var(--text-2);
+}
+.layers-switch {
+  gap: 12px;
+  padding: 0 4px;
+}
+.layers-switch-track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--switch-off);
+  transition: background-color var(--motion) var(--ease);
+}
+.layers-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--switch-knob);
+  transition: transform var(--motion) var(--ease);
+}
+.layers-switch[aria-checked="true"] .layers-switch-track {
+  background: var(--accent);
+}
+.layers-switch[aria-checked="true"] .layers-switch-track::after {
+  background: var(--on-accent);
+  transform: translateX(16px);
+}
+/* The credits: a round "i" bottom right, its popover to the left. */
+.credits-btn {
+  --credits-btn: calc(var(--ctl) - var(--space));
+  position: absolute;
+  z-index: 6;
+  right: var(--inset);
+  bottom: var(--inset);
+  display: grid;
+  place-items: center;
+  width: var(--credits-btn);
+  height: var(--credits-btn);
   padding: 0;
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  cursor: pointer;
+}
+.credits-card {
+  position: absolute;
+  z-index: 7;
+  right: calc(var(--inset) + var(--ctl) - var(--space) + 8px);
+  bottom: var(--inset);
+  max-width: min(400px, calc(100% - 76px));
+  padding: 9px 12px;
+  border-radius: var(--radius-ctl);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-2);
+  transform-origin: bottom right;
+}
+/* MapLibre writes the credits (web/map/Credits.tsx); the card gives them their look. */
+.credits-card .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+.credits-card .maplibregl-ctrl-attrib a {
+  color: inherit;
 }
 .map-card {
   position: absolute;
@@ -1528,6 +1684,7 @@ input[aria-invalid="true"] {
 .btn,
 .icon-btn,
 .map-btn,
+.credits-btn,
 .chip,
 .segmented > * {
   transition: scale var(--motion) var(--ease);
@@ -1540,6 +1697,7 @@ input[aria-invalid="true"] {
 .btn:active,
 .icon-btn:not(.drag-handle):active,
 .map-btn:active,
+.credits-btn:active,
 .chip:not(:has(:disabled)):active,
 .route-row:active,
 .segmented > :active {
@@ -1547,6 +1705,7 @@ input[aria-invalid="true"] {
 }
 /* Popovers grow from where they open; they close at once. */
 .layers-card,
+.credits-card,
 .suggestions,
 .found-card,
 .turn-pop,
@@ -1557,6 +1716,7 @@ input[aria-invalid="true"] {
 }
 @starting-style {
   .layers-card,
+  .credits-card,
   .suggestions,
   .found-card,
   .turn-pop,
@@ -1622,9 +1782,10 @@ input[aria-invalid="true"] {
     border-radius: var(--radius-pill);
     background: var(--stroke);
   }
-  .maplibregl-ctrl-bottom-left {
-    left: 0;
-    bottom: var(--radius-panel);
+  /* Clear of the sheet's rounded top, which lies over the map's foot. */
+  .credits-btn,
+  .credits-card {
+    bottom: calc(var(--inset) + var(--radius-panel));
   }
   .map-search {
     left: var(--inset);
@@ -1634,10 +1795,6 @@ input[aria-invalid="true"] {
   }
   .map-search-box {
     height: var(--ctl);
-  }
-  /* The map is short here: a card open over it takes the legend's room. */
-  .map:has(.layers-card, .found-card) .legend {
-    visibility: hidden;
   }
   /* Pinch zooms on a phone. */
   .ctl-group--zoom {
@@ -1654,9 +1811,6 @@ input[aria-invalid="true"] {
     content: "";
     position: absolute;
     inset: -8px;
-  }
-  .legend-rr {
-    column-gap: 8px;
   }
   .import-row {
     flex-wrap: wrap;

@@ -32,7 +32,8 @@ const placeRows = () => within(screen.getByRole("region", { name: "Places" })).g
 const stopRows = () => placeRows().slice(1, -1);
 /** What each place row shows, in order. */
 const rowValues = () => placeRows().map((row) => (within(row).getByRole("combobox") as HTMLInputElement).value);
-const legend = () => within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
+/** The railroads the selected route's row names, each with its colour. */
+const selectedRailroads = () => [...within(screen.getByRole("region", { name: "Routes" })).getByRole("button", { pressed: true }).querySelectorAll("[data-railroad]")].map((chip) => chip.textContent);
 
 /** Temple, TX typed with Enter; North Little Rock, AR picked from the suggestions (the EXAMPLE shop). */
 async function planTempleToLittleRock(user: ReturnType<typeof userEvent.setup>) {
@@ -60,7 +61,7 @@ describe("Route planner", () => {
     expect(await screen.findByRole("link", { name: "EXAMPLE Omaha → North Platte" })).toHaveAttribute("href", "/route/saved/route-9");
   });
 
-  it("a typed start and a chosen destination give the routes at once; the legend lists only the selected route's railroads", async () => {
+  it("a typed start and a chosen destination give the routes at once; the selected route's row names its railroads and turn-backs", async () => {
     const user = userEvent.setup();
     openPage("/route");
     await user.type(field("Start"), "Temple, TX{Enter}");
@@ -77,7 +78,8 @@ describe("Route planner", () => {
     expect(shortest).toHaveAccessibleName("839 km BNSF UP 1 interchange");
     expect(within(shortest).queryByText(/interchange/, { ignore: ".visually-hidden, script, style" })).toBeNull();
     expect(within(shortest).getByTitle("1 interchange")).toHaveClass("ix-chip");
-    expect(legend()).toEqual(["BNSF", "↩Turn-back"]);
+    expect(selectedRailroads()).toEqual(["BNSF"]);
+    expect(pick).toHaveTextContent("1 turn-back");
     expect(hint()).toHaveTextContent("Click the map to add a stop.");
     expect(fake.state.lastPlan).toEqual({ places: [{ kind: "text", text: "Temple, TX" }, { kind: "shop", shopId: "shop-ex-1" }], include: DEFAULT_INCLUDE, turnAtStops: false });
   });
@@ -176,15 +178,15 @@ describe("Route planner", () => {
     expect(turn).not.toBeChecked();
   });
 
-  it("Distances in the layers card shows every distance in miles, and back in km; this browser keeps the choice", async () => {
+  it("Units in the Layers card shows every distance in miles, and back in km; this browser keeps the choice", async () => {
     const user = userEvent.setup();
     await planTempleToLittleRock(user);
     await user.click(screen.getByRole("button", { name: /^Map layers/ }));
-    const distances = screen.getByRole("radiogroup", { name: "Distances" });
-    expect(within(distances).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["km", "mi"]);
-    expect(within(distances).getByRole("radio", { name: "km" })).toHaveAttribute("aria-checked", "true");
+    const units = screen.getByRole("radiogroup", { name: "Units" });
+    expect(within(units).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["km", "mi"]);
+    expect(within(units).getByRole("radio", { name: "km" })).toHaveAttribute("aria-checked", "true");
 
-    await user.click(within(distances).getByRole("radio", { name: "mi" }));
+    await user.click(within(units).getByRole("radio", { name: "mi" }));
     expect(localStorage.getItem("visnarn.distance-unit")).toBe("mi");
     expect(routeRows()[0]).toHaveTextContent(/^650 mi/);
     expect(routeRows()[1]).toHaveTextContent(/^521 mi/);
@@ -194,13 +196,13 @@ describe("Route planner", () => {
     expect(sections.filter((row) => /\d mi$/.test(row.textContent ?? ""))).not.toHaveLength(0);
     expect(sections.filter((row) => /\d km$/.test(row.textContent ?? ""))).toHaveLength(0);
 
-    await user.click(within(distances).getByRole("radio", { name: "km" }));
+    await user.click(within(units).getByRole("radio", { name: "km" }));
     expect(routeRows()[0]).toHaveTextContent(/^1,046 km/);
     expect(localStorage.getItem("visnarn.distance-unit")).toBe("km");
 
     // The card is a popover: Escape closes it.
     await user.keyboard("{Escape}");
-    expect(screen.queryByRole("radiogroup", { name: "Distances" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: "Units" })).not.toBeInTheDocument();
   });
 
   it("a pill on the map selects that route: the URL and the pressed row follow", async () => {
@@ -210,7 +212,7 @@ describe("Route planner", () => {
     await user.click(screen.getByRole("button", { name: "Route −207 km · 1 more interchange" }));
     expect(currentPath()).toBe("/route?option=shortest");
     expect(routeRows()[1]).toHaveAttribute("aria-pressed", "true");
-    expect(legend()).toEqual(["BNSF", "UP"]);
+    expect(selectedRailroads()).toEqual(["BNSF", "UP"]);
 
     await user.click(screen.getByRole("button", { name: /^Route \+207 km/ }));
     expect(currentPath()).toBe("/route?option=pick");

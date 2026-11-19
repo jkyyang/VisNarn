@@ -115,11 +115,13 @@ describe("Route planner", () => {
     expect(sections.at(-1)).toHaveTextContent("North Little Rock");
     expect(sections.some((row) => /\b(BNSF|UP|CSXT|NS|CN|CPKC)\b [\d,]+ km/.test(row.textContent ?? ""))).toBe(true);
 
-    // The legend lists the selected route's railroads and no others.
+    // The selected route's row names the railroads its sections run on and no others, each with its colour.
     const pressed = rows.find((row) => row.getAttribute("aria-pressed") === "true");
-    const onRoute = RAILROADS.filter((railroad) => within(pressed!).queryByText(railroad));
-    const legend = within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
-    expect(legend.filter((item) => item !== "↩Turn-back")).toEqual(onRoute);
+    const chips = [...pressed!.querySelectorAll<HTMLElement>("[data-railroad]")];
+    const named = RAILROADS.filter((railroad) => chips.some((chip) => chip.dataset.railroad === railroad));
+    const runOn = RAILROADS.filter((railroad) => sections.some((row) => new RegExp(`\\b${railroad}\\b [\\d,]+ km`).test(row.textContent ?? "")));
+    expect(named).toEqual(runOn);
+    for (const chip of chips) expect(chip.querySelector<HTMLElement>(".rr-swatch")?.style.background).toBe(`var(--rr-${chip.dataset.railroad?.replace(" ", "-")})`);
   });
 
   it("a click on the map adds a stop, which the route then runs through", async () => {

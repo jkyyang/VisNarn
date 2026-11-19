@@ -3,9 +3,9 @@
  * while the user moves between screens; a screen says what the map should show by rendering
  * <MapContent> anywhere in its tree.
  *
- * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night) are view state
- * owned here. The day or night look is set on the map section, and the whole page takes it from there
- * (web/styles.css).
+ * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night, the carrier shown
+ * alone) are view state owned here. The day or night look is set on the map section, and the whole
+ * page takes it from there (web/styles.css).
  */
 import {
   createContext,
@@ -45,7 +45,7 @@ export interface MapContentProps {
   onSelect?: (target: SceneTarget) => void;
   /** Things on the map a person drags or taps: on Shops, the edited shop's pin and its links' rings. */
   handles?: MapHandle[];
-  /** Undo / redo, shown with the map controls when given. */
+  /** Undo / redo, shown in the panel's header when given. */
   history?: MapHistory;
   /** What a place found with the map's search box can become here: "Start", "Add stop". */
   placeActions?: PlaceAction[];
@@ -144,15 +144,23 @@ function useNow(running: boolean): number {
 
 const nothing = () => null;
 
+/** What the screens have asked the map to show now. */
+function useStagedContent(): MapContentProps | null {
+  const stage = useContext(StageContext);
+  return useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
+}
+
+/** The undo and redo of the screen the map shows now, for the panel's header. */
+export const useStagedHistory = (): MapHistory | null => useStagedContent()?.history ?? null;
+
 /**
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
- * `coveredLeft`: how many px of the map the panel covers from the left; the camera works in the rest.
+ * `cameraLeft`: how many px of the map every camera move keeps clear on the left, for the panel.
  */
-export function MapStage(props: { coveredLeft: number }): ReactElement {
-  const stage = useContext(StageContext);
+export function MapStage(props: { cameraLeft: number }): ReactElement {
   const network = useContext(NetworkContext);
-  const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
-  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto" });
+  const content = useStagedContent();
+  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto", carrier: null });
   const [drawable] = useState(canDrawMaps);
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
   const now = useNow(layers.light === "auto");
@@ -171,7 +179,7 @@ export function MapStage(props: { coveredLeft: number }): ReactElement {
               look={look}
               now={now}
               onCentre={setCentre}
-              coveredLeft={props.coveredLeft}
+              cameraLeft={props.cameraLeft}
             />
           </Suspense>
         </ErrorBoundary>
