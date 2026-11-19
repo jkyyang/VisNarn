@@ -23,7 +23,7 @@ import { Menu, MenuItem } from "../../ui/Menu.tsx";
 import { useReorder } from "../../ui/reorder.ts";
 import { Switch } from "../../ui/Switch.tsx";
 import type { DistanceUnit } from "../../units.ts";
-import { BACK_OUT, clickToSet, errorText, interchangesWord, lineName, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
+import { BACK_OUT, clickToSet, errorText, interchangesWord, lineName, nearPlace, NO_TRACK_NEAR, placeProblem, plural, routeName, shortPlace } from "../../words.ts";
 import { fullPlan, isEmpty, nextTarget, samePlan, type PlanAction, type PlanSession } from "./session.ts";
 
 export interface RoutePanelProps {
@@ -326,8 +326,8 @@ function RouteOptions(props: { plan: Plan; carriers: CarrierChoice[]; dispatch: 
 
 // ---- routes ----
 
-/** Why the router offers a route: the strategy that found it. */
-const STRATEGY_WORDS: Record<RouteStrategy, string> = { pick: "recommended", shortest: "shortest", "fewest-interchanges": "fewest interchanges", "no-turn-backs": "no turn-backs" };
+/** Why the router offers a route, where the row's own counts do not already say it. */
+const STRATEGY_WORDS: Partial<Record<RouteStrategy, string>> = { pick: "recommended", shortest: "shortest" };
 
 /**
  * The routes found, when there are two or more: a row each, as in the Shops list (its carriers; its interchanges and
@@ -342,7 +342,7 @@ function RouteRows(props: { routes: RoutePath[]; chosen: RoutePath; onSelect: (i
           <button key={route.strategies[0]} type="button" className="route-row" aria-pressed={route === props.chosen} onClick={() => props.onSelect(route.strategies[0])}>
             <span className="shop-text">
               <span className="shop-name">{route.railroads.map(lineName).join(" · ")}</span>
-              <span className="shop-sub">{[interchangesWord(route.interchanges), ...(turns ? [plural(turns, "turn-back")] : []), ...route.strategies.map((id) => STRATEGY_WORDS[id])].join(" · ")}</span>
+              <span className="shop-sub">{[interchangesWord(route.interchanges), ...(turns ? [plural(turns, "turn-back")] : []), ...route.strategies.flatMap((id) => STRATEGY_WORDS[id] ?? [])].join(" · ")}</span>
             </span>
             <span className="leg-km">{fmtDistance(route.km, props.unit)}</span>
           </button>
@@ -364,7 +364,7 @@ type CardRow =
 function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: number[] }): CardRow[] {
   const { route, places } = props;
   const rows: CardRow[] = [];
-  let here = shortPlace(places[0]?.label ?? "");
+  let here = nearPlace(places[0]?.label ?? "");
   // A leg's end is the next place the route names after it.
   const arrive = (place: string) => {
     for (const row of rows) if (row.kind === "leg" && !row.to) row.to = place;
@@ -379,23 +379,23 @@ function cardRows(props: { route: RoutePath; places: ResolvedPlace[]; rows: numb
         return;
       }
       case "interchange":
-        arrive(shortPlace(step.at));
+        arrive(nearPlace(step.at));
         return;
       case "stop":
-        arrive(shortPlace(step.label));
-        rows.push({ kind: "stop", key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: shortPlace(step.label) });
+        arrive(nearPlace(step.label));
+        rows.push({ kind: "stop", key, mark: <PlacePin kind="stop" n={props.rows[step.stop + 1] ?? step.stop + 1} />, text: nearPlace(step.label) });
         return;
       case "turn-back": {
         const turnBack = route.turnBacks[step.turnBack];
-        if (turnBack) arrive(shortPlace(turnBack.at.near));
-        rows.push({ kind: "turn-back", key, mark: <TurnBadge />, text: turnBack ? shortPlace(turnBack.at.near) : "Turn-back" });
+        if (turnBack) arrive(nearPlace(turnBack.at.near));
+        rows.push({ kind: "turn-back", key, mark: <TurnBadge />, text: turnBack ? nearPlace(turnBack.at.near) : "Turn-back" });
         return;
       }
       case "back-out":
         rows.push({ kind: "back-out", key, mark: null, text: BACK_OUT });
         return;
       case "destination":
-        arrive(shortPlace(places.at(-1)?.label ?? ""));
+        arrive(nearPlace(places.at(-1)?.label ?? ""));
         return;
     }
   });

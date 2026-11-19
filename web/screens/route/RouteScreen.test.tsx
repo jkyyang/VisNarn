@@ -84,7 +84,7 @@ describe("Route planner", () => {
     expect(pick).toHaveAttribute("aria-pressed", "true");
     expect(pick).toHaveTextContent("1,046 km");
     // A row per route, as in the Shops list: its carriers; its interchanges, turn-backs and why it is offered; its length.
-    expect(shortest).toHaveAccessibleName("BNSF · UP 1 interchange · shortest · no turn-backs 839 km");
+    expect(shortest).toHaveAccessibleName("BNSF · UP 1 interchange · shortest 839 km");
     // The result card under them is the selected route: its length, carriers and interchanges.
     expect(screen.getByRole("region", { name: "Route" })).toHaveTextContent(/1,046 km1 carrier · 0 interchanges · 1 turn-back/);
     expect(selectedRailroads()).toEqual(["BNSF"]);

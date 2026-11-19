@@ -8,7 +8,7 @@ import { useMemo, type ReactElement } from "react";
 import { Layer, Source, type LayerProps } from "react-map-gl/maplibre";
 import type { LngLat } from "../../shared/geo.ts";
 import { css, type ThemeColors } from "../theme.ts";
-import { shortPlace } from "../words.ts";
+import { nearPlace, shortPlace } from "../words.ts";
 import type { MapScene } from "./scene.ts";
 
 type Label = { name: string; kind: "shop" | "interchange"; rank: number };
@@ -23,7 +23,7 @@ export function sceneLabels(scene: MapScene | null): FeatureCollection<Point, La
     type: "FeatureCollection",
     features: [
       ...shops.map((pin) => label(pin.position, { name: shortPlace(pin.label), kind: "shop", rank: pin.kind !== "shop" || pin.mark?.selected ? 0 : 1 })),
-      ...interchanges.filter((x) => x.place).map((x) => label(x.position, { name: shortPlace(x.place), kind: "interchange", rank: 0 })),
+      ...interchanges.filter((x) => x.place).map((x) => label(x.position, { name: nearPlace(x.place), kind: "interchange", rank: 0 })),
     ],
   };
 }
@@ -47,7 +47,7 @@ function labelLayer(kind: Label["kind"], colors: ThemeColors): LayerProps {
       "text-variable-anchor": [...look.anchors],
       "text-radial-offset": look.offsetEm,
       "text-justify": "auto",
-      // One line: "110 km from St. Louis".
+      // One line: "near St. Louis".
       "text-max-width": 30,
       "symbol-sort-key": ["get", "rank"],
     },

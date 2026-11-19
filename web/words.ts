@@ -17,6 +17,9 @@ import type { DistanceUnit } from "./units.ts";
  */
 export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2}$/, "");
 
+/** A place in a result row or beside a route's node: "Chicago", and "near St. Louis" for "110 km from St. Louis, MO" (no listed city is close). */
+export const nearPlace = (near: string) => shortPlace(near).replace(/^[\d,.]+ km from /, "near ");
+
 /** "Regina, SK · Procor (approximate)" → ["Regina, SK · Procor", "approximate"]: a shop row shows the note on its code's line. */
 export function nameAndNote(name: string): [string, string | null] {
   const match = /^(.*\S)\s*\(([^()]+)\)$/.exec(name);

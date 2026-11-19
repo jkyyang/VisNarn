@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FraId, PlaceResolution } from "../shared/places.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
-import { interchangesWord, isApproximate, nameAndNote, pillText, placeHint, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
+import { interchangesWord, isApproximate, nameAndNote, nearPlace, pillText, placeHint, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
 
 function route(id: RouteStrategy, km: number, interchanges: number): RoutePath {
   return { strategies: [id], km, interchanges, railroads: ["BNSF"], legs: [], turnBacks: [], steps: [] };
@@ -61,6 +61,8 @@ describe("words", () => {
   it("short words for places, interchanges and turn-backs", () => {
     expect(shortPlace("Temple, TX")).toBe("Temple");
     expect(shortPlace("72 km from Jacksonville, FL")).toBe("72 km from Jacksonville");
+    expect(nearPlace("72 km from Jacksonville, FL")).toBe("near Jacksonville");
+    expect(nearPlace("Temple, TX")).toBe("Temple");
     expect(shortPlace("Regina, SK · Procor (approximate)")).toBe("Regina");
     expect(shortPlace("Texarkana, AR · UTLX")).toBe("Texarkana");
     expect(isApproximate("Regina, SK · Procor (approximate)")).toBe(true);
