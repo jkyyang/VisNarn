@@ -165,6 +165,11 @@ test.describe("Shops", () => {
     await expect(links).toContainText("Oakville · FRA 633683");
     expect((await drawn)[0]!.path.length).toBeGreaterThan(2);
 
+    // The ＋ sits on the pin's edge, and after the drag just made too, the pin's own middle is the pin's to press.
+    const pin = await handle(page, "Oakville test plant").boundingBox();
+    const under = ([x, y]: number[]) => document.elementFromPoint(x, y)?.closest(".map-handle")?.getAttribute("aria-label");
+    expect(await page.evaluate(under, [pin!.x + pin!.width / 2, pin!.y + pin!.height / 2])).toBe("Oakville test plant");
+
     // The ＋ on the pin's edge, dropped on the main line west of the plant 100 m short of a node, adds link 2 at that node.
     // Undo takes it away, Redo brings it back.
     await drag(page, "Add link", { lon: -79.7256, lat: 43.41345 });
