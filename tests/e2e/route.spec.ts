@@ -7,7 +7,7 @@ import type { Locator, Page } from "@playwright/test";
 import type { NetworkNode } from "../../shared/places.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
-import { clickMapCentre, expect, expectMapCanvas, freeMapCentre, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
+import { clickMapCentre, expect, expectMapCanvas, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
 
 const routeRows = (page: Page): Locator => page.getByRole("region", { name: "Routes" }).getByRole("button");
 /** Every place is a row: start, stops, destination. */
@@ -101,14 +101,17 @@ test.describe("Route planner", () => {
     await page.goto("/route");
     await expectMapCanvas(page);
     const canvas = mapRegion(page).locator("canvas.maplibregl-canvas");
-    const centre = await freeMapCentre(page);
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error("The map is not on the page.");
+    // Open sea off the Pacific coast: no shop under the pointer.
+    const sea = { x: box.x + box.width * 0.3, y: box.y + box.height - 60 };
     // A new plan starts with the start's ⌖ on.
-    await page.mouse.move(centre.x, centre.y);
+    await page.mouse.move(sea.x, sea.y);
     await expect(canvas).toHaveCSS("cursor", "crosshair");
     await page.keyboard.press("Escape");
-    await page.mouse.move(centre.x + 4, centre.y);
+    await page.mouse.move(sea.x + 4, sea.y);
     await expect(canvas).toHaveCSS("cursor", "grab");
-    await page.mouse.click(centre.x + 4, centre.y);
+    await page.mouse.click(sea.x + 4, sea.y);
     await page.waitForTimeout(500);
     await expect(page.getByRole("combobox", { name: "Start" })).toHaveValue("");
     await expect(page.locator(".flash")).toHaveCount(0);

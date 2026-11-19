@@ -236,10 +236,11 @@ export function useQuery<R extends ReadRoute>(route: R, request: Request<R> | nu
   const snapshot = useCallback(() => (key === null ? IDLE : cache.state(key)), [key]);
   const state = useSyncExternalStore(subscribe, snapshot, snapshot) as QueryState<Res<R>>;
 
-  // A changed request keeps showing the answer to the one before, marked stale, until its own arrives.
+  // A changed request keeps showing the answer to the one before, marked stale, until its own arrives
+  // (idle: the first render of a new request, before its load starts).
   const last = useRef<{ key: string; data: Res<R> } | null>(null);
   if (state.status === "ready" && key !== null) last.current = { key, data: state.data };
-  if (key !== null && state.status === "loading" && last.current && last.current.key !== key) {
+  if (key !== null && (state.status === "loading" || state.status === "idle") && last.current && last.current.key !== key) {
     return { status: "ready", data: last.current.data, stale: true };
   }
   return state;
