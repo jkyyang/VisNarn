@@ -17,6 +17,12 @@ import type { DistanceUnit } from "./units.ts";
  */
 export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2}$/, "");
 
+/** "Sarnia, ON · Procor" → "Procor"; "Ville Platte, LA · UTLX (ends at UP, 20 km away)" → "UTLX": the shop's company tag, null without one. */
+export const companyOf = (name: string): string | null => /\s·\s([^(]*?)\s*(?:\([^)]*\))?$/.exec(name)?.[1] || null;
+
+/** "Regina, SK · Procor (approximate)": the shop is placed at its city's centre. */
+export const isApproximate = (name: string): boolean => /\(approximate\)$/.test(name);
+
 /** "UP", "Regional", "Short line", "Passenger". */
 export const lineName = (line: MapLine) => (isClassI(line) ? line : line[0].toUpperCase() + line.slice(1));
 

@@ -74,7 +74,7 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   await keepScreenshot(page, "earth-dusk");
 });
 
-test("every switch of map and time keeps the night tiles under the network, the network under the place names, and MapLibre quiet", async ({ page }) => {
+test("every switch of map and time keeps the night tiles under the network, the network under the place names, the route and its pins under their own names, and MapLibre quiet", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (message) => {
     // A tile the network failed to fetch is the network's business; anything else MapLibre logs is ours.
@@ -95,7 +95,10 @@ test("every switch of map and time keeps the night tiles under the network, the 
       .poll(async () => {
         const order = await mapLayerOrder(page);
         const network = order.filter((id) => id.startsWith("network-")).map((id) => order.indexOf(id));
-        return network.length > 0 && order.indexOf("night-lights") < Math.min(...network) && Math.max(...network) < order.indexOf("labels");
+        const underNames = (id: string) => order.indexOf(id) >= 0 && order.indexOf(id) < order.indexOf("scene-names") && order.indexOf("scene-names") < order.indexOf("shop-labels");
+        return (
+          network.length > 0 && order.indexOf("night-lights") < Math.min(...network) && Math.max(...network) < order.indexOf("labels") && underNames("route") && underNames("pins")
+        );
       }, look)
       .toBe(true);
   };

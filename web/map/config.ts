@@ -51,6 +51,9 @@ export const AUTO_DARK_ZOOM = 7;
 /** Zoomed out to here or further, the street map's water is the deep blue of the Earth from space. */
 export const OCEAN_SPACE_ZOOM = 5;
 
+/** Zoomed out past this, the map shows main lines and big cities only: regional and short-line track, and every city, from here in. */
+export const DETAIL_MIN_ZOOM = 5;
+
 /** The Real tracks tiles carry rail from this zoom; from here in their lines replace the network layers. */
 export const REAL_TRACKS_MIN_ZOOM = 8;
 

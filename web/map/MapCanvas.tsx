@@ -14,6 +14,7 @@ import { fresh, usePlace, useTrackPaths } from "../data/hooks.ts";
 import { useThemeColors } from "../theme.ts";
 import { basemapStyle, type BasemapKind } from "./basemaps.ts";
 import type { LightMode, MapLook } from "./daylight.ts";
+import { shownCarrier, useCarrierFilter } from "./carrierFilter.ts";
 import { BasemapStyle, NightLights } from "./DayNight.tsx";
 import { DeckOverlay } from "./DeckOverlay.tsx";
 import { FitBounds } from "./FitBounds.tsx";
@@ -24,12 +25,13 @@ import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import { MapSearch } from "./MapSearch.tsx";
 import {
-  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES,
+  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, PAN_BOUNDS, PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES,
   TILE_CACHE_MAX_TILES,
 } from "./config.ts";
 import type { MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
+import { SceneLabels } from "./SceneLabels.tsx";
 import { NETWORK_BOUNDS, routePaths, withRoutePaths } from "./scene.ts";
 
 export interface MapLayerChoice {
@@ -172,17 +174,24 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const scene = useMemo(() => (given && trackPaths ? withRoutePaths(given, trackPaths) : given), [given, trackPaths]);
   const networkShown = layers.network && !(layers.tracks && zoom >= REAL_TRACKS_MIN_ZOOM);
   const include = content?.include ?? DEFAULT_INCLUDE;
-  const networkClasses = useMemo(() => (networkShown ? drawnClasses(include) : []), [networkShown, include]);
+  // Zoomed out, the main lines only.
+  const mainOnly = zoom < DETAIL_MIN_ZOOM;
+  const networkClasses = useMemo(
+    () => (networkShown ? drawnClasses(include).filter((c) => !mainOnly || (c !== "regional" && c !== "short_line")) : []),
+    [networkShown, include, mainOnly],
+  );
+  const carrier = shownCarrier(useCarrierFilter());
+  const underRoute = scene?.kind === "route" && scene.selected !== null;
+  // Auto zoomed out shows the Earth from space, the day side and the night side at once (./basemaps.ts).
+  const fromSpace = layers.light === "auto" && zoom < AUTO_DARK_ZOOM;
   const picking = !!content?.onPick;
   const latest = useRef(content);
   latest.current = content;
 
   const deckLayers = useMemo(() => {
     const drawn = scene ? sceneLayers(scene, colors, zoom) : [];
-    // The network dims under a route (and under the shops), so that is what the eye finds.
-    const dimmed = scene?.kind === "shops" || (scene?.kind === "route" && scene.selected !== null);
-    return [...(network ? networkLayers(network, networkClasses, dimmed, colors) : []), ...drawn];
-  }, [network, networkClasses, scene, colors, zoom]);
+    return [...(network ? networkLayers(network, networkClasses, { carrier, underRoute, fromSpace }, colors) : []), ...drawn];
+  }, [network, networkClasses, carrier, underRoute, fromSpace, scene, colors, zoom]);
   const watchCamera = (map: Pick<MapLibreMap, "getCenter">) => {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
@@ -241,6 +250,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         <FoldAttribution />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
+        <SceneLabels scene={scene} colors={colors} />
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} nonce={fitNonce} coveredLeft={props.coveredLeft} />}
         <FlyTo focus={content?.focus} coveredLeft={props.coveredLeft} />
         <FlyTo focus={found?.ok ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} coveredLeft={props.coveredLeft} />

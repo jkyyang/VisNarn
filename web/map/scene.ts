@@ -8,7 +8,7 @@ import { placeKind, type PlannedRoute } from "../../shared/plans.ts";
 import type { Line } from "../../shared/railroads.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../../shared/route.ts";
 import type { DistanceUnit } from "../units.ts";
-import { pillText } from "../words.ts";
+import { companyOf, isApproximate, pillText } from "../words.ts";
 
 export type PinKind = "start" | "stop" | "destination" | "shop";
 
@@ -18,9 +18,25 @@ export interface ScenePin {
   glyph: string;
   label: string;
   position: LngLat;
-  /** A shop square: clicking it puts that shop in the plan. */
+  /** A shop's marker: clicking it puts that shop in the plan. */
   shopId: ShopId | null;
+  /** How a shop looks on the map, also as a place of the plan; null for any other place. */
+  mark: ShopMark | null;
 }
+
+/** A shop's marker, named beside it on the map. */
+export interface ShopMark {
+  /** A filled dot for Procor, a ring for every other company. */
+  filled: boolean;
+  /** Placed at its city's centre: a dashed ring round the marker. */
+  approximate: boolean;
+  /** The accent ring of the shop picked in the list. */
+  selected: boolean;
+}
+
+/** The company whose shops are filled dots. */
+const FILLED_COMPANY = "Procor";
+const markOf = (name: string, selected = false): ShopMark => ({ filled: companyOf(name) === FILLED_COMPANY, approximate: isApproximate(name), selected });
 
 /** One route as drawn: a path per leg with its line colour, and chevrons along it for the direction of travel. */
 export interface SceneRoute {
@@ -278,14 +294,15 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   for (const shop of shops) {
     const place = resolvedOf(shop.place);
     if (!place || inPlaces(place, places)) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(place), shopId: shop.id, mark: markOf(shop.name) });
   }
   places.forEach((place, i) => {
     if (!place) return;
     const kind = placeKind(i, places.length);
     const position = (i === first ? firstLeg?.path[0] : i === last ? lastLeg?.path.at(-1) : undefined) ?? at(place);
     // A stop's number is its row: the start is row 0.
-    pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null });
+    const mark = place.match.method === "shop" ? markOf(place.label) : null;
+    pins.push({ kind, glyph: kind === "stop" ? String(i) : "", label: place.label, position, shopId: null, mark });
   });
 
   if (!routes || !chosen) return { kind: "route", selected: null, alternatives: [], pills: [], turnBacks: [], pins, bounds: null };
@@ -320,12 +337,12 @@ export function planScene(input: { planned: PlannedRoute | null; option: RouteSt
   };
 }
 
-/** Shops: every other shop that is on the network, and the links of the one being edited. */
-export function shopsScene(shops: ShopView[], editing: EditedShop | null): MapScene {
+/** Shops: every other shop that is on the network, the one picked in the list ringed, and the links of the one being edited. */
+export function shopsScene(shops: ShopView[], editing: EditedShop | null, selected: ShopId | null = null): MapScene {
   const pins: ScenePin[] = [];
   for (const shop of shops) {
     if (!shop.place.ok || shop.id === editing?.shopId) continue;
-    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id });
+    pins.push({ kind: "shop", glyph: "", label: shop.name, position: at(shop.place.place), shopId: shop.id, mark: markOf(shop.name, shop.id === selected) });
   }
   const links = editing?.links ?? [];
   const bounds = new BoundsBuilder();

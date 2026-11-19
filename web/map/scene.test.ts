@@ -7,9 +7,11 @@ import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
-import { LABELS } from "./basemaps.ts";
-import { LAYER, lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
+import { shortPlace } from "../words.ts";
+import { LABELS, SCENE_NAMES } from "./basemaps.ts";
+import { LAYER, lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip, type NetworkFocus } from "./layers.ts";
 import { legendFor } from "./Legend.tsx";
+import { sceneLabels } from "./SceneLabels.tsx";
 import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneLink, type SceneRoute } from "./scene.ts";
 
 const grey: RGBA = [90, 100, 110, 255];
@@ -17,8 +19,11 @@ const colors: ThemeColors = {
   sans: "sans-serif",
   fg: [0, 0, 0, 255],
   accent: [255, 199, 44, 255],
+  onAccent: [18, 22, 29, 255],
   alternative: grey,
   casing: [255, 255, 255, 255],
+  neutral: [58, 67, 80, 255],
+  fromSpace: { line: [201, 209, 220, 255], casing: [10, 13, 20, 153] },
   risk: [215, 0, 21, 255],
   rail: { BNSF: [1, 0, 0, 255], UP: [2, 0, 0, 255], CSXT: [3, 0, 0, 255], NS: [4, 0, 0, 255], CN: [5, 0, 0, 255], CPKC: [6, 0, 0, 255], regional: [7, 0, 0, 255], "short line": [8, 0, 0, 255], passenger: [9, 0, 0, 255] },
 };
@@ -227,6 +232,32 @@ describe("shopsScene", () => {
   });
 });
 
+describe("names on the map", () => {
+  const named = (name: string, i = 0) => ({ ...shops[i], name });
+
+  it("names each shop by its town, the selected one placed first", () => {
+    const scene = shopsScene([named("Sarnia, ON · Procor", 0), named("Regina, SK · Procor (approximate)", 1)], null, shops[1].id);
+    expect(sceneLabels(scene).features.map((f) => f.properties)).toEqual([
+      { name: "Sarnia", kind: "shop", rank: 1 },
+      { name: "Regina", kind: "shop", rank: 0 },
+    ]);
+    expect(sceneLabels(null).features).toEqual([]);
+  });
+
+  it("names a shop that is the route's start or destination, placed first, and each interchange of the selected route by its place", () => {
+    const usedAsEnd = planScene({ planned: { ...oneRoute, places: oneRoute.places.with(-1, { ok: true, place: { ...shopPlace("North Little Rock, AR") } }) }, option: null, shops, unit: "km" });
+    const labels = sceneLabels(usedAsEnd).features.map((f) => f.properties);
+    expect(labels).toContainEqual({ name: "North Little Rock", kind: "shop", rank: 0 });
+    // Typed as a city, the start is the map's own place name.
+    expect(labels.filter((l) => l.kind === "shop" && l.rank === 0)).toHaveLength(1);
+
+    const changing = routeScene(twoRoutes, "shortest");
+    const places = changing.selected?.interchanges.map((x) => shortPlace(x.place)) ?? [];
+    expect(places.length).toBeGreaterThan(0);
+    expect(sceneLabels(changing).features.filter((f) => f.properties.kind === "interchange").map((f) => f.properties)).toEqual(places.map((name) => ({ name, kind: "interchange", rank: 0 })));
+  });
+});
+
 describe("legend", () => {
   it("lists the selected route's railroads; with no route, the lines of the network classes drawn", () => {
     expect(legendFor(planScene({ planned: twoRoutes, option: null, shops, unit: "km" }), ["class_i"]).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
@@ -235,6 +266,11 @@ describe("legend", () => {
     expect(legendFor(null, []).railroads).toEqual([]);
   });
 });
+
+const cpkc = { type: "Feature", geometry: { type: "LineString", coordinates: [] }, properties: { owner: "CPKC", class: "class_i" } };
+const network = { ...Object.fromEntries(NETWORK_CLASSES.map((c) => [c, []])), class_i: [cpkc] } as unknown as Parameters<typeof networkLayers>[0];
+const byClass = (drawn: NetworkClass[], focus: Partial<NetworkFocus> = {}) =>
+  Object.fromEntries((networkLayers(network, drawn, { carrier: null, underRoute: false, fromSpace: false, ...focus }, colors) as Layer[]).map((l) => [l.id, l.props as unknown as Record<string, unknown>]));
 
 describe("layers", () => {
   let scene: MapScene;
@@ -258,8 +294,10 @@ describe("layers", () => {
       return typeof getWidth === "number" ? getWidth : getWidth({ railroad });
     };
     expect(width(LAYER.alternatives, "UP")).toBeLessThan(width(LAYER.route, "UP"));
-    // Regional and short-line sections are thinner than Class I ones, as in the legend.
-    expect(width(LAYER.route, "short line")).toBeLessThan(width(LAYER.route, "UP"));
+    // The mockup's route: 3.4 px for every section, over a casing 7.5 px wide.
+    expect(width(LAYER.route, "short line")).toBe(3.4);
+    expect(width(LAYER.route, "UP")).toBe(3.4);
+    expect(width(LAYER.routeCasing, "UP")).toBe(7.5);
   });
 
   it("colours the selected route by railroad, section by section", () => {
@@ -269,10 +307,43 @@ describe("layers", () => {
     expect(getColor({ railroad: "UP" })).toBe(colors.rail.UP);
   });
 
-  it("shows fewer chevrons zoomed out than zoomed in", () => {
+  it("shows fewer chevrons zoomed out than zoomed in, and none on the thin line of the whole network's view", () => {
     const count = (zoom: number) => ((sceneLayers(scene, colors, zoom) as Layer[]).find((l) => l.id === LAYER.chevrons)!.props.data as unknown[]).length;
-    expect(count(3)).toBeLessThan(count(7));
-    expect(count(7)).toBeLessThan(count(10));
+    expect(count(5.5)).toBe(0);
+    expect(count(6)).toBeGreaterThan(0);
+    expect(count(6)).toBeLessThan(count(10));
+  });
+
+  it("draws every marker over the route and under the scene's own names", () => {
+    for (const layer of layers) expect(layer.props, layer.id).toMatchObject({ beforeId: SCENE_NAMES });
+  });
+
+  it("marks a shop by its company, a shop placed approximately with a dashed ring, and the route's ends and the selected shop with the accent ring", () => {
+    const shop = shops[0];
+    const named = (name: string) => ({ ...shop, name });
+    const iconOf = (scene: MapScene, label: string) => {
+      const pins = (sceneLayers(scene, colors, 5) as Layer[]).find((l) => l.id === LAYER.pins)!;
+      const pin = scene.pins.find((p) => p.label === label)!;
+      return decodeURIComponent((pins.props as unknown as { getIcon: (pin: unknown) => { url: string } }).getIcon(pin).url);
+    };
+    const accent = `rgba(${colors.accent.slice(0, 3).join(",")},1)`;
+    const filled = `r="5" fill="rgba(0,0,0,1)"`;
+    const ring = `r="4" fill="rgba(255,255,255,1)" stroke="rgba(0,0,0,1)"`;
+
+    const procor = shopsScene([named("Sarnia, ON · Procor")], null);
+    expect(iconOf(procor, "Sarnia, ON · Procor")).toContain(filled);
+    expect(iconOf(procor, "Sarnia, ON · Procor")).not.toContain(accent);
+    const utlx = shopsScene([named("Texarkana, AR · UTLX")], null, shop.id);
+    expect(iconOf(utlx, "Texarkana, AR · UTLX")).toContain(ring);
+    expect(iconOf(utlx, "Texarkana, AR · UTLX")).toContain(accent);
+    const approximate = shopsScene([named("Regina, SK · Procor (approximate)")], null);
+    expect(iconOf(approximate, "Regina, SK · Procor (approximate)")).toContain("stroke-dasharray");
+    expect(iconOf(procor, "Sarnia, ON · Procor")).not.toContain("stroke-dasharray");
+
+    const route = routeScene(oneRoute);
+    for (const end of route.pins.filter((p) => p.kind === "start" || p.kind === "destination")) expect(iconOf(route, end.label)).toContain(accent);
+    expect(iconOf(route, route.pins.find((p) => p.kind === "start")!.label)).toContain(filled);
+    expect(iconOf(route, route.pins.find((p) => p.kind === "destination")!.label)).toContain(ring);
   });
 
   it("a grey route is a click on the map on that line; a shop square is a place; the plan's own pins and rings take the click and do nothing", () => {
@@ -306,11 +377,7 @@ describe("layers", () => {
   });
 
 
-  it("gives each class its own layer, mounted while hidden, Class I coloured by owner and the rest in their route colour, under the place names", () => {
-    const network = Object.fromEntries(NETWORK_CLASSES.map((c) => [c, []])) as unknown as Parameters<typeof networkLayers>[0];
-    const byClass = (drawn: NetworkClass[], dimmed = false) => Object.fromEntries((networkLayers(network, drawn, dimmed, colors) as Layer[]).map((l) => [l.id, l.props]));
-    const lineColor = (props: unknown, owner: string) => (props as { getLineColor: (f: { properties: { owner: string } }) => RGBA }).getLineColor({ properties: { owner } });
-
+  it("gives each class its own layer under the place names, mounted while hidden, every line one faint neutral colour", () => {
     const shown = byClass(["class_i", "short_line"]);
     expect(Object.keys(shown).at(-1)).toBe("network-class_i");
     expect(Object.fromEntries(Object.entries(shown).map(([id, props]) => [id, props.visible]))).toEqual({
@@ -319,17 +386,33 @@ describe("layers", () => {
       "network-regional": false,
       "network-class_i": true,
     });
-    expect(lineColor(shown["network-class_i"], "UP")).toBe(colors.rail.UP);
-    expect(lineColor(shown["network-class_i"], "KCTL")).toBe(grey);
-    expect(lineColor(shown["network-short_line"], "KCTL")).toBe(colors.rail["short line"]);
-    expect(lineColor(shown["network-regional"], "WSOR")).toBe(colors.rail.regional);
-    expect(lineColor(shown["network-passenger"], "AMTK")).toBe(colors.rail.passenger);
-    expect(shown["network-short_line"].opacity).toBeLessThan(shown["network-class_i"].opacity as number);
-    expect(byClass([], true)["network-class_i"]).toMatchObject({ visible: false, opacity: 0.35 });
-    expect(shown["network-class_i"]).toMatchObject({ beforeId: LABELS });
+    for (const props of Object.values(shown)) expect(props).toMatchObject({ getLineColor: colors.neutral, getLineWidth: 1.1, opacity: 0.4, beforeId: LABELS, lineCapRounded: true, lineJointRounded: true });
+  });
+
+  it("shows the carrier the Layers popover picks in its colour over the rest, which fade; under a route all fade further", () => {
+    const isolated = byClass(["class_i"], { carrier: "CPKC" });
+    expect(isolated[LAYER.carrier]).toMatchObject({ data: [cpkc], getLineColor: colors.rail.CPKC, getLineWidth: 1.9, opacity: 1, beforeId: LABELS });
+    expect(isolated["network-class_i"].opacity).toBe(0.13);
+    expect(Object.keys(isolated).at(-1)).toBe(LAYER.carrier);
+    // The same data for the same carrier: deck.gl draws it again without re-tessellating.
+    expect(byClass(["class_i"], { carrier: "CPKC" })[LAYER.carrier].data).toBe(isolated[LAYER.carrier].data);
+
+    const underRoute = byClass(["class_i"], { underRoute: true });
+    expect(underRoute["network-class_i"].opacity).toBe(0.16);
+    expect(underRoute[LAYER.carrier]).toBeUndefined();
+    expect(byClass(["class_i"], { carrier: "CPKC", underRoute: true })[LAYER.carrier]).toMatchObject({ getLineWidth: 1.4, opacity: 0.55 });
+    expect(byClass(["short_line"], { carrier: "CPKC" })[LAYER.carrier]).toBeUndefined();
+  });
+
+  it("seen from space, draws each line light over a dark see-through casing, so it reads on the day side and the night side", () => {
+    const space = byClass(["class_i"], { fromSpace: true });
+    const ids = Object.keys(space);
+    expect(ids.indexOf("network-class_i-casing")).toBeLessThan(ids.indexOf("network-passenger"));
+    expect(space["network-class_i"]).toMatchObject({ getLineColor: colors.fromSpace.line, getLineWidth: 1.1 });
+    expect(space["network-class_i-casing"]).toMatchObject({ getLineColor: colors.fromSpace.casing, getLineWidth: 3.1, visible: true, beforeId: LABELS });
+    expect(byClass(["class_i"])["network-class_i-casing"]).toBeUndefined();
   });
 });
-
 
 /** One of the EXAMPLE shops, resolved as the server resolves a shop given as the destination. */
 function shopPlace(name: string) {
