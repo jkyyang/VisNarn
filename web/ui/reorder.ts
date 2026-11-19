@@ -12,46 +12,12 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { flushSync } from "react-dom";
+import { projected, record, reducedMotion, rubber, speed, spring, type Track } from "./motion.ts";
 
 /** Travel before a press on the handle becomes a drag, so a tap stays a tap. */
 const DRAG_AFTER_PX = 4;
-/** How far momentum carries a released row: Apple's deceleration rate, the snappier one. */
-const DECELERATION = 0.99;
-/** Release speed is measured over the pointer's last moves within this window. */
-const VELOCITY_MS = 100;
-/** Rubber band stiffness past the ends (Apple's constant). */
-const RUBBER = 0.55;
-/** The settle spring: response 0.4 s, critically damped, so a row lands without bouncing. */
-const SPRING = { stiffness: (2 * Math.PI / 0.4) ** 2, damping: (4 * Math.PI * 1) / 0.4 };
 /** The lift of a dragged row. */
 const LIFT_SCALE = 1.02;
-
-const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-/** Distance past an end, shortened the further it goes. */
-const rubber = (over: number, size: number) => (over * size * RUBBER) / (size + RUBBER * Math.abs(over));
-
-/** Moves `x` to `to` along a damped spring starting at velocity `v` (px/s); returns a stop function. */
-function spring(from: number, to: number, v: number, onUpdate: (x: number) => void, onDone: () => void): () => void {
-  let x = from;
-  let last = performance.now();
-  let frame = 0;
-  const tick = (now: number) => {
-    const dt = Math.min((now - last) / 1000, 1 / 30);
-    last = now;
-    v += (-SPRING.stiffness * (x - to) - SPRING.damping * v) * dt;
-    x += v * dt;
-    if (Math.abs(x - to) < 0.3 && Math.abs(v) < 5) {
-      onUpdate(to);
-      onDone();
-      return;
-    }
-    onUpdate(x);
-    frame = requestAnimationFrame(tick);
-  };
-  frame = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(frame);
-}
 
 interface Drag {
   from: number;
@@ -62,7 +28,7 @@ interface Drag {
   gap: number;
   offset: number;
   target: number;
-  samples: { t: number; y: number }[];
+  samples: Track;
   started: boolean;
   stop: (() => void) | null;
 }
@@ -200,9 +166,7 @@ export function useReorder(keys: string[], onMove: (from: number, to: number) =>
         rows[at].classList.add("is-dragging");
         listRef.current?.classList.add("is-reordering");
       }
-      const now = performance.now();
-      d.samples.push({ t: now, y: e.clientY });
-      while (d.samples.length > 2 && now - d.samples[0].t > VELOCITY_MS) d.samples.shift();
+      record(d.samples, e.clientY);
       const low = slotOffset(d, 0);
       const high = slotOffset(d, rows.length - 1);
       const size = heights[at];
@@ -222,13 +186,9 @@ export function useReorder(keys: string[], onMove: (from: number, to: number) =>
         drag.current = null;
         return;
       }
-      const first = d.samples[0];
-      const latest = d.samples[d.samples.length - 1];
-      const ms = latest && first ? latest.t - first.t : 0;
-      const velocity = e.type === "pointercancel" || ms <= 0 ? 0 : ((latest.y - first.y) / ms) * 1000;
-      // Where momentum would carry it, as Apple projects a flick; a cancelled drag goes back.
-      const projected = d.offset + (velocity / 1000) * (DECELERATION / (1 - DECELERATION));
-      const to = e.type === "pointercancel" ? d.from : slotAt(d, projected);
+      const velocity = e.type === "pointercancel" ? 0 : speed(d.samples);
+      // Where momentum would carry it; a cancelled drag goes back.
+      const to = e.type === "pointercancel" ? d.from : slotAt(d, projected(d.offset, velocity));
       d.target = to;
       shiftOthers(d, to);
       if (reducedMotion()) return finish(d, to);
