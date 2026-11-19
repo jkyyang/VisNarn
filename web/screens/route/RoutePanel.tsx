@@ -565,7 +565,8 @@ function SavedList(props: {
                 {route.id === props.current && onRename ? (
                   <RouteName name={route.name} onRename={onRename} onError={(why) => setWrong(why ? { id: route.id, why } : null)} />
                 ) : (
-                  <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })}>
+                  // On a phone the sheet lowers to half, for the route opened.
+                  <a className="saved-name" {...linkTo({ name: "route", saved: route.id, option: null })} onClickCapture={() => showSheet("half")}>
                     {route.name}
                   </a>
                 )}

@@ -45,7 +45,7 @@ test("the map pans a margin past North America and no further, and stops zooming
   await page.goto("/route");
   await expectMapCanvas(page);
 
-  // Pulled towards the South Atlantic: the bottom edge stops at 5° N, the right edge at 20° W.
+  // Pulled towards the South Atlantic: the bottom edge stops at 20° S, the right edge at 20° W.
   await zoomOutAndDrag(page, -3000, -3000);
   // The bottom row, just left of the credits button in the corner.
   const southEast = await placeAt(page, 0.955, 0.98);

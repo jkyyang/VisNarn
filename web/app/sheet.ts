@@ -6,7 +6,8 @@
  *
  * It writes on the panel its transform, --sheet-hidden (how much of it is below the screen, which the body
  * keeps clear so every row can scroll into view) and --keyboard (the on-screen keyboard's height); on the
- * frame, --sheet-covered (how much of the map it covers). A text field focused raises it full, above the
+ * frame, --sheet-covered (how much of the map it covers) once it rests; the camera is told at once where it
+ * goes to rest, so a flight started with it frames clear of it. A text field focused raises it full, above the
  * keyboard; lowered, it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
  */
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
@@ -50,10 +51,11 @@ function usePhone(): boolean {
   );
 }
 
-/** The sheet's rest, on a phone held upright. */
-export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
+/** The sheet's rest, and the px of the map it covers there; on a phone held upright (elsewhere 0). */
+export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; covered: number } {
   const on = usePhone();
   const [rest, setRest] = useState<Rest>("half");
+  const [covered, setCovered] = useState(0);
   const restRef = useRef(rest);
 
   useLayoutEffect(() => {
@@ -66,9 +68,10 @@ export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
       y = to;
       el.style.transform = `translate3d(0, ${to}px, 0)`;
     };
+    const coveredAt = (to: number) => (el.parentElement?.clientHeight ?? 0) - el.offsetTop - to;
     const rested = (to: number) => {
       el.style.setProperty("--sheet-hidden", `${to}px`);
-      el.parentElement?.style.setProperty("--sheet-covered", `${el.parentElement.clientHeight - el.offsetTop - to}px`);
+      el.parentElement?.style.setProperty("--sheet-covered", `${coveredAt(to)}px`);
     };
     const settle = (next: Rest, velocity = 0) => {
       stop?.();
@@ -77,6 +80,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
       // A field the sheet lowers over takes no more typing: its keyboard goes.
       if (next !== "full" && isTextField(document.activeElement) && el.contains(document.activeElement)) document.activeElement.blur();
       const to = offsets(el)[next];
+      setCovered(coveredAt(to));
       if (reducedMotion()) {
         place(to);
         rested(to);
@@ -89,6 +93,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
       const to = offsets(el)[restRef.current];
       place(to);
       rested(to);
+      setCovered(coveredAt(to));
     };
     replace();
     current = settle;
@@ -209,6 +214,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
       current = null;
       el.style.transform = "";
       el.parentElement?.style.removeProperty("--sheet-covered");
+      setCovered(0);
       el.removeEventListener("pointerdown", onPointerDown);
       body?.removeEventListener("touchstart", onTouchStart);
       body?.removeEventListener("touchmove", onTouchMove);
@@ -221,5 +227,5 @@ export function useSheet(panel: RefObject<HTMLElement | null>): Rest {
     };
   }, [panel, on]);
 
-  return rest;
+  return { rest, covered };
 }

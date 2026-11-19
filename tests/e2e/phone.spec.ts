@@ -3,7 +3,7 @@
  * the map fills the screen and the panel is a sheet over its foot, at three rests: its head, half, full.
  */
 import type { Page } from "@playwright/test";
-import { expect, expectMapCanvas, expectNoSideScroll, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
+import { expect, expectMapCanvas, expectNoSideScroll, keepScreenshot, mapPoint, mapRegion, planRoute, test } from "./app.ts";
 
 /** How far down the screen the sheet's top is, 0 to 1. */
 const sheetTop = (page: Page) => page.locator(".panel").evaluate((panel) => panel.getBoundingClientRect().top / window.innerHeight);
@@ -70,9 +70,19 @@ test("A plan on a phone: ⌖ lowers the sheet for the map, the route's places lo
   await expect(page.locator("section.map")).toHaveAttribute("data-picking", "true");
   await page.getByRole("button", { name: "Raise the panel" }).tap();
 
-  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+  const planned = await planRoute(page, "Taylor, TX", "North Little Rock, AR");
   await expect(page.getByRole("combobox", { name: "Destination" })).not.toBeFocused();
   await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
+  // The camera frames the whole route above the sheet.
+  if (planned.outcome !== "routed") throw new Error("No route.");
+  const points = planned.routes[0].legs.flatMap((leg) => leg.path);
+  const [lons, lats] = [points.map((p) => p[0]), points.map((p) => p[1])];
+  const northWest = await mapPoint(page, [Math.min(...lons), Math.max(...lats)]);
+  const southEast = await mapPoint(page, [Math.max(...lons), Math.min(...lats)]);
+  expect(northWest.x).toBeGreaterThan(0);
+  expect(northWest.y).toBeGreaterThan(0);
+  expect(southEast.x).toBeLessThan(page.viewportSize()?.width ?? 0);
+  expect(southEast.y).toBeLessThan((await sheetTop(page)) * (page.viewportSize()?.height ?? 0));
   await page.getByRole("button", { name: "Raise the panel" }).tap();
   const result = page.getByRole("region", { name: "Route", exact: true });
   await result.scrollIntoViewIfNeeded();

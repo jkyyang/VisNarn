@@ -24,10 +24,10 @@ import { lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from ".
 import { MapHandles } from "./MapHandles.tsx";
 import { MapControls } from "./MapControls.tsx";
 import {
-  AUTO_DARK_ZOOM, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, MAX_PIXEL_RATIO, PAN_BOUNDS,
+  AUTO_DARK_ZOOM, CAMERA_MARGIN_PX, DECK_PICK_RADIUS_PX, DETAIL_MIN_ZOOM, FIT_MS, FLY_MS, FOUND_ZOOM, INITIAL_PADDING_PX, MAX_PIXEL_RATIO, PAN_BOUNDS,
   PICK_RADIUS_PX, REAL_TRACKS_MIN_ZOOM, SPARE_TILE_TEXTURES, TILE_CACHE_MAX_TILES,
 } from "./config.ts";
-import type { Found, MapContentProps, MapFocus } from "./MapStage.tsx";
+import type { Covered, Found, MapContentProps, MapFocus } from "./MapStage.tsx";
 import { RealTracks } from "./RealTracks.tsx";
 import { RouteMarks } from "./RouteMarks.tsx";
 import { SceneLabels } from "./SceneLabels.tsx";
@@ -55,11 +55,11 @@ export interface MapCanvasProps {
   /** Where the map centre is after each move, for the sun's position. */
   onCentre: (centre: LngLat) => void;
   /**
-   * How many px of the map every fit, flight and reset keeps clear on the left, for the panel. Given
-   * to each camera move, never set as the camera's padding: MapLibre keeps PAN_BOUNDS on the whole
-   * canvas only, so a padded camera would show past them beside the panel.
+   * The map under the panel, which every fit, flight and reset frames clear of. Given to each camera
+   * move, never set as the camera's padding: MapLibre keeps PAN_BOUNDS on the whole canvas only, so a
+   * padded camera would show past them beside the panel. A sheet that moves moves no camera; the next move frames clear of it.
    */
-  cameraLeft: number;
+  covered: Covered;
   /** The place chosen in the panel's search: its pin and card, and the camera flies there when `fly`. */
   found: Found | null;
   onCloseFound: () => void;
@@ -67,13 +67,15 @@ export interface MapCanvasProps {
   onContextLost: () => void;
 }
 
-/** The whole network, right of `cameraLeft`: where the map opens, and where Reset view goes back to. */
-const networkView = (cameraLeft: number) => ({
+/** The whole network, clear of the panel: where the map opens, and where Reset view goes back to. */
+const networkView = (covered: Covered) => ({
   bounds: [
     [NETWORK_BOUNDS[0], NETWORK_BOUNDS[1]],
     [NETWORK_BOUNDS[2], NETWORK_BOUNDS[3]],
   ] as [[number, number], [number, number]],
-  fitBoundsOptions: { padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: INITIAL_PADDING_PX, left: cameraLeft } },
+  fitBoundsOptions: {
+    padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: covered.bottom + INITIAL_PADDING_PX, left: covered.left + CAMERA_MARGIN_PX },
+  },
 });
 
 const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -87,14 +89,14 @@ const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 /** Web-mercator ground distance covered by one screen pixel (MapLibre zoom levels use 512 px tiles). */
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
-/** Flies to one place when the screen asks for it, into the middle of the free map. Renders nothing; must be a child of the map. */
-function FlyTo({ focus, cameraLeft }: { focus: MapFocus | undefined; cameraLeft: number }) {
+/** Flies to one place when the screen asks for it, into the middle of the map the panel leaves free. Renders nothing; must be a child of the map. */
+function FlyTo({ focus, covered }: { focus: MapFocus | undefined; covered: Covered }) {
   const map = useMap().current;
   const key = focus?.kind === "place" ? `${focus.lon},${focus.lat},${focus.zoom}` : null;
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
     // `essential`: the duration already follows reduced motion, and MapLibre's own fallback for it would drop the offset.
-    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [cameraLeft / 2, 0], duration: still() ? 0 : FLY_MS, essential: true });
+    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [covered.left / 2, -covered.bottom / 2], duration: still() ? 0 : FLY_MS, essential: true });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
   }, [map, key]);
   return null;
@@ -132,9 +134,9 @@ function ContextLost({ onLost }: { onLost: () => void }) {
 /** The controls need the map instance for zoom and reset, so they live inside the map. */
 function Controls(props: { canvas: MapCanvasProps; onPreview: (carrier: Railroad | null) => void }): ReactElement {
   const map = useMap().current;
-  const { layers, onLayers, cameraLeft } = props.canvas;
+  const { layers, onLayers, covered } = props.canvas;
   const reset = () => {
-    const { bounds, fitBoundsOptions } = networkView(cameraLeft);
+    const { bounds, fitBoundsOptions } = networkView(covered);
     map?.fitBounds(bounds, { ...fitBoundsOptions, duration: still() ? 0 : FIT_MS });
   };
   return (
@@ -207,7 +209,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
       data-carrier={carrier ?? undefined}
     >
       <MapGL
-        initialViewState={networkView(props.cameraLeft)}
+        initialViewState={networkView(props.covered)}
         maxBounds={PAN_BOUNDS}
         mapStyle={firstStyle}
         maxTileCacheSize={TILE_CACHE_MAX_TILES}
@@ -260,10 +262,10 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         <SceneLabels scene={scene} colors={colors} />
-        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} cameraLeft={props.cameraLeft} />}
-        <FlyTo focus={content?.focus} cameraLeft={props.cameraLeft} />
-        <FlyTo focus={content?.flyTo} cameraLeft={props.cameraLeft} />
-        <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} cameraLeft={props.cameraLeft} />
+        {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} covered={props.covered} />}
+        <FlyTo focus={content?.focus} covered={props.covered} />
+        <FlyTo focus={content?.flyTo} covered={props.covered} />
+        <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} covered={props.covered} />
         <Controls canvas={props} onPreview={setPreview} />
         <Credits />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}

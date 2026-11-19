@@ -8,7 +8,6 @@ import { useLayoutEffect, useRef, useState, type ReactElement, type RefObject } 
 import type { PlaceSuggestion, ShopId } from "../../shared/places.ts";
 import { useBasemap } from "../data/basemap.ts";
 import { fresh, usePlace, useShops } from "../data/hooks.ts";
-import { CAMERA_MARGIN_PX } from "../map/config.ts";
 import { MapStage, MapStageProvider } from "../map/MapStage.tsx";
 import { RouteWorkspace } from "../screens/route/RouteWorkspace.tsx";
 import { ShopsScreen } from "../screens/shops/ShopsScreen.tsx";
@@ -33,7 +32,7 @@ export default function App(): ReactElement {
   const reopen = useRef<HTMLButtonElement>(null);
   const [panelState, setPanelState] = usePanelState();
   const folded = panelState === "folded";
-  const cameraLeft = useCameraLeft(panel, !folded);
+  const coveredLeft = useCoveredLeft(panel, !folded);
   const sheet = useSheet(panel);
   const [text, setText] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
@@ -67,8 +66,8 @@ export default function App(): ReactElement {
             <button
               type="button"
               className="sheet-grabber"
-              aria-label={sheet === "full" ? "Lower the panel" : "Raise the panel"}
-              onClick={() => showSheet(sheet === "half" ? "full" : "half")}
+              aria-label={sheet.rest === "full" ? "Lower the panel" : "Raise the panel"}
+              onClick={() => showSheet(sheet.rest === "half" ? "full" : "half")}
             />
             <PanelHeader
               current={screen.name}
@@ -96,7 +95,7 @@ export default function App(): ReactElement {
             </button>
           )}
           <WhyTip />
-          <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
+          <MapStage covered={{ left: coveredLeft, bottom: sheet.covered }} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
     </ErrorBoundary>
@@ -104,23 +103,23 @@ export default function App(): ReactElement {
 }
 
 /**
- * The px every camera move keeps clear on the left: up to the open panel's right edge and a margin past
- * it, else the margin alone. On a phone the panel is as wide as the map and lies over its foot. The
- * panel's place follows the window only, so a window resize and a fold are the times to measure again.
+ * The px of the map under the open panel on its left: up to the panel's right edge. On a phone the panel
+ * is as wide as the map and lies over its foot (./sheet.ts says how far). The panel's place follows the
+ * window only, so a window resize and a fold are the times to measure again.
  */
-function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
-  const [left, setLeft] = useState(CAMERA_MARGIN_PX);
+function useCoveredLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
+  const [left, setLeft] = useState(0);
   useLayoutEffect(() => {
     const element = panel.current;
     const frame = element?.parentElement;
     if (!open || !element || !frame) {
-      setLeft(CAMERA_MARGIN_PX);
+      setLeft(0);
       return;
     }
     const measure = () => {
       const { width, right } = element.getBoundingClientRect();
       const box = frame.getBoundingClientRect();
-      setLeft(width < box.width ? Math.round(right - box.left) + CAMERA_MARGIN_PX : CAMERA_MARGIN_PX);
+      setLeft(width < box.width ? Math.round(right - box.left) : 0);
     };
     measure();
     window.addEventListener("resize", measure);

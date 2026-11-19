@@ -36,6 +36,12 @@ import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapHandle } from "./MapHandles.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
+/** The px of the map under the panel: at its left beside a floating panel, at its foot under a phone's sheet. */
+export interface Covered {
+  left: number;
+  bottom: number;
+}
+
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
 export type MapFocus = { kind: "fit" } | { kind: "place"; lon: number; lat: number; zoom: number };
 
@@ -182,9 +188,9 @@ const useLight = storedChoice<LightMode>("visnarn.time-of-day", ["auto", "day", 
 
 /**
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
- * `cameraLeft`: how many px of the map every camera move keeps clear on the left, for the panel.
+ * `covered`: the map under the panel, which every camera move frames clear of.
  */
-export function MapStage(props: { cameraLeft: number; found: Found | null; onCloseFound: () => void }): ReactElement {
+export function MapStage(props: { covered: Covered; found: Found | null; onCloseFound: () => void }): ReactElement {
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
@@ -218,7 +224,7 @@ export function MapStage(props: { cameraLeft: number; found: Found | null; onClo
               look={look}
               now={now}
               onCentre={setCentre}
-              cameraLeft={props.cameraLeft}
+              covered={props.covered}
               found={props.found}
               onCloseFound={props.onCloseFound}
             />

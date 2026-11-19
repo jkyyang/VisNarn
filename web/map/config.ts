@@ -8,10 +8,12 @@
  * and northern South America stays but the map cannot drift to another continent. MapLibre keeps the
  * whole screen inside these, which also stops zooming out once they fill the screen. Zoomed all the
  * way out, the panel covers up to about 72° on a laptop screen: the west edge is that far past the
- * Aleutians (180°), so all of Alaska fits right of the panel. MapLibre draws the world again west of 180°.
+ * Aleutians (180°), so all of Alaska fits right of the panel. The south edge is as far below the
+ * network as a phone's half sheet covers when zoomed out, so a route that reaches Mexico still frames above it.
+ * MapLibre draws the world again west of 180°.
  */
 export const PAN_BOUNDS: [[number, number], [number, number]] = [
-  [-255, 5],
+  [-255, -20],
   [-20, 83],
 ];
 
@@ -21,7 +23,7 @@ export const NETWORK_CENTRE: [number, number] = [-95.5, 38.5];
 /** Room around the whole network, when the map first opens and on Reset view. */
 export const INITIAL_PADDING_PX = 24;
 
-/** Every camera move keeps this much clear on the left: on each side of the open panel, or alone when it is collapsed. */
+/** A fit or reset keeps this much clear on the left: past the open panel's edge, or alone when it is folded. */
 export const CAMERA_MARGIN_PX = 16;
 
 /** The camera's flight to one place, and its move to frame a route. */
@@ -34,7 +36,7 @@ export const FIT_MAX_ZOOM = 11;
 /**
  * Room kept round a framed route, in px: at the top for the pills and turn-back marks that sit over the
  * line, over the credits, and on the right a share of the free map for the labels that hang off the
- * outermost pins, never less than the map buttons take. The left is the camera's own (CAMERA_MARGIN_PX).
+ * outermost pins, never less than the map buttons take. The left is the camera's own (CAMERA_MARGIN_PX); a phone's sheet adds its height to the bottom.
  */
 export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 92 };
 

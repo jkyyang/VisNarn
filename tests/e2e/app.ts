@@ -87,16 +87,17 @@ export const mapLayerOrder = (page: Page): Promise<string[]> => askMap(page, "ge
 export const mapPoint = (page: Page, lngLat: [number, number]): Promise<{ x: number; y: number }> => askMap(page, "project", lngLat);
 
 /**
- * The middle of the map the camera frames, where the search box puts the place it found: every camera
- * move keeps the panel's width + 32 px clear on the left on a desktop (the panel floats over the map's
- * left side), 16 px on a phone (the panel lies below the map).
+ * The middle of the map the panel leaves free, where the camera flies a place to: right of the panel
+ * floating over the map's left side, or above a phone's sheet over its foot.
  */
 export async function freeMapCentre(page: Page): Promise<{ x: number; y: number }> {
   const map = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
   const panel = await page.locator(".panel").boundingBox();
   if (!map || !panel) throw new Error("The map or the panel is not on the page.");
-  const left = panel.width < map.width ? panel.width + 32 : 16;
-  return { x: map.x + left + (map.width - left) / 2, y: map.y + map.height / 2 };
+  const sheet = panel.width >= map.width;
+  const left = sheet ? 0 : panel.x + panel.width - map.x;
+  const bottom = sheet ? map.y + map.height - panel.y : 0;
+  return { x: map.x + left + (map.width - left) / 2, y: map.y + (map.height - bottom) / 2 };
 }
 
 /** Clicks the middle of the free map. */

@@ -10,6 +10,7 @@ import type { LngLat } from "../../../shared/geo.ts";
 import { resolvedOf, type PlaceSuggestion, type ShopView } from "../../../shared/places.ts";
 import { placeKind } from "../../../shared/plans.ts";
 import { go, HOME, type Screen } from "../../app/routes.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { removeRoute, saveRoute, usePlannedRoute, useReadOnly, useSavedRoutes, useShops } from "../../data/hooks.ts";
 import { SELECTED_ZOOM } from "../../map/config.ts";
 import { MapContent, type MapFlash } from "../../map/MapStage.tsx";
@@ -52,6 +53,8 @@ export function RouteWorkspace({ screen, onFind }: {
   const pick = (next: Picked | null, at: LngLat | null = null) => {
     setPicked(next);
     setFlyTo(at);
+    // On a phone the sheet lowers to half, for the place flown to.
+    if (at) showSheet("half");
   };
   const toggle = (next: Picked) => pick(picked?.kind === next.kind && picked.index === next.index ? null : next);
   useEffect(() => pick(null), [chosen]);
