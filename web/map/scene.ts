@@ -104,8 +104,8 @@ export interface EditedShop {
 /** Something in the scene the user clicked: a route to select, a leg of the selected one (by its `index`), or a place to put in the plan. */
 export type SceneTarget = { kind: "option"; id: RouteStrategy } | { kind: "leg"; index: number } | { kind: "place"; ref: PlaceRef; position: LngLat };
 
-/** The Class I network end to end: where a scene with nothing in it is framed. */
-export const NETWORK_BOUNDS: Bounds = [-125, 24, -66, 55];
+/** The Class I network end to end, Vancouver to Montréal and Edmonton to Mexico City: where a scene with nothing in it is framed. */
+export const NETWORK_BOUNDS: Bounds = [-125, 19, -66, 55];
 
 /** Chevrons every 10 km; every 4th also shows from zoom 6, every 16th at any zoom. Spacing on screen stays near 25 px. */
 const CHEVRON_KM = 10;

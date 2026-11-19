@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FraId, PlaceResolution } from "../shared/places.ts";
 import type { RoutePath, RouteStrategy, TurnBack } from "../shared/route.ts";
-import { interchangesWord, isApproximate, pillText, placeHint, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
+import { interchangesWord, isApproximate, nameAndNote, pillText, placeHint, placeProblem, routeName, shortPlace, trackWords, turnBackMove } from "./words.ts";
 
 function route(id: RouteStrategy, km: number, interchanges: number): RoutePath {
   return { strategies: [id], km, interchanges, railroads: ["BNSF"], legs: [], turnBacks: [], steps: [] };
@@ -65,6 +65,10 @@ describe("words", () => {
     expect(shortPlace("Texarkana, AR · UTLX")).toBe("Texarkana");
     expect(isApproximate("Regina, SK · Procor (approximate)")).toBe(true);
     expect(isApproximate("Ville Platte, LA · UTLX (ends at UP, 20 km away)")).toBe(false);
+    expect(nameAndNote("Regina, SK · Procor (approximate)")).toEqual(["Regina, SK · Procor", "approximate"]);
+    expect(nameAndNote("Ville Platte, LA · UTLX (ends at UP, 20 km away)")).toEqual(["Ville Platte, LA · UTLX", "ends at UP, 20 km away"]);
+    expect(nameAndNote("Texarkana, AR · UTLX")).toEqual(["Texarkana, AR · UTLX", null]);
+    expect(nameAndNote("(approximate)")).toEqual(["(approximate)", null]);
     expect(interchangesWord(1)).toBe("1 interchange");
     expect(interchangesWord(2)).toBe("2 interchanges");
     const turnBack: TurnBack = {

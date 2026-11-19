@@ -80,7 +80,7 @@ const rowName = (at: number, count: number) => {
 };
 
 /**
- * One place input with autocomplete, a pick-on-map button, a remove button, and the one line under it
+ * One place input with autocomplete, a remove button, a pick-on-map button, and the one line under it
  * when the place did not resolve. The typed text is its own while focused: Enter takes the highlighted
  * suggestion, else the first one, else the text as typed; leaving the box puts back what is set.
  */
@@ -162,14 +162,14 @@ function PlaceField(props: {
           }}
           />
         </span>
-        <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
-          <Crosshair />
-        </button>
         {props.remove && (
           <button type="button" className="icon-btn remove-btn" aria-label={`${props.remove} ${props.label}`} title={props.remove} onClick={props.onRemove}>
             <Cross />
           </button>
         )}
+        <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
+          <Crosshair />
+        </button>
       </div>
       {open && <SuggestionList id={listId} label={`Suggestions for ${props.label}`} list={list} active={active} onChoose={(suggestion) => done(suggestion.ref)} />}
       {props.problem && (
@@ -529,7 +529,7 @@ function SavedList(props: {
 
 // ---- the panel ----
 
-/** Route with Undo / Redo · the places and what a click does next · options · the routes · the result · save · saved routes. */
+/** Route with Undo / Redo · the places and what a click does next · options · the result · the other routes · saved routes. */
 export function RoutePanel(props: RoutePanelProps): ReactElement {
   const { session, dispatch, planned, open } = props;
   const plan = session.plan.present;
@@ -618,7 +618,6 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
         </p>
       </section>
 
-      {routes && chosen && routes.length > 1 && <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />}
       {routes && chosen && string && (
         <ResultCard
           route={chosen}
@@ -631,6 +630,7 @@ export function RoutePanel(props: RoutePanelProps): ReactElement {
           onLeg={props.onLeg}
         />
       )}
+      {routes && chosen && routes.length > 1 && <RouteRows routes={routes} chosen={chosen} onSelect={props.onSelect} unit={props.unit} />}
 
       {props.saved.length > 0 && <SavedList saved={props.saved} current={open?.id ?? null} unfolded={empty} onRename={save} onRemove={props.onRemoveSaved} />}
     </div>

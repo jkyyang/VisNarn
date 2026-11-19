@@ -18,7 +18,7 @@ import { ownerOf, type Owner } from "../../owner.ts";
 import { lineColor } from "../../theme.ts";
 import { PHONE_QUERY } from "../../map/config.ts";
 import type { DistanceUnit } from "../../units.ts";
-import { clickToSet, errorText, lineName, linkText, plural } from "../../words.ts";
+import { clickToSet, errorText, lineName, linkText, nameAndNote, plural } from "../../words.ts";
 
 /** Rows of an import preview listed by name; the rest are counted. */
 const PREVIEW_ROWS = 8;
@@ -41,8 +41,9 @@ function CarrierDots({ railroads }: { railroads: readonly Railroad[] }): ReactEl
 }
 
 /**
- * The shops: a count, Add shop and the ⋯ menu (Import CSV) over one row per shop (its owner's mark, name, code
- * and carriers). A row's click selects the shop and the map flies there; Edit shows on the hovered or selected row.
+ * The shops: a count, Add shop and the ⋯ menu (Import CSV) over one row per shop (its owner's mark, name, code and
+ * the name's note in brackets, carriers). A row's click selects the shop and the map flies there; Edit shows on the
+ * hovered or selected row.
  */
 export function ShopList(props: {
   shops: ShopView[];
@@ -71,13 +72,14 @@ export function ShopList(props: {
         {props.shops.map((shop) => {
           const selected = shop.id === props.selected;
           const editing = shop.id === editingId;
+          const [name, note] = nameAndNote(shop.name);
           return (
             <li key={shop.id} className={`shop-row${selected || editing ? " is-selected" : ""}${shop.place.ok ? "" : " is-off"}`} title={shop.place.ok ? undefined : "Not on the network"}>
               <button type="button" className="shop-pick" aria-pressed={selected} onClick={() => props.onSelect(shop)}>
                 <OwnerGlyph owner={ownerOf(shop)} />
                 <span className="shop-text">
-                  <span className="shop-name">{shop.name}</span>
-                  <span className="shop-sub">{shop.code}</span>
+                  <span className="shop-name">{name}</span>
+                  <span className="shop-sub">{[shop.code, note].filter(Boolean).join(" · ")}</span>
                 </span>
                 {shop.place.ok && <CarrierDots railroads={shop.place.place.railroads} />}
               </button>

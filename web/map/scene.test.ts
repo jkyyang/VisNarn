@@ -261,6 +261,10 @@ const cpkc = { type: "Feature", geometry: { type: "LineString", coordinates: [] 
 const network = { ...Object.fromEntries(NETWORK_CLASSES.map((c) => [c, []])), class_i: [cpkc] } as unknown as Parameters<typeof networkLayers>[0];
 const byClass = (drawn: NetworkClass[], focus: Partial<NetworkFocus> = {}) =>
   Object.fromEntries((networkLayers(network, drawn, { carrier: null, underRoute: false, fromSpace: false, ...focus }, colors) as Layer[]).map((l) => [l.id, l.props as unknown as Record<string, unknown>]));
+/** What the eye gets of a layer's opacity: deck.gl draws it at opacity^(1/2.2). */
+const seenOpacity = (props: Record<string, unknown> | undefined) => Number(props?.opacity) ** (1 / 2.2);
+/** Depth test "less": a layer draws each pixel once, so its own overlaps do not darken it. */
+const ONCE_PER_PIXEL = { parameters: { depthFunc: 0x0201 } };
 
 describe("layers", () => {
   let scene: MapScene;
@@ -377,21 +381,26 @@ describe("layers", () => {
       "network-regional": false,
       "network-class_i": true,
     });
-    for (const props of Object.values(shown)) expect(props).toMatchObject({ getLineColor: colors.neutral, getLineWidth: 1.1, opacity: 0.4, beforeId: LABELS, lineCapRounded: true, lineJointRounded: true });
+    for (const props of Object.values(shown)) {
+      expect(props).toMatchObject({ getLineColor: colors.neutral, getLineWidth: 1.1, beforeId: LABELS, lineCapRounded: true, lineJointRounded: true, ...ONCE_PER_PIXEL });
+      expect(seenOpacity(props)).toBeCloseTo(0.4);
+    }
   });
 
   it("shows the carrier the Layers popover picks in its colour over the rest, which fade; under a route all fade further", () => {
     const isolated = byClass(["class_i"], { carrier: "CPKC" });
-    expect(isolated[LAYER.carrier]).toMatchObject({ data: [cpkc], getLineColor: colors.rail.CPKC, getLineWidth: 1.9, opacity: 1, beforeId: LABELS });
-    expect(isolated["network-class_i"].opacity).toBe(0.13);
+    expect(isolated[LAYER.carrier]).toMatchObject({ data: [cpkc], getLineColor: colors.rail.CPKC, getLineWidth: 1.9, opacity: 1, beforeId: LABELS, ...ONCE_PER_PIXEL });
+    expect(seenOpacity(isolated["network-class_i"])).toBeCloseTo(0.13);
     expect(Object.keys(isolated).at(-1)).toBe(LAYER.carrier);
     // The same data for the same carrier: deck.gl draws it again without re-tessellating.
     expect(byClass(["class_i"], { carrier: "CPKC" })[LAYER.carrier].data).toBe(isolated[LAYER.carrier].data);
 
     const underRoute = byClass(["class_i"], { underRoute: true });
-    expect(underRoute["network-class_i"].opacity).toBe(0.16);
+    expect(seenOpacity(underRoute["network-class_i"])).toBeCloseTo(0.16);
     expect(underRoute[LAYER.carrier]).toBeUndefined();
-    expect(byClass(["class_i"], { carrier: "CPKC", underRoute: true })[LAYER.carrier]).toMatchObject({ getLineWidth: 1.4, opacity: 0.55 });
+    const carrierUnderRoute = byClass(["class_i"], { carrier: "CPKC", underRoute: true })[LAYER.carrier];
+    expect(carrierUnderRoute).toMatchObject({ getLineWidth: 1.4 });
+    expect(seenOpacity(carrierUnderRoute)).toBeCloseTo(0.55);
     expect(byClass(["short_line"], { carrier: "CPKC" })[LAYER.carrier]).toBeUndefined();
   });
 

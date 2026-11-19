@@ -148,6 +148,16 @@ const NETWORK_LOOK = {
 
 const LINE_PX = { lineWidthUnits: "pixels", lineCapRounded: true, lineJointRounded: true } as const;
 
+/** WebGL's depth test "less": a pixel a layer has drawn, that layer does not draw again. */
+const GL_LESS = 0x0201;
+
+/**
+ * A network layer as the eye should see `opacity`. deck.gl draws a layer at opacity^(1/2.2), and every overlap of its own
+ * lines (a curve's many short segments, a double main) blended again, so a 40 % line came out nearly solid. Each layer
+ * sits at its own depth offset, so with the test "less" it covers a pixel once and the layers after it still draw.
+ */
+const seenAt = (opacity: number) => ({ opacity: opacity ** 2.2, parameters: { depthFunc: GL_LESS } });
+
 /** The Class I lines of each carrier, sorted once per network, so showing a carrier again gives deck.gl the same data. */
 const carrierLinesOf = once<Mainline, Record<Railroad, Mainline["class_i"]>>();
 const carrierLines = (network: Mainline, carrier: Railroad) =>
@@ -171,7 +181,7 @@ export function networkLayers(network: Mainline, drawn: readonly NetworkClass[],
           id: part === "line" ? `network-${c}` : `network-${c}-casing`,
           data: network[c],
           visible: drawn.includes(c),
-          opacity,
+          ...seenAt(opacity),
           filled: false,
           ...LINE_PX,
           getLineWidth: part === "line" ? NETWORK_LOOK.width : NETWORK_LOOK.casing,
@@ -183,7 +193,7 @@ export function networkLayers(network: Mainline, drawn: readonly NetworkClass[],
   const look = underRoute ? NETWORK_LOOK.carrierUnderRoute : NETWORK_LOOK.carrier;
   return [
     ...quiet,
-    new GeoJsonLayer({ ...UNDER_LABELS, id: LAYER.carrier, data: carrierLines(network, carrier), opacity: look.opacity, filled: false, ...LINE_PX, getLineWidth: look.width, getLineColor: colors.rail[carrier] }),
+    new GeoJsonLayer({ ...UNDER_LABELS, id: LAYER.carrier, data: carrierLines(network, carrier), ...seenAt(look.opacity), filled: false, ...LINE_PX, getLineWidth: look.width, getLineColor: colors.rail[carrier] }),
   ];
 }
 

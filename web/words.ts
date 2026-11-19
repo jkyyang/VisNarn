@@ -17,6 +17,12 @@ import type { DistanceUnit } from "./units.ts";
  */
 export const shortPlace = (near: string) => near.replace(/\s+·\s.*$/, "").replace(/\s*\([^)]*\)$/, "").replace(/,\s*[A-Z]{2}$/, "");
 
+/** "Regina, SK · Procor (approximate)" → ["Regina, SK · Procor", "approximate"]: a shop row shows the note on its code's line. */
+export function nameAndNote(name: string): [string, string | null] {
+  const match = /^(.*\S)\s*\(([^()]+)\)$/.exec(name);
+  return match ? [match[1], match[2]] : [name, null];
+}
+
 /** "Regina, SK · Procor (approximate)": the shop is placed at its city's centre. */
 export const isApproximate = (name: string): boolean => /\(approximate\)$/.test(name);
 

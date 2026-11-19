@@ -53,9 +53,9 @@ export const Plus = ({ size = 18 }: { size?: number }): ReactElement => (
 
 export const More = (): ReactElement => (
   <Icon>
-    <circle className="dot" cx="5" cy="12" r="1.4" />
-    <circle className="dot" cx="12" cy="12" r="1.4" />
-    <circle className="dot" cx="19" cy="12" r="1.4" />
+    <circle className="dot" cx="5" cy="12" r="2.6" />
+    <circle className="dot" cx="12" cy="12" r="2.6" />
+    <circle className="dot" cx="19" cy="12" r="2.6" />
   </Icon>
 );
 

@@ -39,6 +39,8 @@
   --stroke: rgba(18, 22, 29, 0.1);
   --text: #12161d;
   --text-2: rgba(18, 22, 29, 0.68);
+  /* The quietest mark: a drag handle. */
+  --text-3: rgba(18, 22, 29, 0.38);
   --thumb: #ffffff;
   --thumb-shadow: 0 1px 2px rgba(18, 22, 29, 0.14);
   --switch-off: rgba(18, 22, 29, 0.2);
@@ -78,6 +80,7 @@
   --stroke: rgba(255, 255, 255, 0.1);
   --text: #f3f5f8;
   --text-2: rgba(243, 245, 248, 0.64);
+  --text-3: rgba(243, 245, 248, 0.4);
   --thumb: rgba(255, 255, 255, 0.14);
   --thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.11);
   --switch-off: rgba(255, 255, 255, 0.16);
@@ -661,6 +664,11 @@ input[aria-invalid="true"] {
   min-height: 44px;
   padding-left: var(--space);
 }
+.list-bar .icon-btn {
+  width: 34px;
+  height: 34px;
+  color: var(--text);
+}
 .list-count {
   flex: 1;
   font-size: var(--text-md);
@@ -675,6 +683,9 @@ input[aria-invalid="true"] {
   height: 34px;
   padding: 0 14px 0 10px;
   border-radius: var(--radius-pill);
+}
+.btn--pill .icon {
+  stroke-width: 2.2;
 }
 .menu {
   position: relative;
@@ -737,7 +748,7 @@ input[aria-invalid="true"] {
 .route-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .route-rows,
 .result {
@@ -747,14 +758,14 @@ input[aria-invalid="true"] {
 .route-panel.is-stale .result {
   opacity: 0.4;
 }
-/* The route panel's bar sits closer to the card under it. */
+/* The route panel's bar sits right on the card under it. */
 .route-panel > .list-bar {
-  margin-bottom: calc(-2 * var(--space));
+  margin-bottom: -10px;
 }
 .plan {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 .plan > :not(.group) {
   padding: 0 4px;
@@ -830,6 +841,11 @@ input[aria-invalid="true"] {
   height: auto;
   font-weight: var(--weight-strong);
 }
+.pick-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-inner);
+}
 .pick-btn[aria-pressed="true"] {
   background: var(--accent);
   color: var(--on-accent);
@@ -838,7 +854,7 @@ input[aria-invalid="true"] {
   align-self: start;
   width: 28px;
   margin-top: calc((52px - var(--icon-btn)) / 2);
-  color: var(--text-2);
+  color: var(--text-3);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -943,9 +959,6 @@ input[aria-invalid="true"] {
   gap: 6px;
   padding: 14px;
 }
-.result-head + .sections {
-  margin-top: var(--space);
-}
 .result-head {
   display: flex;
   flex-wrap: wrap;
@@ -963,6 +976,9 @@ input[aria-invalid="true"] {
   font-variant-numeric: tabular-nums;
 }
 .sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1258,6 +1274,11 @@ input.saved-name {
 .shop-sub {
   font-size: var(--text-sm);
   color: var(--text-2);
+}
+.shop-row :is(.shop-name, .shop-sub) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .carrier-dots {
   flex: none;
