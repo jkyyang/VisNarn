@@ -10,6 +10,9 @@ function fitOptions(mapWidth: number, cameraLeft: number) {
   return { padding: { top, bottom, left: cameraLeft, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
 }
 
+/** A fit puts the route's box on the edge of its room: this much past it still counts as inside. */
+const EDGE_SLACK_PX = 8;
+
 type View = { getWest(): number; getSouth(): number; getEast(): number; getNorth(): number };
 
 /** True when `bounds` lie wholly inside the visible map. */
@@ -59,15 +62,16 @@ export function FitBounds(props: { bounds: Bounds | null; cameraLeft: number }) 
     previous.current = bounds;
     if (!map || !bounds) return;
     const [west, south, east, north] = bounds;
-    // What the person sees: the map right of the panel.
     const { clientWidth, clientHeight } = map.getContainer();
-    const nw = map.unproject([cameraLeft, 0]);
-    const se = map.unproject([clientWidth, clientHeight]);
+    const options = fitOptions(clientWidth, cameraLeft);
+    // Where a framed route is clear of the panel and the map buttons: the room a fit keeps, with a few px to spare (a fit lands on its edge).
+    const { top, right, bottom, left } = options.padding;
+    const nw = map.unproject([left - EDGE_SLACK_PX, top - EDGE_SLACK_PX]);
+    const se = map.unproject([clientWidth - right + EDGE_SLACK_PX, clientHeight - bottom + EDGE_SLACK_PX]);
     const view: View = { getWest: () => nw.lng, getNorth: () => nw.lat, getEast: () => se.lng, getSouth: () => se.lat };
     // Switching tabs or editing stops must not zoom the map back and forth: the camera stays where
     // the user put it unless the route ran off it.
     if (!first && !appeared && !shouldRefit(view, before, bounds)) return;
-    const options = fitOptions(clientWidth, cameraLeft);
     map.fitBounds([[west, south], [east, north]], { ...options, duration: jump ? 0 : FIT_MS });
     // Keyed on the numbers: a re-check that lands on the same route leaves the camera wherever the user has panned to.
   }, [map, key]);

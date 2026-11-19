@@ -32,9 +32,9 @@ export const FIT_MS = 800;
 export const FIT_MAX_ZOOM = 11;
 
 /**
- * Room kept round a framed route, in px: under the search box, over the credits, and on the right a
- * share of the free map for the labels that hang off the outermost pins, never less than the map
- * buttons take. The left is the camera's own (CAMERA_MARGIN_PX).
+ * Room kept round a framed route, in px: at the top for the pills and turn-back marks that sit over the
+ * line, over the credits, and on the right a share of the free map for the labels that hang off the
+ * outermost pins, never less than the map buttons take. The left is the camera's own (CAMERA_MARGIN_PX).
  */
 export const FIT_PADDING = { top: 72, bottom: 84, sideShare: 0.14, sideMin: 40, sideMax: 150, buttons: 92 };
 
