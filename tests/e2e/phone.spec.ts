@@ -1,67 +1,118 @@
 /**
- * Phone: the route planner in a 390 × 844 window with touch, as on an iPhone 14. The map sits on top,
- * the same rows follow in one column, and nothing is cut off at the sides.
+ * Phone held upright, as the "iphone" (WebKit, iPhone 15 Pro) and "android" (Chrome, Pixel 7) projects run it:
+ * the map fills the screen and the panel is a sheet over its foot, at three rests: its head, half, full.
  */
-import { expect, expectMapCanvas, expectNoSideScroll, keepScreenshot, mapRegion, PHONE, planRoute, test } from "./app.ts";
+import type { Page } from "@playwright/test";
+import { expect, expectMapCanvas, expectNoSideScroll, keepScreenshot, mapRegion, planRoute, test } from "./app.ts";
 
-test.use(PHONE);
+/** How far down the screen the sheet's top is, 0 to 1. */
+const sheetTop = (page: Page) => page.locator(".panel").evaluate((panel) => panel.getBoundingClientRect().top / window.innerHeight);
 
-test("Phone: map on top, then the places, the routes and the sections in one column", async ({ page }) => {
+/** Drags the sheet by its grabber, in steps, from where it is to `to` (0 to 1 of the screen's height). */
+async function dragSheet(page: Page, to: number): Promise<void> {
+  const grabber = await page.locator(".sheet-grabber").boundingBox();
+  const height = page.viewportSize()?.height ?? 0;
+  if (!grabber) throw new Error("The sheet has no grabber.");
+  const x = grabber.x + grabber.width / 2;
+  await page.mouse.move(x, grabber.y + grabber.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, to * height, { steps: 12 });
+  await page.mouse.up();
+}
+
+test("The map fills the screen; the sheet rests at half and drags to full and to its head", async ({ page }) => {
   await page.goto("/route");
-
-  const map = mapRegion(page);
   await expectMapCanvas(page);
-  const mapBox = await map.boundingBox();
-  expect(mapBox?.y ?? -1).toBeLessThan(10);
-  expect(mapBox?.width ?? 0).toBeGreaterThan(380);
+  const map = await mapRegion(page).boundingBox();
+  const size = page.viewportSize();
+  expect(map).toMatchObject({ x: 0, y: 0, width: size?.width, height: size?.height });
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
 
-  await expect(page.getByRole("navigation", { name: "Mode" }).getByRole("link")).toHaveText([/^Route/, /^Shops/]);
+  await dragSheet(page, 0.1);
+  await expect.poll(() => sheetTop(page)).toBeLessThan(0.1);
+  await expect(page.getByRole("button", { name: "Lower the panel" })).toBeVisible();
 
-  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
-  await expect(page.getByRole("combobox", { name: "Start" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Route", exact: true })).toBeVisible();
-  await expect(page.getByRole("list", { name: "Sections" })).toBeVisible();
-  const undo = page.getByRole("button", { name: "Undo route change" });
-  await expect(undo).toBeVisible();
+  // Down to its head: the search and Route | Shops stay on screen, nothing else.
+  await dragSheet(page, 0.95);
+  const search = page.getByRole("combobox", { name: "Search shops and cities" });
+  await expect(search).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole("navigation", { name: "Mode" })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole("combobox", { name: "Start" })).not.toBeInViewport();
 
-  // The layers card is a popover: opening it moves no button, it stays on the map, and Escape closes it.
-  const before = await undo.boundingBox();
-  await page.getByRole("button", { name: /^Map layers/ }).tap();
-  const card = await page.locator(".layers-card").boundingBox();
-  const shown = await map.boundingBox();
-  if (!card || !shown) throw new Error("The layers card or the map is not on the page.");
-  expect(await undo.boundingBox()).toEqual(before);
-  expect(card.x).toBeGreaterThanOrEqual(shown.x);
-  expect(card.y + card.height).toBeLessThanOrEqual(shown.y + shown.height);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".layers-card")).toBeHidden();
-
-  // Nothing wider than the phone: no sideways scrolling.
+  // The grabber's tap goes to half.
+  await page.getByRole("button", { name: "Raise the panel" }).tap();
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
   await expectNoSideScroll(page);
-  await keepScreenshot(page, "phone");
 });
 
-test("Phone: Shops fits the width; a shop's form comes into view when Edit is tapped", async ({ page }) => {
-  for (const path of ["/route", "/shops"]) {
+test("Text fields are 16 px or larger, so iOS does not zoom; a focused field raises the sheet above the keyboard", async ({ page }) => {
+  for (const path of ["/route", "/shops/new"]) {
     await page.goto(path);
-    await expectMapCanvas(page);
-    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
-    await expectNoSideScroll(page, path);
+    await expect(page.locator(".panel input").first()).toBeVisible();
+    const sizes = await page.locator("input").evaluateAll((inputs) => inputs.map((input) => parseFloat(getComputedStyle(input).fontSize)));
+    expect(Math.min(...sizes), path).toBeGreaterThanOrEqual(16);
   }
+  await page.goto("/route");
+  const search = page.getByRole("combobox", { name: "Search shops and cities" });
+  await search.tap();
+  await expect(search).toBeFocused();
+  await expect.poll(() => sheetTop(page)).toBeLessThan(0.1);
+  // Enter, a phone's Go key: the keyboard goes.
+  await search.press("Enter");
+  await expect(search).not.toBeFocused();
+});
 
-  await page.goto("/shops");
-  await page.getByRole("button", { name: /^Edit / }).first().tap();
-  const form = page.getByRole("region", { name: "Edit shop" });
-  await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
-  await expect(form.getByRole("textbox", { name: "Name", exact: true })).toBeInViewport();
+test("A plan on a phone: ⌖ lowers the sheet for the map, the route's places lower it to half, and full shows the result", async ({ page }) => {
+  await page.goto("/route");
+  // Start's ⌖ is on as the planner opens; Destination's is pressed.
+  await page.getByRole("button", { name: "Pick on the map: Destination" }).tap();
+  await expect(page.getByRole("combobox", { name: "Destination" })).not.toBeInViewport();
+  await expect(page.locator("section.map")).toHaveAttribute("data-picking", "true");
+  await page.getByRole("button", { name: "Raise the panel" }).tap();
+
+  await planRoute(page, "Taylor, TX", "North Little Rock, AR");
+  await expect(page.getByRole("combobox", { name: "Destination" })).not.toBeFocused();
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
+  await page.getByRole("button", { name: "Raise the panel" }).tap();
+  const result = page.getByRole("region", { name: "Route", exact: true });
+  await result.scrollIntoViewIfNeeded();
+  await expect(result).toBeInViewport();
+  await expect(page.getByRole("list", { name: "Sections" })).toBeVisible();
+  await keepScreenshot(page, "phone");
+
+  // The layers card stays on the map, over the sheet's top.
+  await page.getByRole("button", { name: "Lower the panel" }).tap();
+  await page.getByRole("button", { name: /^Map layers/ }).tap();
+  const card = await page.locator(".layers-card").boundingBox();
+  const top = (await sheetTop(page)) * (page.viewportSize()?.height ?? 0);
+  expect((card?.y ?? 0) + (card?.height ?? 0)).toBeLessThanOrEqual(top);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".layers-card")).toBeHidden();
   await expectNoSideScroll(page);
+});
 
-  // With the sheet already slid up over the map, the form still opens at its heading.
+test("A red edge says why on a tap: no hover on a phone", async ({ page }) => {
+  await page.goto("/route");
+  const search = page.getByRole("combobox", { name: "Search shops and cities" });
+  await search.fill("Qqzzx");
+  await expect(page.locator(".search-field")).toHaveClass(/is-wrong/);
+  await search.tap();
+  await expect(page.locator(".why-tip")).toHaveText("No shop, code or city called “Qqzzx”.");
+  await expect(page.locator(".why-tip")).toBeInViewport();
+});
+
+test("Shops fits the width; Edit lowers the sheet to half, its form opens at its heading", async ({ page }) => {
   await page.goto("/shops");
+  await expectMapCanvas(page);
+  await expectNoSideScroll(page);
+  await page.getByRole("button", { name: "Raise the panel" }).tap();
   const last = page.getByRole("button", { name: /^Edit / }).last();
   await last.scrollIntoViewIfNeeded();
-  await page.evaluate(() => window.scrollBy({ top: 400 }));
-  await expect.poll(() => page.locator(".panel").evaluate((panel) => panel.getBoundingClientRect().top)).toBeLessThan(20);
   await last.tap();
+  await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
+  const form = page.getByRole("region", { name: "Edit shop" });
   await expect(form.getByRole("heading", { name: "Edit shop" })).toBeInViewport({ ratio: 1 });
+  // The name waits for a tap: no keyboard over the map the shop is set on.
+  await expect(form.getByRole("textbox", { name: "Name", exact: true })).not.toBeFocused();
+  await expectNoSideScroll(page);
 });

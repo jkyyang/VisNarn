@@ -44,7 +44,7 @@ How the rules are enforced:
 | `tsconfig.areas.json` | the list of areas, for `tsc -b` | the architecture test reads the area list from here |
 | `<area>/tsconfig.json` | that area's runtime and its allowed imports (`references`) | |
 | `vite.config.ts` | Vite: React, vitest settings; in development it runs inside the Node server (middleware mode, one port, no proxy) | checked in the `scripts` area |
-| `index.html` | the page shell; loads `/web/main.tsx` | |
+| `index.html` | the page shell; loads `/web/main.tsx`; the phone meta (viewport over the notch, theme colour, home-screen icon and name, `public/manifest.json`) | |
 | `vercel.json` | Vercel: the built page (`dist/`) as static files, `/api/*` to the function and the files it reads (server sources, `public/data` network) | see `docs/deploy/vercel.md` |
 | `.vercelignore` | what never goes to Vercel: the Python pipeline and its inputs | without it `requirements.txt` makes Vercel build Python |
 | `api/index.ts` | the Vercel function: re-exports `server/vercel.ts` | outside the areas: one line |
@@ -114,9 +114,10 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 |---|---|---|
 | `main.tsx` | mounting the app | `./app/App`, styles |
 | `styles.css` | the look: tokens at the top (the accent, the glass surfaces, ink, strokes, the railroad palette, radii, sizes, motion), with the night set the whole page takes from the map's look and the phone sizes; nothing outside the token blocks names a colour (`styles.test.ts`); the shared kit classes (`.glass`, `.group`, `.segmented` with its sliding thumb, `.chip`, buttons, fields); then each part | |
-| `app/App.tsx` | the page frame: one map, the panel floating over it (a sheet under it on a phone) with its header and scrolling body, folded away to a button (kept in this browser); the panel's search text, the place it found and the shop picked on Shops; how far the panel covers the map, for the camera; the note when the server cannot be reached | `./routes`, `./chrome`, `./PanelSearch`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
+| `app/App.tsx` | the page frame: one map, the panel floating over it (on a phone, a sheet over its foot with a grabber) with its header and scrolling body, folded away to a button (kept in this browser); the panel's search text, the place it found and the shop picked on Shops; how far the panel covers the map, for the camera; the note when the server cannot be reached | `./routes`, `./chrome`, `./PanelSearch`, `./sheet`, `../screens/*`, `../map/MapStage`, `../data/*`, `../ui/*` |
 | `app/routes.ts` | `Screen` ↔ URL: `parseLocation`, `hrefFor`, `useScreen`, `go`, `linkTo` | `shared/` |
 | `app/chrome.tsx` | `PanelHeader`: the search, the fold button, Route \| Shops with its sliding thumb | `./routes`, `../ui/*` |
+| `app/sheet.ts` | the phone's sheet: `useSheet` (three rests, head, half and full; dragged by its head, and by its body where the body cannot scroll; settled on a spring with the release's momentum; raised full for a text field, the keyboard kept clear), `showSheet` (a screen sends it to a rest) | `../map/config` (`PHONE_QUERY`), `../ui/motion` |
 | `app/PanelSearch.tsx` | `PanelSearch`: the one search (Your shops, cities, nodes; grouped), "/" to reach it; a place it cannot find turns its edge red | `../data/hooks`, `../ui/*`, `shared/` |
 | `data/query.ts` | the transport and the query cache: `useQuery`, `read`, `write`, `callApi`. **Internal**: only `web/data/` imports it; the only `fetch` to the API | `shared/api`, `shared/app` |
 | `data/hooks.ts` | the named reads and changes the screens use; `useReadOnly` (the public site: no control that changes stored data) | `./query`, `shared/` |
@@ -146,9 +147,9 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `map/Legend.tsx` | `Legend`, `legendFor`: the selected route's railroads only (with no route, the lines of the classes drawn), and "↩ Turn-back" when it has one | `./scene` (type), `../theme`, `shared/railroads` |
 | `screens/route/RouteWorkspace.tsx` | container for the route planner (desktop and phone): saved route from the URL, session, `usePlannedRoute`, the leg, stop or turn-back picked in the panel or on the map (picked in the panel, a stop or turn-back is flown to), the answer to a map click, scene, save | `./session`, `./RoutePanel`, `../../data/hooks`, `../../map/*`, `../../app/routes`, `../../ui/*` |
 | `screens/route/session.ts` | the plan being worked on: the place list with undo history, which row's ⌖ is on, the missed click; `planReducer` (set, insert, remove, move, reverse as list operations; track and turning at stops), `nextTarget`, `placeAtEnd`, `stopInsertIndex`, `fullPlan`, `usePlanSession` (with a row's ⌖ on, click → snap to the line clicked or the nearest node → that row; ⌖ then moves to the next empty row) | `../../data/hooks`, `../../map/config`, `../../ui/useEscape`, `shared/` |
-| `screens/route/RoutePanel.tsx` | the planner's panel: the bar (Route, Undo / Redo, the ⋯ menu: Reverse, Save, Copy route string, New); `PlaceList` (one card, a row per place: glyph, name over value, ⌖, × on hover, drag handle; then Add stop; a red edge says what is wrong); Route options (track classes, Turn at stops, the carrier from a place where several meet); the routes found when two or more; the result card (length, carriers, interchanges, a row per carrier leg, stop and turn-back that picks it on the map); Saved routes (the open one renamed in place; after Save route it opens on that row, lit once) | `./session`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
+| `screens/route/RoutePanel.tsx` | the planner's panel: the bar (Route, Undo / Redo, the ⋯ menu: Reverse, Save, Copy route string, New); `PlaceList` (one card, a row per place: glyph, name over value, ⌖, × on hover, drag handle; then Add stop; a red edge says what is wrong); Route options (track classes, Turn at stops, the carrier from a place where several meet); the routes found when two or more; the result card (length, carriers, interchanges, a row per carrier leg, stop and turn-back that picks it on the map); Saved routes (the open one renamed in place; after Save route it opens on that row, lit once) | `./session`, `../../app/sheet`, `../../map/scene` (`chosenRoute`), `../../ui/*`, `../../words`, `../../format`, `shared/` |
 | `screens/shops/ShopsScreen.tsx` | container: shops (narrowed by the panel's search, one selected and flown to), the form, the shop import; the edited shop's links with their undo history, the suggestion and a drag's preview (`useShopLinks`), a drop or a tap refined (`shopLinkAt`); the map's handles for the pin (red where no track is near), the rings and the ＋; the answer to a drop or a tap | `./ShopsPage`, `../route/session` (`History`, a type), `../../data/hooks`, `../../map/*`, `../../app/*` |
-| `screens/shops/ShopsPage.tsx` | `ShopList` (count, Add shop, ⋯ with Import CSV; a row per shop: owner's mark, name, code, carrier dots, Edit), `ShopForm` (Undo / Redo of link changes, Name, Shop code, Location set on the map and shown as the place it is near), `ShopLinks` (Track links: a ring per link to press, ×, the suggestion's Use, ＋), `ImportPreview` ("update" on a row that replaces a saved shop), `useImport` | `../../ui/*`, `../../data/hooks`, `../../owner`, `shared/` |
+| `screens/shops/ShopsPage.tsx` | `ShopList` (count, Add shop, ⋯ with Import CSV; a row per shop: owner's mark, name, code, carrier dots, Edit), `ShopForm` (Undo / Redo of link changes, Name, Shop code, Location set on the map and shown as the place it is near), `ShopLinks` (Track links: a ring per link to press, ×, the suggestion's Use, ＋), `ImportPreview` ("update" on a row that replaces a saved shop), `useImport` | `../../ui/*`, `../../app/sheet`, `../../data/hooks`, `../../owner`, `shared/` |
 | `ui/badges.tsx` | `RailroadChip`, `RailroadChips`, `Railroads`, `PlacePin` (the start a filled dot, a numbered stop, the destination a ring), `TurnBadge` | `shared/` |
 | `ui/icons.tsx` | the icons, one stroke style: `Crosshair`, `Cross`, `Search`, `Undo`, `Redo`, `Plus`, `More`, `Check`, `Chevron`, `PanelIcon`, `Grip` | |
 | `ui/combobox.tsx` | `moveActive`, `SuggestionList` (grouped under headings when asked): what the place inputs share | `shared/` (types) |
@@ -161,7 +162,9 @@ Outside `engine/`, only `engine/index.ts` may be imported.
 | `ui/Switch.tsx` | `Switch`: an on/off row, the accent when on | |
 | `ui/history.tsx` | `HistoryButtons`, `useHistoryKeys`: Undo and Redo while there is history, and Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | `./icons` |
 | `ui/stored.ts` | `storedChoice`: a choice the viewer makes that this browser keeps, shared by every part of the page that shows it, held for the page while storage is refused | |
-| `ui/reorder.ts` | `useReorder`: drag to reorder with momentum, rubber band and a settle spring; keyboard grab mode; FLIP slides | `react-dom` |
+| `ui/reorder.ts` | `useReorder`: drag to reorder with momentum, rubber band and a settle spring; keyboard grab mode; FLIP slides | `./motion`, `react-dom` |
+| `ui/motion.ts` | what every drag shares: rubber band, release speed, momentum projection, settle spring, reduced motion | |
+| `ui/WhyTip.tsx` | `WhyTip`: on a touch screen, a tap on something marked wrong shows why (its tooltip) | |
 | `ui/ErrorBoundary.tsx`, `ui/files.ts` | an error fallback; reading a chosen file as text | |
 | `**/*.test.ts` | tests next to the code | |
 
@@ -188,7 +191,7 @@ Two screens: Route (the planner) and Shops.
 | `api.test.ts` | the API end to end over HTTP, one block per screen's needs, plus restart |
 | `screens.test.tsx` | the planner and Shops rendered from the real back end's answers |
 | `map-look.test.ts` | the railroad colours: told apart from each other and from the grey of routes not selected (CIEDE2000, also with simulated colour-blind vision), by day and by night; against the grounds they are drawn on; the night tokens against the dark theme |
-| `e2e/*.spec.ts`, `e2e/app.ts` | the browser tests against the real app (Playwright, port 8797) and what they share |
+| `e2e/*.spec.ts`, `e2e/app.ts` | the browser tests against the real app (Playwright, port 8797; projects: a laptop in Chrome, `phone.spec.ts` on an iPhone in WebKit and an Android phone in Chrome) and what they share |
 
 ## Data
 

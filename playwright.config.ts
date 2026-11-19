@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 /**
  * Port 8797: a person's own copy of the app on 5173 may hold real data, and the tests add, change and
@@ -8,8 +8,8 @@ import { defineConfig } from "@playwright/test";
  */
 const PORT = Number(process.env.VISNARN_E2E_PORT ?? 8797);
 
-/** A throwaway database, wiped before each start; the tests add the EXAMPLE shops they start from (./tests/e2e/app.ts). */
-const E2E_DATA_DIR = join(tmpdir(), "visnarn-e2e-data");
+/** A throwaway database per port, wiped before each start; the tests add the EXAMPLE shops they start from (./tests/e2e/app.ts). */
+const E2E_DATA_DIR = join(tmpdir(), `visnarn-e2e-data-${PORT}`);
 
 export default defineConfig({
   testDir: "tests/e2e",
@@ -21,12 +21,18 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   reporter: [["list"]],
+  /**
+   * A laptop in the installed Google Chrome (no Playwright browser download) runs every screen; the phone held
+   * upright (phone.spec.ts) runs on an iPhone in WebKit, Safari's engine, and on an Android phone in Chrome.
+   */
+  projects: [
+    { name: "chrome", testIgnore: /phone\.spec\.ts/, use: { channel: "chrome", viewport: { width: 1440, height: 900 } } },
+    { name: "iphone", testMatch: /phone\.spec\.ts/, use: { ...devices["iPhone 15 Pro"] } },
+    { name: "android", testMatch: /phone\.spec\.ts/, use: { ...devices["Pixel 7"], channel: "chrome" } },
+  ],
   use: {
-    // The installed Google Chrome; no Playwright browser download.
-    channel: "chrome",
     headless: true,
     baseURL: `http://127.0.0.1:${PORT}`,
-    viewport: { width: 1440, height: 900 },
     // Fixed so dates typed into the page and shown back are the same on any laptop.
     timezoneId: "America/Chicago",
     locale: "en-US",
