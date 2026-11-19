@@ -578,7 +578,9 @@ input[aria-invalid="true"] {
   gap: calc(2 * var(--space));
   padding: calc(3 * var(--space)) calc(3 * var(--space)) calc(2 * var(--space));
 }
+/* Positioned: the search's suggestions open as wide as this row, the panel's own width. */
 .panel-search-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space);
@@ -612,7 +614,6 @@ input[aria-invalid="true"] {
 }
 /* The one search, with its "/" key and the places it finds, grouped. */
 .panel-search {
-  position: relative;
   flex: 1;
   min-width: 0;
 }
@@ -817,12 +818,23 @@ input[aria-invalid="true"] {
   justify-content: center;
   height: 52px;
 }
+/* The field's box sits in the row's middle column; its suggestions open under the row, as wide as the card. */
 .place-field {
-  position: relative;
-  min-width: 0;
+  display: contents;
 }
 .place-box {
+  min-width: 0;
   min-height: 52px;
+}
+/* In the flow: the panel grows with the list, so its scrolling body never cuts the list off. */
+.place-row .suggestions {
+  position: static;
+  grid-column: 1 / -1;
+  margin: 0 0 var(--space) -6px;
+}
+/* The handle comes after the list in the row: it keeps its place beside the box. */
+.place-row .drag-handle {
+  grid-area: 1 / 3;
 }
 /* The row's name over what is set: "Start" / "Sarnia, ON · Procor". */
 .place-value {
