@@ -2,14 +2,14 @@
  * The HTTP shell on node:http. It knows the protocol and nothing about rail: match the route,
  * decode the request, call the handler, encode the answer.
  *
- * Local-only rules, because there is no login yet:
- * - the Host header must name the loopback address and this port (a page on another site cannot
- *   reach the server by pointing its own domain name at 127.0.0.1: "DNS rebinding");
- * - a request that carries an Origin must come from this server's own page, and one the browser marks
- *   as sent from another site is refused unless it opens the page in a window: this covers every
+ * `handler` answers a request on this laptop (`serve`) and in the Vercel function (../vercel.ts):
+ * - a request that carries an Origin must come from the page of the host it was sent to, and one the browser
+ *   marks as sent from another site is refused unless it opens the page in a window: this covers every
  *   path, /api and the rest, because in development Vite serves any file it can read (the database too);
  * - a body must be sent as application/json, which a form or a plain cross-site request cannot do;
  * - answers are never cached and request bodies are never logged.
+ * On this laptop, where there is no login, `serve` also wants the Host header to name the loopback address and
+ * this port (a page on another site cannot reach the server by pointing its own domain name at 127.0.0.1: "DNS rebinding").
  */
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -68,45 +68,27 @@ class Refusal extends Error {
 
 const envelope = (kind: ApiErrorBody["error"]["kind"], message: string, field: string | null = null): ApiErrorBody => ({ error: { kind, message, field } });
 
-/**
- * Starts listening on the loopback address. There is no host option: see LOOPBACK in ../config.ts.
- * Port 0 picks a free port (tests). `dev`: the page is served from source by Vite, inside this
- * server and on its port, with hot reload; otherwise from `webDir`, or not at all.
- */
-export async function serve(app: App, options: { port: number; webDir: string | null; dev?: boolean }): Promise<Server> {
+export type Respond = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
+
+/** An Origin header names this server's own page: the host the request was sent to. */
+const sameOrigin = (origin: string, host: string | undefined) => URL.canParse(origin) && new URL(origin).host === host;
+
+/** A navigation cannot read the answer, so a link from another site may still open the page. */
+function fromAnotherPage(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (origin !== undefined && !sameOrigin(origin, req.headers.host)) return true;
+  const site = req.headers["sec-fetch-site"];
+  return site !== undefined && site !== "same-origin" && site !== "none" && req.headers["sec-fetch-mode"] !== "navigate";
+}
+
+/** The API, and `page` for every other path. A crash is answered with 500 and logged, never the request body. */
+export function handler(app: App, page: (req: IncomingMessage, res: ServerResponse, pathname: string) => Promise<void> = apiOnly): Respond {
   const match = routeMatcher(Object.keys(handlers) as Route[]);
-  const webRoot = options.webDir ? resolve(options.webDir) : null;
-  let vite: ViteDevServer | null = null;
-
-  const server = createServer((req, res) => {
-    respond(req, res).catch((error: unknown) => {
-      console.error("Request failed:", error instanceof Error ? error.stack : error);
-      if (!res.headersSent) sendJson(res, 500, envelope("internal", "Something went wrong on the server."));
-      else res.destroy();
-    });
-  });
-
-  const port = () => (server.address() as AddressInfo).port;
-  const loopbackHost = (host: string | undefined) => {
-    const m = /^(127\.0\.0\.1|localhost)(?::(\d{1,5}))?$/i.exec(host ?? "");
-    return !!m && (m[2] ? Number(m[2]) : 80) === port();
-  };
-  const sameOrigin = (origin: string) => origin === `http://${LOOPBACK}:${port()}` || origin === `http://localhost:${port()}`;
-  /** A navigation cannot read the answer, so a link from another site may still open the page. */
-  const fromAnotherPage = (req: IncomingMessage) => {
-    const origin = req.headers.origin;
-    if (origin !== undefined && !sameOrigin(origin)) return true;
-    const site = req.headers["sec-fetch-site"];
-    return site !== undefined && site !== "same-origin" && site !== "none" && req.headers["sec-fetch-mode"] !== "navigate";
-  };
 
   async function respond(req: IncomingMessage, res: ServerResponse): Promise<void> {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
-    if (!loopbackHost(req.headers.host)) {
-      return sendJson(res, 403, envelope("invalid", `This server only answers requests addressed to ${LOOPBACK}:${port()}.`));
-    }
     if (fromAnotherPage(req)) {
       req.resume();
       return sendJson(res, 403, envelope("invalid", "Requests from other web pages are refused."));
@@ -115,18 +97,7 @@ export async function serve(app: App, options: { port: number; webDir: string | 
     if (!target.startsWith("/")) return sendJson(res, 400, envelope("invalid", BAD_PATH));
     const url = new URL(`http://${LOOPBACK}${target}`);
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return api(req, res, url);
-    if (vite) {
-      const devServer = vite;
-      return new Promise<void>((done) => {
-        devServer.middlewares(req, res, () => {
-          sendJson(res, 404, envelope("not-found", NOT_FOUND));
-          done();
-        });
-        res.on("close", () => done());
-      });
-    }
-    if (webRoot) return staticFile(req, res, url.pathname, webRoot);
-    return sendJson(res, 404, envelope("not-found", "This server answers /api only; the page is served by `npm run dev` or `npm start`."));
+    return page(req, res, url.pathname);
   }
 
   async function api(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
@@ -162,6 +133,51 @@ export async function serve(app: App, options: { port: number; webDir: string | 
     }
   }
 
+  return (req, res) =>
+    respond(req, res).catch((error: unknown) => {
+      console.error("Request failed:", error instanceof Error ? error.stack : error);
+      if (!res.headersSent) sendJson(res, 500, envelope("internal", "Something went wrong on the server."));
+      else res.destroy();
+    });
+}
+
+/**
+ * Starts listening on the loopback address. There is no host option: see LOOPBACK in ../config.ts.
+ * Port 0 picks a free port (tests). `dev`: the page is served from source by Vite, inside this
+ * server and on its port, with hot reload; otherwise from `webDir`, or not at all.
+ */
+export async function serve(app: App, options: { port: number; webDir: string | null; dev?: boolean }): Promise<Server> {
+  const webRoot = options.webDir ? resolve(options.webDir) : null;
+  let vite: ViteDevServer | null = null;
+
+  const page = async (req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> => {
+    if (vite) {
+      const devServer = vite;
+      return new Promise<void>((done) => {
+        devServer.middlewares(req, res, () => {
+          sendJson(res, 404, envelope("not-found", NOT_FOUND));
+          done();
+        });
+        res.on("close", () => done());
+      });
+    }
+    if (webRoot) return staticFile(req, res, pathname, webRoot);
+    return apiOnly(req, res);
+  };
+  const respond = handler(app, page);
+
+  const port = () => (server.address() as AddressInfo).port;
+  const loopbackHost = (host: string | undefined) => {
+    const m = /^(127\.0\.0\.1|localhost)(?::(\d{1,5}))?$/i.exec(host ?? "");
+    return !!m && (m[2] ? Number(m[2]) : 80) === port();
+  };
+
+  const server = createServer((req, res) => {
+    if (loopbackHost(req.headers.host)) return void respond(req, res);
+    req.resume();
+    sendJson(res, 403, envelope("invalid", `This server only answers requests addressed to ${LOOPBACK}:${port()}.`));
+  });
+
   if (options.dev) {
     const root = fileURLToPath(new URL("../../", import.meta.url));
     const { createServer: createVite } = await import("vite");
@@ -171,7 +187,7 @@ export async function serve(app: App, options: { port: number; webDir: string | 
     server.removeAllListeners("upgrade");
     server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
       const origin = req.headers.origin;
-      if (!loopbackHost(req.headers.host) || (origin !== undefined && !sameOrigin(origin))) return void socket.destroy();
+      if (!loopbackHost(req.headers.host) || (origin !== undefined && !sameOrigin(origin, req.headers.host))) return void socket.destroy();
       for (const listener of upgrades) listener.call(server, req, socket, head);
     });
   }
@@ -218,6 +234,11 @@ async function jsonBody(req: IncomingMessage): Promise<unknown> {
   } catch {
     throw new AppError("invalid", "The request body is not valid JSON.");
   }
+}
+
+async function apiOnly(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  req.resume();
+  sendJson(res, 404, envelope("not-found", "This server answers /api only; the page is served by `npm run dev` or `npm start`."));
 }
 
 function sendJson(res: ServerResponse, status: number, value: unknown): void {

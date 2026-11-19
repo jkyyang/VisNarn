@@ -123,7 +123,9 @@ describe("serve: local only", () => {
     expect((await raw(port, "POST", "/api/saved-routes", json({ origin: "https://evil.example" }), body)).status).toBe(403);
     expect((await raw(port, "GET", "/api/shops", { origin: "http://127.0.0.1:1" })).status).toBe(403);
     expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://127.0.0.1:${port}` }), body)).status).toBe(200);
-    expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://localhost:${port}` }), body)).status).toBe(200);
+    expect((await raw(port, "POST", "/api/saved-routes", json({ host: `localhost:${port}`, origin: `http://localhost:${port}` }), body)).status).toBe(200);
+    // The Origin names the host the request was sent to, or it is another page.
+    expect((await raw(port, "POST", "/api/saved-routes", json({ origin: `http://localhost:${port}` }), body)).status).toBe(403);
     const asForm = await raw(port, "POST", "/api/saved-routes", { "content-type": "text/plain" }, body);
     expect(asForm.status).toBe(415);
     expect(JSON.parse(asForm.body).error.message).toMatch(/application\/json/);
