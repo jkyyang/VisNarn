@@ -12,6 +12,7 @@ describe("readConfig", () => {
   it("defaults: port 5173, data in ~/.visnarn, two routing workers, API only", () => {
     expect(readConfig([], HOME)).toEqual({
       port: 5173,
+      databaseUrl: null,
       dataDir: join(homedir(), ".visnarn"),
       networkDir: DEFAULT_NETWORK_DIR,
       webDir: null,
@@ -25,6 +26,11 @@ describe("readConfig", () => {
     const config = readConfig(["--web", "dist"], { ...HOME, VISNARN_PORT: "0", VISNARN_DATA_DIR: data, VISNARN_ROUTE_WORKERS: "3" });
     expect(config).toMatchObject({ port: 0, dataDir: data, webDir: join(process.cwd(), "dist"), dev: false, routeWorkers: 3 });
     expect(readConfig(["--dev"], HOME).dev).toBe(true);
+  });
+
+  it("reads DATABASE_URL: the data folder then holds nothing and may be anywhere", () => {
+    const url = "postgres://user:secret@example.neon.tech/db?sslmode=require";
+    expect(readConfig([], { ...HOME, DATABASE_URL: url, VISNARN_DATA_DIR: ROOT }).databaseUrl).toBe(url);
   });
 
   it("refuses bad numbers, unknown options, and --dev with --web, saying what to change", () => {

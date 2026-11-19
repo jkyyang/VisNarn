@@ -74,8 +74,8 @@ describe("import rules", () => {
     expect(importers((target) => !!target?.startsWith("engine/") && target !== "engine/index.ts", (path) => path.startsWith("engine/"))).toEqual([]);
   });
 
-  it("only server/store/sqlite.ts opens the database, and only server/http/serve.ts speaks HTTP", () => {
-    expect(importers((_t, specifier) => specifier === "node:sqlite", (path) => path === "server/store/sqlite.ts")).toEqual([]);
+  it("only server/store/postgres.ts talks to the database, and only server/http/serve.ts speaks HTTP", () => {
+    expect(importers((_t, specifier) => ["pg", "@electric-sql/pglite"].includes(specifier), (path) => path === "server/store/postgres.ts" || isTest(path))).toEqual([]);
     expect(importers((_t, specifier) => specifier === "node:http", (path) => path === "server/http/serve.ts")).toEqual([]);
   });
 

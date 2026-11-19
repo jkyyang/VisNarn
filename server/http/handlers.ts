@@ -27,14 +27,14 @@ export const handlers: Handlers = {
   "GET /api/shops": (_request, { app }) => app.shops.list(),
   "POST /api/shops": ({ body }, { app }) => app.shops.save(body, null),
   "PUT /api/shops/:shopId": ({ params, body }, { app }) => app.shops.save(body, shopId(params.shopId)),
-  "DELETE /api/shops/:shopId": ({ params }, { app }) => (app.shops.remove(shopId(params.shopId)), null),
+  "DELETE /api/shops/:shopId": async ({ params }, { app }) => (await app.shops.remove(shopId(params.shopId)), null),
   "POST /api/shops/import": ({ body }, { app }) => app.shops.import(body),
 
   "POST /api/route": ({ body }, { app, signal }) => app.plans.route(body, signal),
   "GET /api/saved-routes": (_request, { app }) => app.plans.saved(),
   "POST /api/saved-routes": ({ body }, { app }) => app.plans.save(body, null),
   "PUT /api/saved-routes/:routeId": ({ params, body }, { app }) => app.plans.save(body, savedRouteId(params.routeId)),
-  "DELETE /api/saved-routes/:routeId": ({ params }, { app }) => (app.plans.remove(savedRouteId(params.routeId)), null),
+  "DELETE /api/saved-routes/:routeId": async ({ params }, { app }) => (await app.plans.remove(savedRouteId(params.routeId)), null),
 
   "POST /api/track": ({ body }, { app }) => body.paths.map((path) => app.track.follow(path)),
 };

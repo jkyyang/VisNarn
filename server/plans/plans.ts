@@ -19,11 +19,11 @@ export interface Plans {
   /** Resolves every place; routes once 2 or more are set and every set one resolves. Stores nothing; same plan → same answer. */
   route(plan: Plan, signal?: AbortSignal): Promise<PlannedRoute>;
   /** By name ignoring case; ties in the order saved. */
-  saved(): SavedRoute[];
+  saved(): Promise<SavedRoute[]>;
   /** New when id is null. AppError("not-found") for an unknown id. Saving what is stored writes nothing. */
-  save(draft: SavedRouteDraft, id: SavedRouteId | null): SavedRoute;
+  save(draft: SavedRouteDraft, id: SavedRouteId | null): Promise<SavedRoute>;
   /** AppError("not-found") for an unknown id. */
-  remove(id: SavedRouteId): void;
+  remove(id: SavedRouteId): Promise<void>;
 }
 
 
@@ -37,7 +37,9 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
   return {
     async route(plan, signal) {
       // The ends look in Your shops first; a stop is a position on the track.
-      const places: PlanPlaces = plan.places.map((ref, at) => ref && directory.resolve(ref, placeKind(at, plan.places.length) === "stop" ? "position" : "shop"));
+      const places: PlanPlaces = await Promise.all(
+        plan.places.map((ref, at) => ref && directory.resolve(ref, placeKind(at, plan.places.length) === "stop" ? "position" : "shop")),
+      );
       // The rows the route runs through: the set ones. A point of the trip is the row setAt[point].
       const setAt = places.flatMap((place, at) => (place ? [at] : []));
       const resolved = setAt.flatMap((at) => (places[at]?.ok ? [places[at].place] : []));
@@ -53,20 +55,20 @@ export function createPlans(parts: { store: Store; directory: Directory; planner
 
     saved: () => store.savedRoutes.all(),
 
-    save(draft, id) {
+    async save(draft, id) {
       const name = draft.name.trim();
       if (!name) throw new AppError("invalid", "Give the route a name.", "name");
       const next: SavedRoute = { id: id ?? (randomUUID() as SavedRouteId), name, plan: draft.plan, option: draft.option, routeString: draft.routeString };
       if (id !== null) {
-        const known = store.savedRoutes.get(id) ?? unknown();
+        const known = (await store.savedRoutes.get(id)) ?? unknown();
         if (canonical(known) === canonical(next)) return known;
       }
-      store.savedRoutes.save(next);
+      await store.savedRoutes.save(next);
       return next;
     },
 
-    remove(id) {
-      if (!store.savedRoutes.remove(id)) unknown();
+    async remove(id) {
+      if (!(await store.savedRoutes.remove(id))) unknown();
     },
   };
 }

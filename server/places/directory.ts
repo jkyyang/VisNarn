@@ -28,9 +28,9 @@ import { RAILROADS, type Railroad } from "../../shared/railroads.ts";
 import type { Store } from "../store/store.ts";
 
 export interface Directory {
-  resolve(ref: PlaceRef, role: PlaceRole): PlaceResolution;
+  resolve(ref: PlaceRef, role: PlaceRole): Promise<PlaceResolution>;
   /** Autocomplete. Every suggestion carries a typed ref, so picking one leaves nothing to guess later. */
-  suggest(text: string, role: PlaceRole, limit: number): PlaceSuggestion[];
+  suggest(text: string, role: PlaceRole, limit: number): Promise<PlaceSuggestion[]>;
   /** The node a map click snaps to. */
   nearest(lon: number, lat: number, withinKm: number): NetworkNode | null;
   /**
@@ -42,7 +42,7 @@ export interface Directory {
   shopPlace(shop: Shop, ref: PlaceRef): PlaceResolution;
 }
 
-/** Resolved places kept: typed text adds one per keystroke, so the least recently used go first. */
+/** Network answers kept: typed text adds one per keystroke, so the least recently used go first. */
 const MEMO_ENTRIES = 20_000;
 /** Places offered when typed text matches none. */
 const CANDIDATES = 5;
@@ -58,8 +58,16 @@ const COORD_TEXT = /^(-?\d{1,3}(?:\.\d+)?)\s*(?:,|;|\s)\s*(-?\d{1,3}(?:\.\d+)?)$
 const inNorthAmerica = (lon: number, lat: number) => lon >= -170 && lon <= -50 && lat >= 14 && lat <= 84;
 
 export function createDirectory(network: RailNetwork, store: Store): Directory {
+  // Only answers that follow from the network and the question: one that reads the store is never kept.
   const memo = createCache<string, PlaceResolution>({ maxEntries: MEMO_ENTRIES });
-  let memoRevision = -1;
+  const memoized = (key: string, compute: () => PlaceResolution): PlaceResolution => {
+    let answer = memo.get(key);
+    if (!answer) {
+      answer = compute();
+      memo.set(key, answer);
+    }
+    return answer;
+  };
 
   const problem = (kind: PlaceProblem["kind"], message: string, candidates: PlaceSuggestion[] = []): PlaceResolution => ({
     ok: false,
@@ -152,21 +160,26 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   const atCity = (ref: PlaceRef, city: City): PlaceResolution => atCoordinates(ref, city.lon, city.lat, { method: "city" }, city.name);
 
+  /** Keyed by the shop's content as well: an import preview shows shops that are not saved. */
+  const shopPlace = (shop: Shop, ref: PlaceRef): PlaceResolution => memoized(`shop\u0000${JSON.stringify([ref, shop])}`, () => atShop(ref, shop));
+
+  const onNetwork = (ref: Extract<PlaceRef, { kind: "node" | "coord" }>): PlaceResolution =>
+    memoized(JSON.stringify(ref), () =>
+      ref.kind === "node" ? atNode(ref, ref.fraId, ref.railroad, { method: "node" }) : atCoordinates(ref, ref.lon, ref.lat, { method: "coordinates" }),
+    );
+
   // ---- suggestions (also the candidates of a problem) ----
 
   /** Railroads at a suggested place, from the same (memoized) resolution a pick of it gets. */
-  const railroadsAt = (ref: PlaceRef): Railroad[] => {
-    const found = resolve(ref, "position");
-    return found.ok ? found.place.railroads : [];
-  };
+  const railroadsAt = (found: PlaceResolution): Railroad[] => (found.ok ? found.place.railroads : []);
   const shopSuggestion = (shop: Shop): PlaceSuggestion => {
     const ref: PlaceRef = { kind: "shop", shopId: shop.id };
     const detail = ["Your shop", ...(shop.code ? [shop.code] : [])].join(" · ");
-    return { ref, label: shop.name, detail, source: "shop", railroads: railroadsAt(ref) };
+    return { ref, label: shop.name, detail, source: "shop", railroads: railroadsAt(shopPlace(shop, ref)) };
   };
   const citySuggestion = (city: City): PlaceSuggestion => {
-    const ref: PlaceRef = { kind: "coord", lon: city.lon, lat: city.lat };
-    return { ref, label: city.name, detail: "City", source: "city", railroads: railroadsAt(ref) };
+    const ref = { kind: "coord", lon: city.lon, lat: city.lat } as const;
+    return { ref, label: city.name, detail: "City", source: "city", railroads: railroadsAt(onNetwork(ref)) };
   };
   const nodeSuggestion = (fraId: FraId): PlaceSuggestion[] => {
     const node = network.node(fraId);
@@ -175,12 +188,11 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
     return [{ ref: { kind: "node", fraId, railroad: null }, label: node.near, detail: `FRA node ${fraId}`, source, railroads: node.railroads }];
   };
 
-  const suggest = (text: string, role: PlaceRole, limit: number): PlaceSuggestion[] => {
+  const suggest = async (text: string, role: PlaceRole, limit: number): Promise<PlaceSuggestion[]> => {
     const q = plainMinus(text.trim());
     if (!q || limit <= 0) return [];
     const lower = q.toLowerCase();
-    const shops = store.shops
-      .all()
+    const shops = (await store.shops.all())
       .filter((s) => s.name.toLowerCase().includes(lower) || !!s.code?.toLowerCase().includes(lower))
       .sort((x, y) => Number(!startsWith(x, lower)) - Number(!startsWith(y, lower)))
       .map(shopSuggestion);
@@ -194,7 +206,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
 
   // ---- text ----
 
-  const fromText = (ref: Extract<PlaceRef, { kind: "text" }>, role: PlaceRole): PlaceResolution => {
+  const fromText = async (ref: Extract<PlaceRef, { kind: "text" }>, role: PlaceRole): Promise<PlaceResolution> => {
     const text = plainMinus(ref.text.trim());
     if (!text) return problem("empty", "Nothing is filled in.");
 
@@ -209,59 +221,42 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
       return atCoordinates(ref, lon, lat, { method: "coordinates" });
     }
 
-    const lists: (() => PlaceResolution | null)[] = [];
-    const shopList = () => {
-      const shops = store.shops.named(text);
+    const lists: (() => Promise<PlaceResolution | null>)[] = [];
+    const shopList = async () => {
+      const shops = await store.shops.named(text);
       if (shops.length > 1) return problem("ambiguous", `${shops.length} of Your shops are called "${text}". Pick one.`, shops.map(shopSuggestion));
       return shops.length ? atShop(ref, shops[0]) : null;
     };
-    const cityList = () => {
+    const cityList = async () => {
       const city = network.city(text);
       return city ? atCity(ref, city) : null;
     };
     if (role === "shop") lists.push(shopList, cityList);
     else lists.push(cityList, shopList);
     for (const list of lists) {
-      const found = list();
+      const found = await list();
       if (found) return found;
     }
 
     // A bare number is never taken as an FRA node, but one that is a node is named, for a person to pick on purpose.
     const node = /^\d{1,9}$/.test(text) ? nodeSuggestion(Number(text) as FraId) : [];
     const fraHint = node.length ? ` For FRA node ${text}, type "FRA ${text}".` : "";
-    return problem("unknown", `No place called "${text}".${fraHint}`, [...suggest(text, role, CANDIDATES), ...node].slice(0, CANDIDATES));
+    return problem("unknown", `No place called "${text}".${fraHint}`, [...(await suggest(text, role, CANDIDATES)), ...node].slice(0, CANDIDATES));
   };
 
-  const compute = (ref: PlaceRef, role: PlaceRole): PlaceResolution => {
+  const resolve = async (ref: PlaceRef, role: PlaceRole): Promise<PlaceResolution> => {
     switch (ref.kind) {
       case "node":
-        return atNode(ref, ref.fraId, ref.railroad, { method: "node" });
       case "coord":
-        return atCoordinates(ref, ref.lon, ref.lat, { method: "coordinates" });
+        return onNetwork(ref);
       case "shop": {
-        const shop = store.shops.get(ref.shopId);
-        return shop ? atShop(ref, shop) : problem("removed", "This shop was deleted. Pick another shop.");
+        const shop = await store.shops.get(ref.shopId);
+        return shop ? shopPlace(shop, ref) : problem("removed", "This shop was deleted. Pick another shop.");
       }
       case "text":
         return fromText(ref, role);
     }
   };
-
-  /** Answers are kept until the next write to the store: one may name a shop. */
-  const memoized = (key: string, compute: () => PlaceResolution): PlaceResolution => {
-    if (memoRevision !== store.revision) {
-      memo.clear();
-      memoRevision = store.revision;
-    }
-    let answer = memo.get(key);
-    if (!answer) {
-      answer = compute();
-      memo.set(key, answer);
-    }
-    return answer;
-  };
-
-  const resolve = (ref: PlaceRef, role: PlaceRole): PlaceResolution => memoized(`${role}\u0000${JSON.stringify(ref)}`, () => compute(ref, role));
 
   return {
     resolve,
@@ -273,8 +268,7 @@ export function createDirectory(network: RailNetwork, store: Store): Directory {
         const lead = node && network.lead(lon, lat, node.fraId);
         return node && lead && lead.km <= SHOP_LINK_MAX_KM ? { ...node, km: lead.km, path: lead.path } : null;
       }),
-    // Keyed by the shop's content as well: an import preview shows shops that are not saved.
-    shopPlace: (shop, ref) => memoized(`shop\u0000${JSON.stringify([ref, shop])}`, () => atShop(ref, shop)),
+    shopPlace,
   };
 }
 

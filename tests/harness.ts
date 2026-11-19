@@ -34,9 +34,9 @@ export interface TestApp {
  */
 export async function startTestApp(options: { dataDir?: string; shops?: ShopDraft[] } = {}): Promise<TestApp> {
   const dataDir = options.dataDir ?? mkdtempSync(join(tmpdir(), "visnarn-"));
-  const config: Config = { port: 0, dataDir, networkDir: DEFAULT_NETWORK_DIR, webDir: null, routeWorkers: 1 };
+  const config: Config = { port: 0, databaseUrl: null, dataDir, networkDir: DEFAULT_NETWORK_DIR, webDir: null, routeWorkers: 1 };
   const app = await createApp(config);
-  if (!options.dataDir) for (const shop of options.shops ?? EXAMPLE_SHOPS) app.shops.save(shop, null);
+  if (!options.dataDir) for (const shop of options.shops ?? EXAMPLE_SHOPS) await app.shops.save(shop, null);
   const server = await serve(app, config).catch(async (error: unknown) => {
     await app.close();
     throw error;

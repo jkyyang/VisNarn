@@ -1,5 +1,5 @@
-/** Plans on the real network: a real Directory, one routing worker, a ":memory:" store. */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+/** Plans on the real network: a real Directory, one routing worker, an in-memory store. */
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { DEFAULT_NETWORK_DIR, loadNetwork } from "../../engine/index.ts";
 import { AppError } from "../../shared/app.ts";
 import { DEFAULT_INCLUDE } from "../../shared/railroads.ts";
@@ -7,7 +7,7 @@ import type { FraId, PlaceRef } from "../../shared/places.ts";
 import type { Plan, PlannedRoute, PlanProblem, SavedRouteDraft, SavedRouteId } from "../../shared/plans.ts";
 import { createDirectory } from "../places/directory.ts";
 import { startRoutePlanner, type RoutePlanner } from "../routing/planner.ts";
-import { openStore } from "../store/sqlite.ts";
+import { openStore } from "../store/postgres.ts";
 import type { Store } from "../store/store.ts";
 import { createPlans, type Plans } from "./plans.ts";
 
@@ -15,15 +15,15 @@ let store: Store;
 let planner: RoutePlanner;
 let plans: Plans;
 
-beforeAll(() => {
+beforeAll(async () => {
   const network = loadNetwork();
-  store = openStore(":memory:");
+  store = await openStore("memory://");
   planner = startRoutePlanner({ networkDir: DEFAULT_NETWORK_DIR, networkVersion: network.version, workers: 1 });
   plans = createPlans({ store, directory: createDirectory(network, store), planner });
 });
 afterAll(async () => {
   await planner.close();
-  store.close();
+  await store.close();
 });
 
 const text = (t: string): PlaceRef => ({ kind: "text", text: t });
@@ -36,9 +36,9 @@ const routed = (answer: PlannedRoute) => {
   if (answer.outcome !== "routed") throw new Error(`not routed: ${answer.outcome}`);
   return answer;
 };
-const refusal = (run: () => unknown): AppError | null => {
+const refusal = async (run: () => Promise<unknown>): Promise<AppError | null> => {
   try {
-    run();
+    await run();
   } catch (error) {
     if (error instanceof AppError) return error;
     throw error;
@@ -149,29 +149,29 @@ describe("Plans: saved routes", () => {
     ...over,
   });
 
-  it("saves, lists by name, saves unchanged without a write, replaces, and removes", () => {
-    const taylor = plans.save(draft("Taylor → NLR"), null);
-    const kc = plans.save(draft("kc → Chicago", { option: "shortest" }), null);
+  it("saves, lists by name, saves unchanged without a write, replaces, and removes", async () => {
+    const taylor = await plans.save(draft("Taylor → NLR"), null);
+    const kc = await plans.save(draft("kc → Chicago", { option: "shortest" }), null);
     expect(kc.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(plans.saved().map((r) => r.name)).toEqual(["kc → Chicago", "Taylor → NLR"]);
+    expect((await plans.saved()).map((r) => r.name)).toEqual(["kc → Chicago", "Taylor → NLR"]);
 
-    const revision = store.revision;
-    expect(plans.save(draft("kc → Chicago", { option: "shortest" }), kc.id)).toEqual(kc);
-    expect(store.revision).toBe(revision);
+    const writes = vi.spyOn(store.savedRoutes, "save");
+    expect(await plans.save(draft("kc → Chicago", { option: "shortest" }), kc.id)).toEqual(kc);
+    expect(writes).not.toHaveBeenCalled();
 
-    const renamed = plans.save(draft("KC → Chicago via Galesburg", { option: "shortest" }), kc.id);
+    const renamed = await plans.save(draft("KC → Chicago via Galesburg", { option: "shortest" }), kc.id);
     expect(renamed).toMatchObject({ id: kc.id, name: "KC → Chicago via Galesburg" });
-    expect(store.revision).toBe(revision + 1);
+    expect(writes).toHaveBeenCalledTimes(1);
 
-    plans.remove(taylor.id);
-    expect(plans.saved().map((r) => r.id)).toEqual([kc.id]);
-    plans.remove(kc.id);
+    await plans.remove(taylor.id);
+    expect((await plans.saved()).map((r) => r.id)).toEqual([kc.id]);
+    await plans.remove(kc.id);
   });
 
-  it("an unknown id is not-found; a blank name is invalid", () => {
+  it("an unknown id is not-found; a blank name is invalid", async () => {
     const missing = "no-such-route" as SavedRouteId;
-    expect(refusal(() => plans.save(draft("x"), missing))).toMatchObject({ kind: "not-found" });
-    expect(refusal(() => plans.remove(missing))).toMatchObject({ kind: "not-found" });
-    expect(refusal(() => plans.save(draft("   "), null))).toMatchObject({ kind: "invalid", field: "name" });
+    expect(await refusal(() => plans.save(draft("x"), missing))).toMatchObject({ kind: "not-found" });
+    expect(await refusal(() => plans.remove(missing))).toMatchObject({ kind: "not-found" });
+    expect(await refusal(() => plans.save(draft("   "), null))).toMatchObject({ kind: "invalid", field: "name" });
   });
 });

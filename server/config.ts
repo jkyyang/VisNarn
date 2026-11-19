@@ -1,4 +1,4 @@
-/** Where things are on this laptop. Read once at start; nothing else reads the environment. */
+/** Where things are. Read once at start; nothing else reads the environment. */
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +9,10 @@ export const LOOPBACK = "127.0.0.1";
 
 export interface Config {
   port: number;
+  /** DATABASE_URL: a PostgreSQL server (Neon, on Vercel). Null: the database lives in `dataDir`. */
+  databaseUrl: string | null;
   /**
-   * Folder for the database file. Default: ~/.visnarn. Deliberately outside the repo, outside
+   * Folder for the database on this laptop (PGlite). Default: ~/.visnarn. Deliberately outside the repo, outside
    * public/ and dist/ (Vite serves and copies those), and outside ~/Documents (which a laptop may
    * sync to a cloud drive): real car data stays on this machine.
    */
@@ -41,13 +43,15 @@ export function readConfig(argv: readonly string[], env: Readonly<Record<string,
   }
   if (dev && webDir) throw new Error("--dev serves the page from source and --web serves a built page: use one of them.");
 
+  const databaseUrl = env.DATABASE_URL?.trim() || null;
   const dataDir = resolve(env.VISNARN_DATA_DIR?.trim() || join(env.HOME || homedir(), ".visnarn"));
   // The whole repo: in development Vite serves any file under it.
   for (const served of [REPO, ...(webDir ? [webDir] : [])]) {
-    if (isInside(dataDir, served)) throw new Error(`The data folder ${dataDir} is inside ${served}, which the browser can read. Set VISNARN_DATA_DIR to a folder outside it.`);
+    if (!databaseUrl && isInside(dataDir, served)) throw new Error(`The data folder ${dataDir} is inside ${served}, which the browser can read. Set VISNARN_DATA_DIR to a folder outside it.`);
   }
   return {
     port: wholeNumber(env.VISNARN_PORT, 5173, 0, 65535, "VISNARN_PORT"),
+    databaseUrl,
     dataDir,
     networkDir: DEFAULT_NETWORK_DIR,
     webDir,

@@ -51,7 +51,7 @@ describe("decodeBody", () => {
     expect(decodeBody["POST /api/saved-routes"](draft)).toEqual({ ...draft, name: "KC → Chicago" });
     expect(decodeBody["PUT /api/saved-routes/:routeId"]({ ...draft, option: null })).toMatchObject({ option: null });
     expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, name: "  " }))).toMatch(/^invalid name: /);
-    // SQLite would store "a\u0000b" as "a" and "a\ud800b" as "a\ufffdb"; the rest hide or reorder text.
+    // PostgreSQL refuses "a\u0000b" and UTF-8 turns "a\ud800b" into "a\ufffdb"; the rest hide or reorder text.
     for (const bad of ["a\u0000b", "a\ud800b", "\u200b", "a\nb", "a\tb", "a\u202eb", "a\u2028b"]) {
       expect(refusal(() => decodeBody["POST /api/saved-routes"]({ ...draft, name: bad }))).toMatch(/^invalid name: /);
     }

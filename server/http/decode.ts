@@ -56,7 +56,7 @@ const nonEmpty =
     return t;
   };
 
-/** Text stored and read back as given: no character SQLite would cut at or a person could not see. */
+/** Text stored and read back as given: no character the database would refuse or change, or a person could not see. */
 const visible =
   (decode: Decoder<string>): Decoder<string> =>
   (value, path) => {
