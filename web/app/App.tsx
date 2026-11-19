@@ -1,6 +1,6 @@
 /**
  * The page: one map filling the window, the panel floating over its left side (on a phone, a sheet
- * under it). The URL decides which screen fills the panel; the map is created once and outlives every
+ * over its foot). The URL decides which screen fills the panel; the map is created once and outlives every
  * screen change. The panel's search, the place it found and the shop picked on Shops are page state,
  * shared by the panel and the map.
  */
@@ -15,9 +15,11 @@ import { ShopsScreen } from "../screens/shops/ShopsScreen.tsx";
 import { ErrorBoundary } from "../ui/ErrorBoundary.tsx";
 import { PanelIcon } from "../ui/icons.tsx";
 import { storedChoice } from "../ui/stored.ts";
+import { WhyTip } from "../ui/WhyTip.tsx";
 import { PanelHeader } from "./chrome.tsx";
 import { PanelSearch } from "./PanelSearch.tsx";
 import { useScreen, type Screen } from "./routes.ts";
+import { showSheet, useSheet } from "./sheet.ts";
 
 /** The panel shown or folded away, kept in this browser. */
 const usePanelState = storedChoice("visnarn.panel", ["open", "folded"], () => "open");
@@ -32,6 +34,7 @@ export default function App(): ReactElement {
   const [panelState, setPanelState] = usePanelState();
   const folded = panelState === "folded";
   const cameraLeft = useCameraLeft(panel, !folded);
+  const sheet = useSheet(panel);
   const [text, setText] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
   // The search flies to what it found; a shop square clicked on the map opens its card where the camera is.
@@ -46,6 +49,8 @@ export default function App(): ReactElement {
     setChosen(suggestion);
     setFly(flyThere);
     if (screen.name === "shops" && suggestion?.ref.kind === "shop") setSelectedShop(suggestion.ref.shopId);
+    // On a phone the sheet lowers to half, for the place flown to.
+    if (suggestion && flyThere) showSheet("half");
   };
   const fold = (next: boolean) => {
     setPanelState(next ? "folded" : "open");
@@ -58,6 +63,13 @@ export default function App(): ReactElement {
       <MapStageProvider network={network}>
         <div className="app">
           <main className={`panel glass${folded ? " is-folded" : ""}`} ref={panel}>
+            {/* On a phone: the sheet's grabber. A tap raises it full, or lowers it to half. */}
+            <button
+              type="button"
+              className="sheet-grabber"
+              aria-label={sheet === "full" ? "Lower the panel" : "Raise the panel"}
+              onClick={() => showSheet(sheet === "half" ? "full" : "half")}
+            />
             <PanelHeader
               current={screen.name}
               onCollapse={() => fold(true)}
@@ -83,6 +95,7 @@ export default function App(): ReactElement {
               <PanelIcon />
             </button>
           )}
+          <WhyTip />
           <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
@@ -91,9 +104,9 @@ export default function App(): ReactElement {
 }
 
 /**
- * The px every camera move keeps clear on the left: the open panel with a margin each side of it,
- * else the margin alone. On a phone the panel is as wide as the map and lies below it. The panel's
- * width follows the window only, so a window resize and a fold are the times to measure again.
+ * The px every camera move keeps clear on the left: up to the open panel's right edge and a margin past
+ * it, else the margin alone. On a phone the panel is as wide as the map and lies over its foot. The
+ * panel's place follows the window only, so a window resize and a fold are the times to measure again.
  */
 function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
   const [left, setLeft] = useState(CAMERA_MARGIN_PX);
@@ -105,8 +118,9 @@ function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): num
       return;
     }
     const measure = () => {
-      const { width } = element.getBoundingClientRect();
-      setLeft(width < frame.getBoundingClientRect().width ? Math.round(width) + 2 * CAMERA_MARGIN_PX : CAMERA_MARGIN_PX);
+      const { width, right } = element.getBoundingClientRect();
+      const box = frame.getBoundingClientRect();
+      setLeft(width < box.width ? Math.round(right - box.left) + CAMERA_MARGIN_PX : CAMERA_MARGIN_PX);
     };
     measure();
     window.addEventListener("resize", measure);

@@ -23,7 +23,11 @@
   --text-input: var(--text-lg);
   /* The map beside the panel, less a margin each side: no card over the map is wider. */
   --free-w: calc(100vw - var(--panel-w) - 3 * var(--inset));
-  --sheet-rest: 42svh;
+  /* The window's edges a floating thing keeps off: the margin, or the notch, the status bar and the home indicator where they are wider. */
+  --edge-top: max(var(--inset), env(safe-area-inset-top));
+  --edge-right: max(var(--inset), env(safe-area-inset-right));
+  --edge-bottom: max(var(--inset), env(safe-area-inset-bottom));
+  --edge-left: max(var(--inset), env(safe-area-inset-left));
   --motion: 180ms;
   --ease: ease-out;
   --glass-filter: blur(20px) saturate(140%);
@@ -102,13 +106,24 @@
   --rr-passenger: #ff8ad0;
   color-scheme: dark;
 }
-/* A phone: sized for a finger. Inputs stay at 16 px so the browser does not zoom into them. */
-@media (max-width: 640px) {
+/* A finger: bigger targets. Inputs stay at 16 px so iOS does not zoom into them. */
+@media (pointer: coarse) {
   :root {
-    --free-w: calc(100vw - 2 * var(--inset));
     --ctl: 44px;
     --row: 48px;
     --text-input: 16px;
+  }
+}
+/* A phone held upright: the panel is a sheet, no map beside it. */
+@media (max-width: 640px) {
+  :root {
+    --free-w: calc(100vw - 2 * var(--inset));
+  }
+}
+/* A phone on its side: a narrower panel leaves room for the map. */
+@media (max-height: 500px) and (min-width: 641px) {
+  :root {
+    --panel-w: 320px;
   }
 }
 
@@ -120,6 +135,22 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+/* The page never scrolls (the panel's body does): no rubber band of the whole page, no grey flash on a tap, text at the size it is set. */
+html {
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* A tap is a tap at once: no wait for a double tap, no link preview on a long press. */
+a,
+button,
+input,
+label {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
 body {
   background: var(--bg);
@@ -545,10 +576,11 @@ input[aria-invalid="true"] {
 }
 
 /* ---- Frame: the map fills the window; the panel floats over its left side ---- */
+/* Clipped, never scrolled: a row brought into view scrolls the panel's body only, never the frame under the sheet. */
 .app {
   position: relative;
   height: 100dvh;
-  overflow: hidden;
+  overflow: clip;
 }
 .map {
   position: absolute;
@@ -562,15 +594,37 @@ input[aria-invalid="true"] {
 .panel {
   position: absolute;
   z-index: 2;
-  top: var(--inset);
-  left: var(--inset);
+  top: var(--edge-top);
+  left: var(--edge-left);
   display: flex;
   flex-direction: column;
   width: var(--panel-w);
-  max-height: calc(100% - 2 * var(--inset));
+  max-height: calc(100% - var(--edge-top) - var(--edge-bottom));
 }
 .panel.is-folded {
   display: none;
+}
+/* The phone's sheet has a grabber; the floating panel does not. */
+.sheet-grabber {
+  display: none;
+}
+/* Why something is marked wrong, after a tap on it (web/ui/WhyTip.tsx): under it, or over it near the screen's foot. */
+.why-tip {
+  position: fixed;
+  z-index: 8;
+  left: var(--edge-left);
+  right: var(--edge-right);
+  width: fit-content;
+  max-width: calc(100% - var(--edge-left) - var(--edge-right));
+  margin: calc(2 * var(--space)) auto 0;
+  padding: calc(2 * var(--space)) calc(3 * var(--space));
+  border-radius: var(--radius-ctl);
+  font-size: var(--text-md);
+  pointer-events: none;
+}
+.why-tip.is-above {
+  margin-top: calc(-2 * var(--space));
+  transform: translateY(-100%);
 }
 .panel-head {
   display: flex;
@@ -595,8 +649,8 @@ input[aria-invalid="true"] {
 .panel-open {
   position: absolute;
   z-index: 2;
-  top: var(--inset);
-  left: var(--inset);
+  top: var(--edge-top);
+  left: var(--edge-left);
   display: grid;
   place-items: center;
   padding: 0;
@@ -638,7 +692,7 @@ input[aria-invalid="true"] {
 }
 .panel-search .suggestions {
   z-index: 6;
-  max-height: min(360px, calc(100vh - 140px));
+  max-height: min(360px, calc(100dvh - 140px));
 }
 .suggestions ul {
   margin: 0;
@@ -917,6 +971,12 @@ input[aria-invalid="true"] {
 }
 :is(.place-row, .saved-row):is(:hover, :focus-within) .remove-btn {
   opacity: 1;
+}
+/* No hover on a touch screen: always shown, never an unseen target. */
+@media (hover: none) {
+  .remove-btn {
+    opacity: 1;
+  }
 }
 /* Where several railroads meet: which one takes the car on. A click moves to the next. */
 .next-carrier {
@@ -2065,71 +2125,91 @@ input.saved-name {
   }
 }
 
-/* ---- Phone: the map on top, held while the panel scrolls up over it as a sheet ---- */
-@media (max-width: 640px) {
-  html {
-    scroll-snap-type: y proximity;
-  }
-  html,
-  body {
-    height: auto;
-    overflow: visible;
-  }
-  /* Two rest points: the top of the page, with the map over most of the screen, or the panel at the top.
-     The first is on the frame: the map is sticky, and a sticky element's rest point moves as the page scrolls. */
-  .app {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    min-height: 100svh;
-    overflow: visible;
-    scroll-snap-align: start;
-  }
-  .map {
-    position: sticky;
-    top: 0;
-    order: -1;
-    flex: none;
-    height: calc(100svh - var(--sheet-rest) + var(--radius-panel));
-  }
-  .panel {
+/* ---- A finger: a 44 px target round each small button ---- */
+@media (pointer: coarse) {
+  .btn--pill,
+  .link-btn {
     position: relative;
-    inset: auto;
-    width: 100%;
-    max-height: none;
-    min-height: calc(100svh - var(--inset));
-    margin-top: calc(-1 * var(--radius-panel));
-    padding: 10px 0 calc(24px + env(safe-area-inset-bottom));
-    overflow: visible;
-    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-    background: var(--bg);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    box-shadow: var(--shadow-glass);
-    scroll-snap-align: start;
-    scroll-margin-top: var(--inset);
   }
-  /* The grabber. */
-  .panel::before {
+  :is(.icon-btn, .btn--pill, .link-btn)::before {
     content: "";
     position: absolute;
-    top: 6px;
-    left: 50%;
+    inset: -8px;
+  }
+}
+
+/* ---- Phone held upright: the map fills the screen, the panel is a sheet over its foot (web/app/sheet.ts) ---- */
+@media (max-width: 640px) {
+  .app {
+    position: fixed;
+    inset: 0;
+    height: auto;
+  }
+  /* Where it rests full: just under the status bar; sheet.ts moves it down to its other rests. Opaque: as large as it is,
+     a frosted sheet would show the map through its rows, and blur the whole screen on every frame it moves. */
+  .panel {
+    background: var(--surface-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    top: calc(env(safe-area-inset-top) + 2 * var(--space));
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-height: none;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-width: var(--stroke-w) 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    will-change: transform;
+  }
+  /* The grabber: a strip along the sheet's top, its bar in the middle. */
+  .sheet-grabber {
+    display: block;
+    flex: none;
+    height: 20px;
+    margin-bottom: calc(-2 * var(--space));
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: grab;
+  }
+  .sheet-grabber::before {
+    content: "";
+    display: block;
     width: 36px;
     height: 5px;
-    margin-left: -18px;
+    margin: 7px auto 0;
     border-radius: var(--radius-pill);
-    background: var(--stroke);
+    background: var(--text-3);
   }
-  /* Clear of the sheet's rounded top, which lies over the map's foot. */
+  /* The head drags the sheet: the browser neither pans nor selects words there. */
+  .sheet-grabber,
+  .panel-head {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .panel-head input {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  .panel-search .suggestions {
+    max-height: max(160px, calc(100dvh - var(--keyboard, 0px) - 200px));
+    touch-action: pan-y;
+  }
+  /* Every row can scroll into view, above the screen's foot and the keyboard. */
+  .panel-body {
+    padding-bottom: calc(var(--sheet-hidden, 0px) + var(--keyboard, 0px) + 6 * var(--space));
+  }
+  /* Over the sheet's top, wherever it rests. */
   .credits-btn,
   .credits-card {
-    bottom: calc(var(--inset) + var(--radius-panel));
+    bottom: calc(var(--sheet-covered, 0px) + var(--inset));
   }
   .layers-card {
-    max-height: calc(100% - var(--radius-panel));
+    max-height: calc(100% - var(--sheet-covered, 0px) - var(--edge-top) - var(--inset));
   }
-  /* The sheet scrolls with the page: no fold, and its body does not scroll on its own. */
+  /* The sheet lowers to its head in place of a fold. */
   .panel.is-folded {
     display: flex;
   }
@@ -2137,21 +2217,12 @@ input.saved-name {
   .panel-open {
     display: none;
   }
-  .panel-body {
-    overflow: visible;
-  }
   /* Pinch zooms on a phone. */
   .ctl-group--zoom {
     display: none;
   }
   .chip {
     height: 32px;
-  }
-  /* A 44 px touch target round each small round button. */
-  .icon-btn::before {
-    content: "";
-    position: absolute;
-    inset: -8px;
   }
 }
 

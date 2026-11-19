@@ -10,6 +10,7 @@ import { RAILROADS, type Line, type Railroad, type TrackIncluded } from "../../.
 import type { RoutePath, RouteStrategy } from "../../../shared/route.ts";
 import { compactRouteString, routeStringOf, shownRouteString, type RouteString } from "../../../shared/routeString.ts";
 import { linkTo } from "../../app/routes.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { fresh, usePlaceSuggestions } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { chosenRoute, type Picked } from "../../map/scene.ts";
@@ -172,7 +173,18 @@ function PlaceField(props: {
             <Cross />
           </button>
         )}
-        <button type="button" className="icon-btn pick-btn" aria-pressed={props.picking} aria-label={`Pick on the map: ${props.label}`} title="Pick on the map" onClick={props.onTogglePick}>
+        <button
+          type="button"
+          className="icon-btn pick-btn"
+          aria-pressed={props.picking}
+          aria-label={`Pick on the map: ${props.label}`}
+          title="Pick on the map"
+          onClick={() => {
+            // On a phone the sheet lowers to its head, out of the way of the map.
+            if (!props.picking) showSheet("head");
+            props.onTogglePick();
+          }}
+        >
           <Crosshair />
         </button>
       </div>
@@ -264,7 +276,11 @@ function PlaceList(props: {
                   problem={problem}
                   picking={session.pick === at}
                   remove={count > 2 ? "Remove" : ref ? "Clear" : null}
-                  onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
+                  onCommit={(next) => {
+                    dispatch({ type: "setPlace", at, ref: next });
+                    // The last empty row set: on a phone the sheet lowers to half, for the route on the map.
+                    if (next && places.every((place, i) => i === at || place)) showSheet("half");
+                  }}
                   onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
                   onRemove={() => dispatch({ type: "remove", at })}
                 />

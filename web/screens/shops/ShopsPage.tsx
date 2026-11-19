@@ -6,6 +6,7 @@ import {
   type ShopLink, type ShopView,
 } from "../../../shared/places.ts";
 import type { Railroad } from "../../../shared/railroads.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { fresh, usePlace } from "../../data/hooks.ts";
 import { fmtDistance } from "../../format.ts";
 import { PlacePin, RailroadChips } from "../../ui/badges.tsx";
@@ -89,7 +90,8 @@ export function ShopList(props: {
               title={shop.place.ok ? undefined : "Not on the network"}
               onAnimationEnd={props.onLit}
             >
-              <button type="button" className="shop-pick" aria-pressed={selected} onClick={() => props.onSelect(shop)}>
+              {/* On a phone the sheet lowers to half (from full), so the map shows the shop flown to. */}
+              <button type="button" className="shop-pick" aria-pressed={selected} onClick={() => (showSheet("half"), props.onSelect(shop))}>
                 <OwnerGlyph owner={ownerOf(shop)} />
                 <span className="shop-text">
                   <span className="shop-name">{name}</span>
@@ -98,7 +100,7 @@ export function ShopList(props: {
                 {shop.place.ok && <CarrierDots railroads={shop.place.place.railroads} />}
               </button>
               {onEdit && (
-                <button type="button" className="btn btn--pill shop-edit" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => onEdit(shop)}>
+                <button type="button" className="btn btn--pill shop-edit" aria-label={`Edit ${shop.name}`} aria-pressed={editing} onClick={() => (showSheet("half"), onEdit(shop))}>
                   {editing ? "Editing" : "Edit"}
                 </button>
               )}
@@ -180,11 +182,12 @@ export function ShopForm(props: {
   const nameRef = useRef<HTMLInputElement>(null);
 
   // The form opens above the list, which may be scrolled far down: bring it into view and start at its first box.
-  // On a phone the card can be taller than the screen, where "nearest" stops short and cuts the heading off.
+  // On a phone the card can be taller than the screen, where "nearest" stops short and cuts the heading off. On a touch
+  // screen the name waits for a tap, as its keyboard would cover the map the shop is set on.
   useEffect(() => {
     const phone = window.matchMedia?.(PHONE_QUERY).matches ?? false;
     sectionRef.current?.scrollIntoView?.({ block: phone ? "start" : "nearest" });
-    nameRef.current?.focus({ preventScroll: true });
+    if (!window.matchMedia?.("(pointer: coarse)").matches) nameRef.current?.focus({ preventScroll: true });
   }, []);
 
   const saved = useMemo(() => savedRef(props.shop), [props.shop]);
@@ -415,6 +418,11 @@ export function ShopLinks(props: {
       </span>
     );
   const next = props.links.length;
+  // A ring pressed: the next tap on the map sets it, so on a phone the sheet lowers to its head.
+  const press = (link: number) => {
+    if (props.pressed !== link) showSheet("head");
+    props.onPress(link);
+  };
   return (
     <div className="field" role="group" aria-labelledby={id}>
       <span id={id} className="field-label">
@@ -428,7 +436,7 @@ export function ShopLinks(props: {
               className="icon-btn ring-btn"
               aria-label={`Move link ${i + 1}`}
               aria-pressed={props.pressed === i}
-              onClick={() => props.onPress(i)}
+              onClick={() => press(i)}
               onKeyDown={(event) => {
                 if (event.key === "Delete" || event.key === "Backspace") props.onRemove(i);
               }}
@@ -453,7 +461,7 @@ export function ShopLinks(props: {
         )}
         {next < SHOP_LINKS_MAX && !props.offer && (
           <li className="link-row is-add">
-            <button type="button" className="add-link" aria-pressed={props.pressed === next} onClick={() => props.onPress(next)}>
+            <button type="button" className="add-link" aria-pressed={props.pressed === next} onClick={() => press(next)}>
               <PlacePin kind="stop" n="+" />
               Add link
             </button>
