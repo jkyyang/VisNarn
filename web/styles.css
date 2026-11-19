@@ -1642,7 +1642,7 @@ input.saved-name {
   position: absolute;
   z-index: 6;
   /* Clear of a phone's status bar, notch and round corners: the page runs under them (viewport-fit=cover). */
-  inset: max(var(--inset), env(safe-area-inset-top)) max(var(--inset), env(safe-area-inset-right)) var(--inset) max(var(--inset), env(safe-area-inset-left));
+  inset: var(--edge-top) var(--edge-right) var(--edge-bottom) var(--edge-left);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1819,8 +1819,8 @@ input.saved-name {
   --credits-btn: calc(var(--ctl) - var(--space));
   position: absolute;
   z-index: 6;
-  right: max(var(--inset), env(safe-area-inset-right));
-  bottom: max(var(--inset), env(safe-area-inset-bottom));
+  right: var(--edge-right);
+  bottom: var(--edge-bottom);
   display: grid;
   place-items: center;
   width: var(--credits-btn);
@@ -1839,8 +1839,8 @@ input.saved-name {
 .credits-card {
   position: absolute;
   z-index: 7;
-  right: calc(max(var(--inset), env(safe-area-inset-right)) + var(--ctl) - var(--space) + 8px);
-  bottom: max(var(--inset), env(safe-area-inset-bottom));
+  right: calc(var(--edge-right) + var(--ctl) - var(--space) + 8px);
+  bottom: var(--edge-bottom);
   max-width: min(400px, calc(100% - 76px));
   padding: 9px 12px;
   border-radius: var(--radius-ctl);
@@ -2218,13 +2218,11 @@ input.saved-name {
   .panel-body {
     padding-bottom: calc(var(--sheet-hidden, 0px) + var(--keyboard, 0px) + 6 * var(--space));
   }
-  /* Over the sheet's top, wherever it rests. */
+  /* Over the sheet's top, wherever it rests: the credits, and the Layers card that takes its limits from the controls' box. */
+  .map-controls,
   .credits-btn,
   .credits-card {
     bottom: calc(var(--sheet-covered, 0px) + var(--inset));
-  }
-  .layers-card {
-    max-height: calc(100% - var(--sheet-covered, 0px) - var(--edge-top) - var(--inset));
   }
   /* The sheet lowers to its head in place of a fold. */
   .panel.is-folded {
