@@ -11,6 +11,17 @@ import { expectMapCanvas, keepScreenshot, mapLayerOrder, mapRegion, planRoute, t
 const nasaTiles = (page: Page) =>
   page.waitForResponse((response) => response.url().includes("gibs.earthdata.nasa.gov"), { timeout: 15_000 }).catch(() => null);
 
+/** The "i" opens the map's credits beside it, which name `source`; Escape closes them again. */
+async function expectCredits(page: Page, source: string): Promise<void> {
+  const credits = page.getByRole("button", { name: "Map credits" });
+  await credits.click();
+  await expect(credits).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".credits-card")).toBeVisible();
+  await expect(page.locator(".credits-card")).toContainText(source);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".credits-card")).toBeHidden();
+}
+
 test("Night turns the map dark with city lights, the route stays on top, and Day brings the day map back", async ({ page }) => {
   const lights = nasaTiles(page);
   await page.goto("/route");
@@ -29,8 +40,8 @@ test("Night turns the map dark with city lights, the route stays on top, and Day
   await page.getByRole("radio", { name: "Night" }).click();
   await expect(map).toHaveAttribute("data-look", "night");
   await expect(layers).toHaveAccessibleName("Map layers: Map · Night");
-  await expect(map.locator(".maplibregl-ctrl-attrib")).toContainText("NASA");
   await layers.click();
+  await expectCredits(page, "NASA");
 
   await expectMapCanvas(page);
   await expect(selectedRow).toBeVisible();
@@ -67,7 +78,7 @@ test("Auto at dusk over North America: the satellite picture by day, city lights
   // The map centre is past sunset; the colours over it follow.
   await expect(map).toHaveAttribute("data-look", "night");
   await expect(layers).toHaveAccessibleName(/^Map layers: Satellite · (Sunset|Night)$/);
-  await expect(map.locator(".maplibregl-ctrl-attrib")).toContainText("NASA");
+  await expectCredits(page, "NASA");
   await expect(selectedRow).toBeVisible();
   await lights;
   await expectMapCanvas(page);

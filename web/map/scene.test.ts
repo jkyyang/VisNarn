@@ -2,14 +2,13 @@ import type { Layer, PickingInfo } from "deck.gl";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { LngLat } from "../../shared/geo.ts";
 import type { FraId, ShopView } from "../../shared/places.ts";
-import { DEFAULT_INCLUDE, drawnClasses, NETWORK_CLASSES, RAILROADS, type Line, type NetworkClass } from "../../shared/railroads.ts";
+import { DEFAULT_INCLUDE, drawnClasses, NETWORK_CLASSES, type Line, type NetworkClass } from "../../shared/railroads.ts";
 import type { Plan, PlannedRoute } from "../../shared/plans.ts";
 import type { RoutePath } from "../../shared/route.ts";
 import { createFakeState, installFakeServer } from "../testing/fakeServer.ts";
 import type { RGBA, ThemeColors } from "../theme.ts";
 import { LABELS } from "./basemaps.ts";
 import { LAYER, lineAt, networkLayers, sceneLayers, sceneTarget, sceneTooltip } from "./layers.ts";
-import { legendFor } from "./Legend.tsx";
 import { chosenRoute, pillAnchors, planScene, routePaths, shopsScene, withRoutePaths, type MapScene, type SceneLink, type SceneRoute } from "./scene.ts";
 
 const grey: RGBA = [90, 100, 110, 255];
@@ -224,15 +223,6 @@ describe("shopsScene", () => {
     expect(colorOf(offered)[3]).toBeLessThan(255);
     expect(colorOf(ghost)).toEqual(colorOf(offered));
     expect(colorOf(refused)).toEqual(colors.risk);
-  });
-});
-
-describe("legend", () => {
-  it("lists the selected route's railroads; with no route, the lines of the network classes drawn", () => {
-    expect(legendFor(planScene({ planned: twoRoutes, option: null, shops, unit: "km" }), ["class_i"]).railroads).toEqual(twoRoutes.outcome === "routed" ? twoRoutes.routes[0].railroads : []);
-    expect(legendFor(null, ["class_i"]).railroads).toEqual(RAILROADS);
-    expect(legendFor(null, ["class_i", "short_line", "passenger"]).railroads).toEqual([...RAILROADS, "short line", "passenger"]);
-    expect(legendFor(null, []).railroads).toEqual([]);
   });
 });
 

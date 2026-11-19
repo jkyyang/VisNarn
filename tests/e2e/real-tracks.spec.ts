@@ -8,9 +8,9 @@ import { expect, expectMapCanvas, planRoute, test } from "./app.ts";
 async function setRealTracks(page: Page, on: boolean): Promise<void> {
   const layers = page.getByRole("button", { name: /^Map layers/ });
   await layers.click();
-  const box = page.getByRole("checkbox", { name: "Real tracks" });
-  await box.setChecked(on);
-  await expect(box).toBeChecked({ checked: on });
+  const toggle = page.getByRole("switch", { name: "Real tracks" });
+  await toggle.setChecked(on);
+  await expect(toggle).toBeChecked({ checked: on });
   await layers.click();
 }
 

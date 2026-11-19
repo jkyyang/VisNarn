@@ -3,9 +3,9 @@
  * while the user moves between screens; a screen says what the map should show by rendering
  * <MapContent> anywhere in its tree.
  *
- * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night) are view state
- * owned here. The day or night look is set on the map section, and the whole page takes it from there
- * (web/styles.css).
+ * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night, the carrier shown
+ * alone) are view state owned here. The day or night look is set on the map section, and the whole
+ * page takes it from there (web/styles.css).
  */
 import {
   createContext,
@@ -152,13 +152,13 @@ const nothing = () => null;
 
 /**
  * The map element. Rendered once, by App. With no <MapContent> mounted it shows the bare network.
- * `coveredLeft`: how many px of the map the panel covers from the left; the camera works in the rest.
+ * `cameraLeft`: how many px of the map every camera move keeps clear on the left, for the panel.
  */
-export function MapStage(props: { coveredLeft: number; found: Found | null; onCloseFound: () => void }): ReactElement {
+export function MapStage(props: { cameraLeft: number; found: Found | null; onCloseFound: () => void }): ReactElement {
   const stage = useContext(StageContext);
   const network = useContext(NetworkContext);
   const content = useSyncExternalStore(stage?.subscribe ?? noopSubscribe, stage?.content ?? nothing, nothing);
-  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto" });
+  const [layers, setLayers] = useState<MapLayerChoice>({ basemap: "map", network: true, tracks: false, light: "auto", carrier: null });
   const [drawable] = useState(canDrawMaps);
   const [centre, setCentre] = useState<LngLat>(NETWORK_CENTRE);
   const now = useNow(layers.light === "auto");
@@ -177,7 +177,7 @@ export function MapStage(props: { coveredLeft: number; found: Found | null; onCl
               look={look}
               now={now}
               onCentre={setCentre}
-              coveredLeft={props.coveredLeft}
+              cameraLeft={props.cameraLeft}
               found={props.found}
               onCloseFound={props.onCloseFound}
             />

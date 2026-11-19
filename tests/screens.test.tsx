@@ -14,7 +14,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { RequestArgs, Res, Route } from "../shared/api.ts";
-import { RAILROADS } from "../shared/railroads.ts";
 import { callApi, clearQueryCache } from "../web/data/query.ts";
 import { openPage } from "../web/testing/page.tsx";
 import { EXAMPLE_SHOPS } from "./fixtures.ts";
@@ -119,10 +118,8 @@ describe("Route planner", () => {
     expect(legs[0]).toHaveTextContent(/^(BNSF|UP|CSXT|NS|CN|CPKC)Taylor → /);
     expect(legs.at(-1)).toHaveTextContent(/→ North Little Rock[\d,]+ km$/);
 
-    // The legend lists the selected route's railroads and no others.
-    const onRoute = RAILROADS.filter((railroad) => legs.some((leg) => leg.textContent?.startsWith(railroad)));
-    const legend = within(screen.getByRole("list", { name: "Railroad colors" })).getAllByRole("listitem").map((item) => item.textContent);
-    expect(legend.filter((item) => item !== "↩Turn-back")).toEqual(onRoute);
+    // Each leg in its railroad's colour.
+    for (const leg of legs) expect(leg.querySelector<HTMLElement>(".section-bar")?.style.background).toBe(`var(--rr-${leg.querySelector(".leg-carrier")?.textContent})`);
   });
 
   it("a click on the map adds a stop, which the route then runs through", async () => {

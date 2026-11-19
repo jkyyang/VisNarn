@@ -1,46 +1,47 @@
 /**
- * Popovers: one open at a time in the whole page. Opening one closes any other; a click outside it
- * (`root`: its button and its card) or Escape closes it.
+ * The one popover open on the page: opening one closes the one before. While open, Escape or a press
+ * anywhere outside its own elements closes it.
  */
-import { useEffect, useId, useRef, useSyncExternalStore, type RefObject } from "react";
+import { useCallback, useEffect, useId, useSyncExternalStore, type RefObject } from "react";
 import { useEscape } from "./useEscape.ts";
 
 let openId: string | null = null;
 const listeners = new Set<() => void>();
-function setOpenId(id: string | null): void {
+
+function show(id: string | null): void {
   openId = id;
   listeners.forEach((listener) => listener());
 }
-const subscribe = (listener: () => void) => {
+
+function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => void listeners.delete(listener);
-};
-
-export interface Popover<T extends HTMLElement> {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  /** The element holding the popover's button and its card: a press anywhere else closes it. */
-  root: RefObject<T>;
 }
 
-export function usePopover<T extends HTMLElement = HTMLDivElement>(): Popover<T> {
+/** Whether this popover is open, and its setter. `inside`: the popover and the button that opens it, where a press keeps it open. */
+export function usePopover(inside: readonly RefObject<Element | null>[]): [boolean, (open: boolean) => void] {
   const id = useId();
-  const root = useRef<T>(null);
   const open = useSyncExternalStore(subscribe, () => openId === id, () => false);
-  const setOpen = (next: boolean) => {
-    if (next) setOpenId(id);
-    else if (openId === id) setOpenId(null);
-  };
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (next) show(id);
+      else if (openId === id) show(null);
+    },
+    [id],
+  );
   useEscape(open, () => setOpen(false));
+
   useEffect(() => {
     if (!open) return;
-    const onDown = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpenId(null);
+    // Capture: the map takes its own presses, and this one must still hear them.
+    const onPress = (event: PointerEvent) => {
+      if (!inside.some((ref) => ref.current?.contains(event.target as Node))) setOpen(false);
     };
-    document.addEventListener("pointerdown", onDown, true);
-    return () => document.removeEventListener("pointerdown", onDown, true);
+    document.addEventListener("pointerdown", onPress, true);
+    return () => document.removeEventListener("pointerdown", onPress, true);
   }, [open]);
-  // A popover that goes away closed: the next one may open.
-  useEffect(() => () => void (openId === id && setOpenId(null)), [id]);
-  return { open, setOpen, root };
+
+  // Gone while open: nothing is open.
+  useEffect(() => () => setOpen(false), [setOpen]);
+  return [open, setOpen];
 }

@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef, useState, type ReactElement, type RefObject } 
 import type { PlaceSuggestion, ShopId } from "../../shared/places.ts";
 import { useBasemap } from "../data/basemap.ts";
 import { fresh, usePlace, useShops } from "../data/hooks.ts";
+import { CAMERA_MARGIN_PX } from "../map/config.ts";
 import { MapStage, MapStageProvider } from "../map/MapStage.tsx";
 import { RouteWorkspace } from "../screens/route/RouteWorkspace.tsx";
 import { ShopsScreen } from "../screens/shops/ShopsScreen.tsx";
@@ -30,7 +31,7 @@ export default function App(): ReactElement {
   const reopen = useRef<HTMLButtonElement>(null);
   const [panelState, setPanelState] = usePanelState();
   const folded = panelState === "folded";
-  const covered = useCoveredLeft(panel, folded);
+  const cameraLeft = useCameraLeft(panel, !folded);
   const [text, setText] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PlaceSuggestion | null>(null);
   const [selectedShop, setSelectedShop] = useState<ShopId | null>(null);
@@ -78,7 +79,7 @@ export default function App(): ReactElement {
               <PanelIcon />
             </button>
           )}
-          <MapStage coveredLeft={covered} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place } : null} onCloseFound={() => setChosen(null)} />
+          <MapStage cameraLeft={cameraLeft} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
     </ErrorBoundary>
@@ -86,27 +87,28 @@ export default function App(): ReactElement {
 }
 
 /**
- * How far the panel reaches over the map from its left edge, so the camera centres places in the
- * map that shows. On a phone the panel is as wide as the map and lies below it, and folded it is
- * gone: nothing is covered. The panel's width follows the window only, so a window resize and a
- * fold are the times to measure again.
+ * The px every camera move keeps clear on the left: the open panel with a margin each side of it,
+ * else the margin alone. On a phone the panel is as wide as the map and lies below it. The panel's
+ * width follows the window only, so a window resize and a fold are the times to measure again.
  */
-function useCoveredLeft(panel: RefObject<HTMLElement | null>, folded: boolean): number {
-  const [covered, setCovered] = useState(0);
+function useCameraLeft(panel: RefObject<HTMLElement | null>, open: boolean): number {
+  const [left, setLeft] = useState(CAMERA_MARGIN_PX);
   useLayoutEffect(() => {
     const element = panel.current;
     const frame = element?.parentElement;
-    if (!element || !frame) return;
+    if (!open || !element || !frame) {
+      setLeft(CAMERA_MARGIN_PX);
+      return;
+    }
     const measure = () => {
-      const box = element.getBoundingClientRect();
-      const map = frame.getBoundingClientRect();
-      setCovered(box.width && box.width < map.width ? Math.round(box.right - map.left) : 0);
+      const { width } = element.getBoundingClientRect();
+      setLeft(width < frame.getBoundingClientRect().width ? Math.round(width) + 2 * CAMERA_MARGIN_PX : CAMERA_MARGIN_PX);
     };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [panel, folded]);
-  return covered;
+  }, [panel, open]);
+  return left;
 }
 
 function ScreenView(props: { screen: Screen; query: string; selectedShop: ShopId | null; onSelectShop: (id: ShopId | null) => void }): ReactElement {

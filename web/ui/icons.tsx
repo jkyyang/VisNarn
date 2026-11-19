@@ -103,3 +103,39 @@ export const Bookmark = (): ReactElement => (
     <path d="M6 3h12v18l-6-4-6 4z" />
   </Icon>
 );
+
+/** The map's layers. */
+export const Layers = (): ReactElement => (
+  <Icon>
+    <path d="M12 3l9 5-9 5-9-5 9-5z" />
+    <path d="M3 13l9 5 9-5" />
+  </Icon>
+);
+
+export const Minus = (): ReactElement => (
+  <Icon>
+    <path d="M5 12h14" />
+  </Icon>
+);
+
+/** Back to the whole network. */
+export const Home = (): ReactElement => (
+  <Icon>
+    <path d="M4 11l8-7 8 7" />
+    <path d="M6 10v9h12v-9" />
+  </Icon>
+);
+
+export const Fullscreen = (): ReactElement => (
+  <Icon>
+    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+  </Icon>
+);
+
+/** The map's credits. */
+export const Info = (): ReactElement => (
+  <Icon>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </Icon>
+);

@@ -1,14 +1,13 @@
 /**
  * The map as page tests see it: no WebGL, only what the map was asked to show, and buttons that do
  * what a click on the map would do (a click on empty map, on a grey route, on a shop square) or a drag
- * of a handle to the next click's spot. The real pills, turn-back marks, legend and map controls are
- * drawn, so those are the real ones.
+ * of a handle to the next click's spot. The real pills, turn-back marks and map controls are drawn, so
+ * those are the real ones; the carrier shown in colour is on the map as data-carrier.
  */
-import type { ReactElement } from "react";
-import { DEFAULT_INCLUDE, drawnClasses } from "../../shared/railroads.ts";
+import { useState, type ReactElement } from "react";
+import type { Railroad } from "../../shared/railroads.ts";
 import type { MapCanvasProps } from "../map/MapCanvas.tsx";
 import { MapControls } from "../map/MapControls.tsx";
-import { Legend, legendFor } from "../map/Legend.tsx";
 import { PillFace, TurnBackMark } from "../map/RouteMarkFaces.tsx";
 import type { MapScene } from "../map/scene.ts";
 
@@ -33,8 +32,15 @@ function describe(scene: MapScene | null | undefined): string {
 export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCanvasProps): ReactElement {
   const scene = content?.scene ?? null;
   const select = content?.onSelect;
+  const [preview, setPreview] = useState<Railroad | null>(null);
   return (
-    <div data-testid="map" data-focus={content?.focus.kind ?? "none"} data-tracks={layers.tracks ? "on" : "off"} data-basemap={layers.basemap}>
+    <div
+      data-testid="map"
+      data-focus={content?.focus.kind ?? "none"}
+      data-tracks={layers.tracks ? "on" : "off"}
+      data-basemap={layers.basemap}
+      data-carrier={preview ?? layers.carrier ?? undefined}
+    >
       <p>{describe(scene)}</p>
       {content?.onPick && (
         <button type="button" onClick={() => content.onPick?.(nextClick.lon, nextClick.lat, 5, null)}>
@@ -73,8 +79,7 @@ export default function FakeMapCanvas({ content, layers, onLayers, look }: MapCa
       )}
       {scene?.kind === "route" && scene.pills.map((pill) => <PillFace key={pill.id} pill={pill} corner={null} onSelect={() => select?.({ kind: "option", id: pill.id })} />)}
       {scene?.kind === "route" && scene.turnBacks.map((turnBack, i) => <TurnBackMark key={i} turnBack={turnBack.turnBack} />)}
-      <MapControls layers={layers} onLayers={onLayers} look={look} onZoom={() => {}} onFit={() => {}} />
-      <Legend {...legendFor(scene, layers.network ? drawnClasses(content?.include ?? DEFAULT_INCLUDE) : [])} />
+      <MapControls layers={layers} onLayers={onLayers} look={look} onPreview={setPreview} onZoom={() => {}} onReset={() => {}} />
     </div>
   );
 }

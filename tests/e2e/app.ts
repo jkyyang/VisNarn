@@ -54,33 +54,49 @@ export async function expectMapCanvas(page: Page): Promise<void> {
   expect(box?.height ?? 0).toBeGreaterThan(100);
 }
 
-/** The map style's layers, bottom to top, the deck.gl ones among them: read from react-map-gl's map in the page. */
-export async function mapLayerOrder(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    type Hook = { memoizedState?: { current?: { map?: { getMap?: () => { getLayersOrder: () => string[] } } } }; next?: Hook };
-    type Fiber = { memoizedState?: Hook; return?: Fiber };
-    const container = document.querySelector(".maplibregl-map") as (Element & Record<string, Fiber>) | null;
-    const key = container && Object.keys(container).find((name) => name.startsWith("__reactFiber"));
-    for (let fiber = key ? container[key] : undefined; fiber; fiber = fiber.return) {
-      for (let hook = fiber.memoizedState; hook && typeof hook === "object" && "next" in hook; hook = hook.next) {
-        const map = hook.memoizedState?.current?.map?.getMap?.();
-        if (map) return map.getLayersOrder();
-      }
-    }
-    throw new Error("No map on the page.");
-  });
+/** What the tests ask of react-map-gl's map in the page. */
+interface MapAsked {
+  getLayersOrder(): string[];
+  project(lngLat: [number, number]): { x: number; y: number };
 }
 
+/** Calls one method of the page's map and returns its answer. */
+async function askMap<M extends keyof MapAsked>(page: Page, method: M, ...args: Parameters<MapAsked[M]>): Promise<ReturnType<MapAsked[M]>> {
+  return page.evaluate(
+    ([method, args]) => {
+      type Hook = { memoizedState?: { current?: { map?: { getMap?: () => Record<string, (...a: unknown[]) => unknown> } } }; next?: Hook };
+      type Fiber = { memoizedState?: Hook; return?: Fiber };
+      const container = document.querySelector(".maplibregl-map") as (Element & Record<string, Fiber>) | null;
+      const key = container && Object.keys(container).find((name) => name.startsWith("__reactFiber"));
+      for (let fiber = key ? container[key] : undefined; fiber; fiber = fiber.return) {
+        for (let hook = fiber.memoizedState; hook && typeof hook === "object" && "next" in hook; hook = hook.next) {
+          const map = hook.memoizedState?.current?.map?.getMap?.();
+          if (map) return JSON.parse(JSON.stringify(map[method](...args)));
+        }
+      }
+      throw new Error("No map on the page.");
+    },
+    [method, args] as const,
+  ) as Promise<ReturnType<MapAsked[M]>>;
+}
+
+/** The map style's layers, bottom to top, the deck.gl ones among them. */
+export const mapLayerOrder = (page: Page): Promise<string[]> => askMap(page, "getLayersOrder");
+
+/** Where a place is on the map canvas now, in px from its top left. */
+export const mapPoint = (page: Page, lngLat: [number, number]): Promise<{ x: number; y: number }> => askMap(page, "project", lngLat);
+
 /**
- * The middle of the map the panel leaves free, where the search box puts the place it found: beside
- * the panel on a desktop (the panel floats over the map's left side), the whole map on a phone.
+ * The middle of the map the camera frames, where the search box puts the place it found: every camera
+ * move keeps the panel's width + 32 px clear on the left on a desktop (the panel floats over the map's
+ * left side), 16 px on a phone (the panel lies below the map).
  */
 export async function freeMapCentre(page: Page): Promise<{ x: number; y: number }> {
   const map = await mapRegion(page).locator("canvas.maplibregl-canvas").boundingBox();
   const panel = await page.locator(".panel").boundingBox();
   if (!map || !panel) throw new Error("The map or the panel is not on the page.");
-  const covered = panel.width < map.width ? panel.x + panel.width - map.x : 0;
-  return { x: map.x + covered + (map.width - covered) / 2, y: map.y + map.height / 2 };
+  const left = panel.width < map.width ? panel.width + 32 : 16;
+  return { x: map.x + left + (map.width - left) / 2, y: map.y + map.height / 2 };
 }
 
 /** Clicks the middle of the free map. */
