@@ -8,6 +8,7 @@ import { haversineKm, type LngLat } from "../../../shared/geo.ts";
 import type { PlaceRef } from "../../../shared/places.ts";
 import type { FullPlan, Plan, PlanPlaces, SavedRoute, SavedRouteId } from "../../../shared/plans.ts";
 import { DEFAULT_INCLUDE, type Railroad, type TrackIncluded } from "../../../shared/railroads.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { snapToNetwork } from "../../data/hooks.ts";
 import { PICK_RADIUS_PX } from "../../map/config.ts";
 import { useEscape } from "../../ui/useEscape.ts";
@@ -286,10 +287,13 @@ export function usePlanSession(savedId: SavedRouteId | null, saved: SavedRoute |
   if (current && current === held) memory = current;
 
   const session = current?.session ?? startSession(savedId, EMPTY_PLAN);
-  const dispatch = useCallback((action: PlanAction) => send({ type: "act", action }), []);
-
   const latest = useRef(session);
   latest.current = session;
+  const dispatch = useCallback((action: PlanAction) => {
+    // The last empty place set, in the panel or on the map: on a phone the sheet lowers to half, for the route on the map.
+    if (action.type === "setPlace" && action.ref && latest.current.plan.present.places.every((place, i) => i === action.at || place)) showSheet("half");
+    send({ type: "act", action });
+  }, []);
   const snapping = useRef(false);
 
   useEscape(session.pick !== null, () => dispatch({ type: "pick", at: null }));

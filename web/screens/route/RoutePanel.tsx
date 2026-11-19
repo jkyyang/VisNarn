@@ -276,11 +276,7 @@ function PlaceList(props: {
                   problem={problem}
                   picking={session.pick === at}
                   remove={count > 2 ? "Remove" : ref ? "Clear" : null}
-                  onCommit={(next) => {
-                    dispatch({ type: "setPlace", at, ref: next });
-                    // The last empty row set: on a phone the sheet lowers to half, for the route on the map.
-                    if (next && places.every((place, i) => i === at || place)) showSheet("half");
-                  }}
+                  onCommit={(next) => dispatch({ type: "setPlace", at, ref: next })}
                   onTogglePick={() => dispatch({ type: "pick", at: session.pick === at ? null : at })}
                   onRemove={() => dispatch({ type: "remove", at })}
                 />

@@ -4,12 +4,15 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolvedOf, type FraId } from "../../../shared/places.ts";
+import { showSheet } from "../../app/sheet.ts";
 import { clearQueryCache } from "../../data/query.ts";
 import { installFakeServer, type FakeServer } from "../../testing/fakeServer.ts";
 import { setNextMapClick } from "../../testing/FakeMapCanvas.tsx";
 import { currentPath, openPage, pretendPhone } from "../../testing/page.tsx";
 
 vi.mock("../../map/MapCanvas.tsx", () => import("../../testing/FakeMapCanvas.tsx"));
+// jsdom has no layout for the phone's sheet to move in: the tests see where it is sent.
+vi.mock("../../app/sheet.ts", async (actual) => ({ ...(await actual<typeof import("../../app/sheet.ts")>()), showSheet: vi.fn() }));
 
 let fake: FakeServer;
 beforeEach(() => {
@@ -313,21 +316,13 @@ describe("Shops screen", () => {
       expect(currentPath()).toBe("/shops/shop-ex-2");
     });
 
-    it("pressing a ring scrolls the page to the top, as on a phone the panel may have slid up over the map", async () => {
+    it("pressing a ring lowers the phone's sheet to its head, for the tap on the map that sets the link", async () => {
       const user = userEvent.setup();
-      const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-      const original = window.matchMedia;
-      pretendPhone(true);
-      try {
-        openPage("/shops/shop-ex-1");
-        await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
-        scrollTo.mockClear();
-        await user.click(await within(links()).findByRole("button", { name: "Add link" }));
-        expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
-      } finally {
-        scrollTo.mockRestore();
-        window.matchMedia = original;
-      }
+      openPage("/shops/shop-ex-1");
+      await user.click(await within(await screen.findByRole("group", { name: "Track links" })).findByRole("button", { name: "Use" }));
+      vi.mocked(showSheet).mockClear();
+      await user.click(await within(links()).findByRole("button", { name: "Add link" }));
+      expect(showSheet).toHaveBeenCalledWith("head");
     });
   });
 
