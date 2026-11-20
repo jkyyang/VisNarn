@@ -2328,11 +2328,21 @@ input.saved-name {
   .credits-card {
     bottom: calc(var(--sheet-covered, 0px) + 2 * var(--space));
   }
-  /* The map buttons: one glass stack, a hairline between them; gone with the map under the full sheet. */
+  /*
+   * The map buttons: one glass stack, a hairline between them, at the map's foot just over the sheet, where no bar of the
+   * browser's ever lies (Safari says nothing of where its collapsed bar ends); the Layers card opens upward beside it.
+   * Gone with the map under the full sheet.
+   */
   .map-controls {
+    justify-content: flex-end;
     gap: 0;
   }
-  .panel[data-rest="full"] ~ .map .map-controls {
+  .layers-card {
+    top: auto;
+    bottom: 0;
+    transform-origin: bottom right;
+  }
+  .panel[data-rest="full"] ~ .map :is(.map-controls, .credits-btn, .credits-card) {
     visibility: hidden;
   }
   .map-controls > .map-btn {
@@ -2352,13 +2362,20 @@ input.saved-name {
   .layers-card {
     --surface: var(--surface-thick);
   }
-  /* The credits: a small quiet mark in the corner, its target still a finger's. */
+  /* The credits: a small quiet mark in the other corner, its card to its right, its target still a finger's. */
   .map {
     --credits-btn: calc(var(--ctl) - 4 * var(--space));
   }
   .credits-btn {
+    right: auto;
+    left: var(--edge-left);
     color: var(--text-2);
     box-shadow: none;
+  }
+  .credits-card {
+    right: auto;
+    left: calc(var(--edge-left) + var(--credits-btn) + 8px);
+    transform-origin: bottom left;
   }
   /* The sheet lowers to its head in place of a fold. */
   .panel.is-folded {
