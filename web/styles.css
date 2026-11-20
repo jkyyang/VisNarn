@@ -2215,12 +2215,13 @@ input.saved-name {
 /* ---- Phone held upright: the map fills the screen, the panel is a sheet over its foot (web/app/sheet.ts) ---- */
 @media (max-width: 640px) {
   /*
-   * The frame is the screen the browser's bars and the keyboard leave free: sheet.ts keeps it on the visual viewport, which
-   * iOS moves and shrinks without laying the page out again. Every rest of the sheet is measured from it. It is laid out
-   * with the page, never fixed: Safari paints its own solid band over the bars' ground when a fixed thing borders them.
-   * The map runs on above and below it, and the sheet below it (--bleed: as far as Safari's bars take of the screen when
-   * they are all out, whatever they are doing now: with the keyboard up Safari counts none), so they show through the
-   * bars' glass and the keyboard's; sheet.ts rests the page scrolled by that much, for the part above.
+   * The frame is the screen the browser's bars leave free: sheet.ts keeps it on the visual viewport, which iOS moves
+   * without laying the page out again. Every rest of the sheet is measured from it. It is laid out with the page, never
+   * fixed: Safari paints its own solid band over the bars' ground when a fixed thing borders them. The map runs on above
+   * and below it, and the sheet below it (--bleed: as far as Safari's bars take of the screen when they are all out), so
+   * they show through the bars' glass; sheet.ts rests the page scrolled by that much, for the part above. The keyboard
+   * resizes none of it: it covers the frame's foot (--keyboard, from sheet.ts), and the map and the sheet lie on under
+   * its glass. With it up Safari's units count the bars as gone, so sheet.ts holds the bleed in px while a field is typed in.
    */
   .app {
     position: absolute;
@@ -2314,12 +2315,12 @@ input.saved-name {
   .route-panel .list-count {
     font-size: 0;
   }
-  /* The places found are the sheet's own list, full width down to the keyboard: no card on a card. */
+  /* The places found are the sheet's own list, full width, running on under the keyboard as its rows do, each able to scroll into view over it: no card on a card. */
   .panel-search .suggestions {
     left: calc(-3 * var(--space));
     right: calc(-3 * var(--space));
     max-height: max(160px, calc(var(--frame-height, 100dvh) - 120px));
-    padding: 0 calc(2 * var(--space));
+    padding: 0 calc(2 * var(--space)) var(--keyboard, 0px);
     border-radius: 0;
     background: none;
     box-shadow: none;
@@ -2338,9 +2339,9 @@ input.saved-name {
     background: none;
     box-shadow: none;
   }
-  /* The rows run on under the browser's bottom bar and the keyboard, to the sheet's foot; every row can scroll into view above the frame's foot, and one brought into view stops there. */
+  /* The rows run on under the browser's bottom bar and the keyboard, to the sheet's foot; every row can scroll into view above the frame's foot and the keyboard, and one brought into view stops there. */
   .panel-body {
-    --under: calc(var(--sheet-hidden, 0px) + var(--foot) + var(--bleed));
+    --under: calc(var(--sheet-hidden, 0px) + var(--foot) + var(--bleed) + var(--keyboard, 0px));
     margin-bottom: calc(-1 * (var(--foot) + var(--bleed)));
     padding-bottom: calc(var(--under) + 4 * var(--space));
     scroll-padding-bottom: var(--under);

@@ -13,10 +13,12 @@
  * it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
  *
  * It also keeps the frame on the visual viewport (--frame-top, --frame-height): the screen the browser's bars
- * and the keyboard leave free. iOS shrinks that for the keyboard and scrolls the page under a focused field
- * without laying the page out again; the frame follows, so the sheet's top stays on screen and its body ends
- * at the keyboard. The map runs on above and below the frame (styles.css); Safari paints under its top bar
- * only what has scrolled there, so the page rests scrolled by what lies above the frame.
+ * leave free. The map runs on above and below the frame (styles.css); Safari paints under its top bar only what
+ * has scrolled there, so the page rests scrolled by what lies above the frame, also after iOS has scrolled it
+ * under a focused field. The keyboard resizes nothing: iOS takes it out of the visual viewport, and with it up
+ * Safari's viewport units count its bars as gone, so while a field is typed in the frame keeps its height and
+ * its bleed. The keyboard covers the frame's foot (--keyboard), which the body keeps clear as well: the map
+ * stays under Safari's top bar, and the sheet runs on under the keyboard's glass.
  */
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { PHONE_QUERY } from "../map/config.ts";
@@ -122,7 +124,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     };
     replace();
     current = settle;
-    // The rests move with the panel's size: the page laid out, the phone turned, Android's keyboard.
+    // The rests move with the panel's size: the page laid out, the phone turned.
     const resized = new ResizeObserver(replace);
     resized.observe(el);
 
@@ -210,8 +212,13 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       touch = null;
     };
 
+    /** How far the map runs on above and below the frame. */
+    const bleed = () => (map ? -parseFloat(getComputedStyle(map).top) : 0);
     const onFocus = (event: FocusEvent) => {
-      if (isTextField(event.target)) settle("full");
+      if (!isTextField(event.target)) return;
+      // The keyboard is on its way: the bleed keeps the px it has now.
+      frame?.style.setProperty("--bleed", `${bleed()}px`);
+      settle("full");
     };
     // After the field's own Enter, and a form's submit, have done their work.
     const onEnter = (event: KeyboardEvent) => {
@@ -221,15 +228,22 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
 
     // The frame on the visual viewport, wherever iOS has scrolled the page to; a field typed in stays in view over the keyboard.
     const viewport = window.visualViewport;
+    /** The frame's height: the visual viewport's with no keyboard over it. */
+    let height = 0;
     const onViewport = () => {
       if (!viewport || !frame || viewport.scale > 1.01) return;
-      // How far the map runs on above the frame: where the page rests, also after iOS has scrolled it under a focused field.
-      const runway = map ? -parseFloat(getComputedStyle(map).top) : 0;
+      const typed = isTextField(document.activeElement) ? document.activeElement : null;
+      // While a field is typed in, a visual viewport grown shorter has the keyboard over its foot: the frame keeps its height, and its bleed in px.
+      height = typed ? Math.max(height, viewport.height) : viewport.height;
+      if (!typed) frame.style.removeProperty("--bleed");
+      // Where the page rests, also after iOS has scrolled it under a focused field.
+      const runway = bleed();
       setAbove(runway);
       if (Math.abs(window.scrollY - runway) > 0.5) window.scrollTo(0, runway);
       frame.style.setProperty("--frame-top", `${viewport.pageTop}px`);
-      frame.style.setProperty("--frame-height", `${viewport.height}px`);
-      if (isTextField(document.activeElement) && body?.contains(document.activeElement)) document.activeElement.scrollIntoView({ block: "nearest" });
+      frame.style.setProperty("--frame-height", `${height}px`);
+      frame.style.setProperty("--keyboard", `${height - viewport.height}px`);
+      if (typed && body?.contains(typed)) typed.scrollIntoView({ block: "nearest" });
     };
     onViewport();
     el.addEventListener("pointerdown", onPointerDown);
@@ -247,7 +261,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       stop?.();
       current = null;
       el.style.transform = "";
-      for (const name of ["--frame-top", "--frame-height"]) frame?.style.removeProperty(name);
+      for (const name of ["--frame-top", "--frame-height", "--keyboard", "--bleed"]) frame?.style.removeProperty(name);
       map?.style.removeProperty("--sheet-top");
       setCovered(0);
       setAbove(0);

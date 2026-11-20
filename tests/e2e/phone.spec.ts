@@ -231,6 +231,78 @@ test("Under Safari's bars: the map runs on above and below the frame, the page r
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120);
 });
 
+test("The keyboard resizes nothing: the map stays above the frame and the sheet below it, the page at its rest, and a field typed in shows over the keyboard", async ({ page }) => {
+  // What iOS Safari gives the page: 120 px of screen under its bars, by its viewport units.
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.id = "bars";
+    style.textContent = "html .app { --bleed: 120px; }";
+    document.addEventListener("DOMContentLoaded", () => document.head.append(style));
+  });
+  /** iOS's keyboard, all but `left` px of the screen (233 on an iPhone at 320 × 693): a shorter visual viewport, and by Safari's units no bars. Gone again with `left` null. */
+  const keyboard = (left: number | null) =>
+    page.evaluate((left) => {
+      const viewport = window.visualViewport;
+      const bars = document.getElementById("bars");
+      if (!viewport || !bars) throw new Error("No visual viewport.");
+      bars.textContent = `html .app { --bleed: ${left === null ? 120 : 0}px; }`;
+      Object.defineProperty(viewport, "height", { configurable: true, get: () => left ?? window.innerHeight });
+      viewport.dispatchEvent(new Event("resize"));
+    }, left);
+  const laidOut = async () => ({
+    scrollY: await page.evaluate(() => window.scrollY),
+    frame: await page.locator(".app").boundingBox(),
+    map: await mapRegion(page).boundingBox(),
+    sheet: await page.locator(".panel").boundingBox(),
+  });
+
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120);
+  await page.getByRole("button", { name: "Raise the panel" }).tap();
+  await expect.poll(() => sheetTop(page)).toBeLessThan(0.1);
+  const idle = await laidOut();
+  const size = page.viewportSize() ?? { width: 0, height: 0 };
+  expect(idle.map).toMatchObject({ y: -120, height: size.height + 240 });
+  expect((idle.sheet?.y ?? 0) + (idle.sheet?.height ?? 0)).toBe(size.height + 120);
+
+  const search = page.getByRole("combobox", { name: "Search shops and cities" });
+  await search.tap();
+  await keyboard(233);
+  expect(await laidOut()).toEqual(idle);
+  // iOS scrolls the page under a focused field: it goes back to its rest.
+  await page.evaluate(() => window.scrollTo(0, 300));
+  await expect.poll(laidOut).toEqual(idle);
+
+  // The places found run on under the keyboard; the last of them scrolls into view over it.
+  await search.fill("Tor");
+  const found = page.locator(".panel-search .suggestions");
+  await expect(found.getByRole("option").first()).toBeVisible();
+  await found.evaluate((list) => list.scrollTo(0, list.scrollHeight));
+  const last = await found.getByRole("option").last().boundingBox();
+  expect((last?.y ?? 0) + (last?.height ?? 0)).toBeLessThanOrEqual(233);
+  await search.fill("");
+
+  // A row's field tapped where the keyboard covers it: iOS scrolls the page for it, and it comes into view in the sheet instead.
+  const destination = page.getByRole("combobox", { name: "Destination" });
+  const fieldFoot = async () => {
+    const field = await destination.boundingBox();
+    return (field?.y ?? 0) + (field?.height ?? 0);
+  };
+  expect(await fieldFoot()).toBeGreaterThan(233);
+  await destination.evaluate((field) => {
+    field.focus({ preventScroll: true });
+    window.scrollTo(0, 300);
+  });
+  await expect.poll(fieldFoot).toBeLessThanOrEqual(233);
+  await expect.poll(laidOut).toEqual(idle);
+
+  await destination.blur();
+  await keyboard(null);
+  expect(await laidOut()).toEqual(idle);
+  expect(await page.locator(".app").evaluate((frame) => [frame.style.getPropertyValue("--keyboard"), frame.style.getPropertyValue("--bleed")])).toEqual(["0px", ""]);
+});
+
 test("The map buttons ride on the sheet's top while it is dragged, not only once it rests", async ({ page }) => {
   await page.goto("/route");
   await expectMapCanvas(page);
