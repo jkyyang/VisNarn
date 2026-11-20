@@ -5,7 +5,7 @@
  *
  * Layer choices (Map / Satellite, Rail network, Real tracks, Auto / Day / Night, the carrier shown
  * alone) are view state owned here; this browser keeps the basemap and the time of day. The day or night look is set on the map section, and the whole
- * page takes it from there (web/styles.css).
+ * page takes it from there (web/styles.css), and the browser's bars with it.
  */
 import {
   createContext,
@@ -208,6 +208,10 @@ export function MapStage(props: { covered: Covered; found: Found | null; onClose
   const now = useNow(layers.light === "auto");
   const look = mapLook(layers.light, sunPosition(now, centre));
   const [starts, restart] = useRestart();
+  // The browser's bars round the page take the page's ground, which the look has just changed (web/styles.css).
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
+  }, [look.base]);
 
   return (
     <section className="map" aria-label="Map" data-picking={content?.onPick ? "true" : undefined} data-look={look.base} data-light={look.phase}>

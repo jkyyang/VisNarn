@@ -13,8 +13,18 @@ window.addEventListener("keydown", input("keys"), true);
 const root = document.getElementById("root");
 if (!root) throw new Error("index.html has no #root element.");
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+/**
+ * The page is drawn once its stylesheet applies. A browser may run this module first (Safari does, when the
+ * stylesheet comes later from the network): the map would then be made in an unstyled page, a small box that
+ * cannot frame the network, and open on the far corner of its bounds.
+ */
+const styled = () => getComputedStyle(document.documentElement).getPropertyValue("--accent") !== "";
+const app = createRoot(root);
+(function draw() {
+  if (!styled()) return void requestAnimationFrame(draw);
+  app.render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+})();

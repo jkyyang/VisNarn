@@ -159,3 +159,50 @@ test("Shops fits the width; a shop picked stays on show at half, and its Edit op
   await expect(form.getByRole("textbox", { name: "Name", exact: true })).not.toBeFocused();
   await expectNoSideScroll(page);
 });
+
+/** The lower 48 states' corners (Washington, Maine, Florida, California): on screen, above the sheet. */
+async function expectNetworkAboveSheet(page: Page): Promise<void> {
+  const size = page.viewportSize() ?? { width: 0, height: 0 };
+  await expect
+    .poll(async () => {
+      const top = (await sheetTop(page)) * size.height;
+      const corners = await Promise.all(([[-124, 48], [-67, 45], [-81, 25], [-117, 32.5]] as [number, number][]).map((corner) => mapPoint(page, corner)));
+      return corners.every(({ x, y }) => x > 0 && x < size.width && y > 0 && y < top);
+    })
+    .toBe(true);
+}
+
+test("The map opens on the whole network above the sheet, on a tall screen too", async ({ page }) => {
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  await expectNetworkAboveSheet(page);
+
+  // A phone's whole screen, as a home-screen app has it.
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.reload();
+  await expectMapCanvas(page);
+  await expectNetworkAboveSheet(page);
+});
+
+test("The sheet stays between full and its head: pulled past either, it still covers the screen's foot and its top is on screen", async ({ page }) => {
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  const edges = () =>
+    page.locator(".panel").evaluate((panel) => {
+      const { top, bottom } = panel.getBoundingClientRect();
+      return { top, gap: window.innerHeight - bottom };
+    });
+  const grabber = await page.locator(".sheet-grabber").boundingBox();
+  if (!grabber) throw new Error("The sheet has no grabber.");
+  const x = grabber.x + grabber.width / 2;
+  await page.mouse.move(x, grabber.y + grabber.height / 2);
+  await page.mouse.down();
+  // Held at the screen's top edge, far above where it rests full.
+  await page.mouse.move(x, 0, { steps: 12 });
+  const held = await edges();
+  expect(held.top).toBeGreaterThanOrEqual(0);
+  expect(held.gap).toBeLessThanOrEqual(0);
+  await page.mouse.up();
+  await expect(page.getByRole("button", { name: "Lower the panel" })).toBeVisible();
+  expect((await edges()).gap).toBeLessThanOrEqual(0);
+});

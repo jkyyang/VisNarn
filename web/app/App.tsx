@@ -61,7 +61,7 @@ export default function App(): ReactElement {
     <ErrorBoundary fallback={<p className="error page-error">Something went wrong on this page. Reload to start again.</p>}>
       <MapStageProvider network={network}>
         <div className="app">
-          <main className={`panel glass${folded ? " is-folded" : ""}`} ref={panel}>
+          <main className={`panel glass${folded ? " is-folded" : ""}`} ref={panel} data-rest={sheet.rest}>
             {/* On a phone: the sheet's grabber. A tap raises it full, or lowers it to half. */}
             <button
               type="button"

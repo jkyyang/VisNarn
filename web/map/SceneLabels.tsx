@@ -28,7 +28,7 @@ export function sceneLabels(scene: MapScene | null): FeatureCollection<Point, La
   };
 }
 
-/** The mockup's names: semibold, on a halo of the map's paper. A shop's sits beside its marker, an interchange's off its node, away from the line. */
+/** The mockup's names: semibold, on a thin halo of the map's paper. A shop's sits beside its marker, an interchange's off its node, away from the line. */
 const LOOK = {
   shop: { id: "shop-labels", size: 11.5, anchors: ["left", "right", "top", "bottom"], offsetEm: 1 },
   interchange: { id: "interchange-labels", size: 11, anchors: ["bottom-right", "top-left", "bottom-left", "top-right"], offsetEm: 0.7 },
@@ -51,7 +51,7 @@ function labelLayer(kind: Label["kind"], colors: ThemeColors): LayerProps {
       "text-max-width": 30,
       "symbol-sort-key": ["get", "rank"],
     },
-    paint: { "text-color": css(colors.fg), "text-halo-color": css(colors.casing), "text-halo-width": 1.5 },
+    paint: { "text-color": css(colors.fg), "text-halo-color": css(colors.casing), "text-halo-width": 1.2 },
   };
 }
 

@@ -28,8 +28,19 @@ export const LAYER = {
 const ROUND = { widthUnits: "pixels", capRounded: true, jointRounded: true } as const;
 const fade = ([r, g, b]: RGBA, alpha: number): RGBA => [r, g, b, alpha];
 
-const svgUrl = (width: number, height: number, body: string) =>
-  `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`)}`;
+type Icon = { url: string; width: number; height: number; anchorY: number };
+type IconBox = Omit<Icon, "url">;
+
+/** An icon's image has this many pixels per px of its box, so it stays sharp on a phone's screen. */
+const ICON_SCALE = 3;
+
+/** An SVG drawn in `box` as a deck.gl icon. */
+const svgIcon = ({ width, height, anchorY }: IconBox, body: string): Icon => ({
+  url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${width * ICON_SCALE}" height="${height * ICON_SCALE}" viewBox="0 0 ${width} ${height}">${body}</svg>`)}`,
+  width: width * ICON_SCALE,
+  height: height * ICON_SCALE,
+  anchorY: anchorY * ICON_SCALE,
+});
 
 /**
  * deck.gl redraws a layer's data whenever it is a new array. The big arrays derived from a scene are
@@ -42,15 +53,13 @@ function once<K extends object, V>(): (key: K, make: () => V) => V {
     return made.get(key)!;
   };
 }
-type Icon = { url: string; width: number; height: number; anchorY: number };
-
 /** Each pin's image box: width, height, and where the point it marks sits from the top. A marker is the mockup's 28 px square. */
 export const PIN_BOX = {
   start: { width: 28, height: 28, anchorY: 14 },
   destination: { width: 28, height: 28, anchorY: 14 },
   stop: { width: 22, height: 22, anchorY: 11 },
   shop: { width: 28, height: 28, anchorY: 14 },
-} satisfies Record<ScenePin["kind"], Omit<Icon, "url">>;
+} satisfies Record<ScenePin["kind"], IconBox>;
 
 /** A marker's look: a filled dot or a ring (a shop's company, or the start's dot and the destination's ring), or a stop's numbered ring. */
 type Face = { shape: "dot" | "ring" | "stop"; approximate: boolean; ringed: boolean };
@@ -64,7 +73,7 @@ function faceOf(pin: ScenePin, litRow: number | null): Face {
 
 /**
  * A pin as an image, in the theme's colours: an image cannot read CSS variables; deck.gl knows an image by its url, so
- * a new theme is a new image. A marker as the mockup draws it: a halo, the dashed ring, the dot or the ring on the
+ * a new theme is a new image. A marker as the mockup draws it: the dashed ring, the dot or the ring on the
  * map's paper, the accent ring with its dark outline.
  */
 function iconOf(face: Face, colors: ThemeColors): Icon {
@@ -73,18 +82,17 @@ function iconOf(face: Face, colors: ThemeColors): Icon {
     const disc = (stroke: string, width: number, fill = "none") => `<circle cx="11" cy="11" r="9" fill="${fill}" stroke="${stroke}" stroke-width="${width}"/>`;
     // Ringed: the accent ring with its dark outline in place of the ink ring.
     const body = face.ringed ? disc(onAccent, 4, paper) + disc(accent, 2) : disc(ink, 3, paper);
-    return { ...PIN_BOX.stop, url: svgUrl(22, 22, body) };
+    return svgIcon(PIN_BOX.stop, body);
   }
   const ring = (r: number, stroke: string, width: number, extra = "") => `<circle cx="14" cy="14" r="${r}" fill="none" stroke="${stroke}" stroke-width="${width}"${extra}/>`;
   const body = [
-    `<circle cx="14" cy="14" r="10" fill="${ink}" fill-opacity=".1"/>`,
     face.approximate ? ring(10, ink, 1, ` stroke-opacity=".75" stroke-dasharray="2 3"`) : "",
     face.shape === "dot"
       ? `<circle cx="14" cy="14" r="5" fill="${ink}" stroke="${paper}" stroke-width="2"/>`
       : `<circle cx="14" cy="14" r="6" fill="${paper}"/><circle cx="14" cy="14" r="4" fill="${paper}" stroke="${ink}" stroke-width="2.2"/>`,
     face.ringed ? ring(11, onAccent, 5) + ring(11, accent, 2.5) : "",
   ];
-  return { ...PIN_BOX.shop, url: svgUrl(28, 28, body.join("")) };
+  return svgIcon(PIN_BOX.shop, body.join(""));
 }
 
 const iconsOf = once<ThemeColors, Map<string, Icon>>();
@@ -96,14 +104,11 @@ function pinIcon(pin: ScenePin, colors: ThemeColors, litRow: number | null): Ico
   return made.get(key)!;
 }
 
-const chevronOf = once<ThemeColors, { url: string; width: number; height: number; anchorY: number }>();
+const chevronOf = once<ThemeColors, Icon>();
 const chevron = (colors: ThemeColors) =>
-  chevronOf(colors, () => ({
-    url: svgUrl(12, 12, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${css(colors.casing)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`),
-    width: 12,
-    height: 12,
-    anchorY: 6,
-  }));
+  chevronOf(colors, () =>
+    svgIcon({ width: 12, height: 12, anchorY: 6 }, `<path d="M4 2.5l4 3.5-4 3.5" fill="none" stroke="${css(colors.casing)}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`),
+  );
 
 /** Line widths in px: the selected route over its casing (the casing's whole width), the grey routes and a shop's links with the casing added. */
 const ROUTE_PX = { line: 3.4, casing: 7.5, alternative: 2.4, alternativeCasing: 2, link: 3, linkCasing: 2 };

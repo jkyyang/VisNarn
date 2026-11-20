@@ -37,7 +37,9 @@
   --on-accent: #12161d;
   --surface: rgba(255, 255, 255, 0.76);
   --surface-2: rgba(18, 22, 29, 0.055);
-  /* Opaque surface: a list that drops over other content, the phone's sheet. */
+  /* The phone's sheet: glass thick enough to read rows on, the map a soft blur behind them. */
+  --surface-thick: rgba(247, 248, 250, 0.9);
+  /* Opaque surface: a list that drops over other content. */
   --surface-solid: #f7f8fa;
   --stroke: rgba(18, 22, 29, 0.1);
   --text: #12161d;
@@ -78,6 +80,7 @@
 :root:has(.map[data-look="night"]) {
   --surface: rgba(16, 20, 28, 0.72);
   --surface-2: rgba(255, 255, 255, 0.07);
+  --surface-thick: rgba(22, 26, 34, 0.88);
   --surface-solid: #191e27;
   --stroke: rgba(255, 255, 255, 0.1);
   --text: #f3f5f8;
@@ -105,15 +108,13 @@
   --rr-passenger: #ff8ad0;
   color-scheme: dark;
 }
-/* A finger: bigger targets, and a phone's type sizes (body 17, secondary 15, footnote 13). Fields at 17 px: iOS zooms into one under 16. */
+/* A finger: 44 px targets, and type one step up (16, 14). Fields at 16 px: iOS zooms into one under 16. */
 @media (pointer: coarse) {
   :root {
     --ctl: 44px;
-    --row: 48px;
-    --text-sm: 13px;
-    --text-md: 15px;
-    --text-lg: 17px;
-    --text-display: 28px;
+    --row: 44px;
+    --text-md: 14px;
+    --text-lg: 16px;
   }
 }
 /* A phone held upright: the panel is a sheet, no map beside it. */
@@ -592,6 +593,8 @@ input[aria-invalid="true"] {
   isolation: isolate;
   overflow: hidden;
   background: var(--bg);
+  /* The credits' round button, which its popover opens beside. */
+  --credits-btn: calc(var(--ctl) - var(--space));
 }
 /* The panel: its header stays, its body scrolls inside it; it hugs what it holds, up to the window less a margin. */
 .panel {
@@ -1836,7 +1839,6 @@ input.saved-name {
 }
 /* The credits: a round "i" bottom right, its popover to the left. */
 .credits-btn {
-  --credits-btn: calc(var(--ctl) - var(--space));
   position: absolute;
   z-index: 6;
   right: var(--edge-right);
@@ -1859,7 +1861,7 @@ input.saved-name {
 .credits-card {
   position: absolute;
   z-index: 7;
-  right: calc(var(--edge-right) + var(--ctl) - var(--space) + 8px);
+  right: calc(var(--edge-right) + var(--credits-btn) + 8px);
   bottom: var(--edge-bottom);
   max-width: min(400px, calc(100% - 76px));
   padding: 9px 12px;
@@ -2200,17 +2202,15 @@ input.saved-name {
 
 /* ---- Phone held upright: the map fills the screen, the panel is a sheet over its foot (web/app/sheet.ts) ---- */
 @media (max-width: 640px) {
+  /* The frame is the screen the browser's bars leave free, whatever they do: every rest of the sheet is measured from it. */
   .app {
     position: fixed;
-    inset: 0;
-    height: auto;
+    inset: 0 0 auto;
+    height: 100dvh;
   }
-  /* Where it rests full: just under the status bar; sheet.ts moves it down to its other rests. Opaque: as large as it is,
-     a frosted sheet would show the map through its rows, and blur the whole screen on every frame it moves. */
+  /* Where it rests full: just under the status bar, down to the frame's foot; sheet.ts moves it down to its other rests. */
   .panel {
-    background: var(--surface-solid);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
+    --surface: var(--surface-thick);
     top: calc(env(safe-area-inset-top) + 2 * var(--space));
     right: 0;
     bottom: 0;
@@ -2224,11 +2224,13 @@ input.saved-name {
     border-radius: var(--radius-panel) var(--radius-panel) 0 0;
     will-change: transform;
   }
-  /* The grabber: a strip along the sheet's top, its bar in the middle. */
+  /* The grabber: a strip along the sheet's top, its bar in the middle; over the head's top edge, which it overlaps. */
   .sheet-grabber {
+    position: relative;
+    z-index: 1;
     display: block;
     flex: none;
-    height: 20px;
+    height: 16px;
     margin-bottom: calc(-2 * var(--space));
     padding: 0;
     border: 0;
@@ -2240,7 +2242,7 @@ input.saved-name {
     display: block;
     width: 36px;
     height: 5px;
-    margin: 7px auto 0;
+    margin: 6px auto 0;
     border-radius: var(--radius-pill);
     background: var(--text-3);
   }
@@ -2254,6 +2256,29 @@ input.saved-name {
   .panel-head input {
     -webkit-user-select: text;
     user-select: text;
+  }
+  /* A compact head: the search and the tabs lower than a finger's 44 px, the tabs' targets still that tall. */
+  .search-field {
+    height: calc(var(--ctl) - var(--space));
+  }
+  .panel-head .segmented {
+    height: calc(var(--ctl) - 2 * var(--space));
+  }
+  .panel-head .segmented > * {
+    font-size: var(--text-md);
+  }
+  .panel-head .segmented > ::after {
+    content: "";
+    position: absolute;
+    inset: calc(-1 * var(--space)) 0;
+  }
+  /* The Route tab already says Route: the bar keeps its actions only. */
+  .route-panel > .list-bar {
+    min-height: var(--icon-btn);
+    margin-top: calc(-1 * var(--space));
+  }
+  .route-panel .list-count {
+    font-size: 0;
   }
   /* The places found are the sheet's own list, full width down to the keyboard: no card on a card. */
   .panel-search .suggestions {
@@ -2275,7 +2300,39 @@ input.saved-name {
   .map-controls,
   .credits-btn,
   .credits-card {
-    bottom: calc(var(--sheet-covered, 0px) + var(--inset));
+    bottom: calc(var(--sheet-covered, 0px) + 2 * var(--space));
+  }
+  /* The map buttons: one glass stack, a hairline between them; gone with the map under the full sheet. */
+  .map-controls {
+    gap: 0;
+  }
+  .panel[data-rest="full"] ~ .map .map-controls {
+    visibility: hidden;
+  }
+  .map-controls > .map-btn {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .map-controls > .map-btn:not(:first-child) {
+    border-top-width: 0;
+  }
+  .map-controls > .map-btn:first-child {
+    border-radius: var(--radius-ctl) var(--radius-ctl) 0 0;
+  }
+  .map-controls > .map-btn:last-child {
+    border-radius: 0 0 var(--radius-ctl) var(--radius-ctl);
+  }
+  /* Rows to read over the map. */
+  .layers-card {
+    --surface: var(--surface-thick);
+  }
+  /* The credits: a small quiet mark in the corner, its target still a finger's. */
+  .map {
+    --credits-btn: calc(var(--ctl) - 4 * var(--space));
+  }
+  .credits-btn {
+    color: var(--text-2);
+    box-shadow: none;
   }
   /* The sheet lowers to its head in place of a fold. */
   .panel.is-folded {

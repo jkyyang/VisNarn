@@ -1,6 +1,6 @@
 /**
- * What every drag in the panel shares (a reordered row, the phone's sheet): the rubber band past an end,
- * the speed a finger lets go at, where that momentum carries, and the spring that settles it there.
+ * What the drags in the panel share (a reordered row, the phone's sheet): the speed a finger lets go at, where
+ * that momentum carries, and the spring that settles it there; for a row, the rubber band past an end.
  */
 
 /** How far momentum carries a release: Apple's deceleration rate, the snappier one. */
