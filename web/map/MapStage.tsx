@@ -164,6 +164,20 @@ function useNow(running: boolean): number {
 
 const nothing = () => null;
 
+const DARK_PHONE = "(prefers-color-scheme: dark) and (pointer: coarse)";
+
+/** Whether this is a phone or a tablet in Dark Mode. */
+function useDarkPhone(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      const query = window.matchMedia?.(DARK_PHONE);
+      query?.addEventListener("change", onChange);
+      return () => query?.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia?.(DARK_PHONE).matches ?? false,
+  );
+}
+
 /** A map started again after its WebGL context was lost waits this long since the last start, so a phone short of memory is not caught in a loop. */
 const RESTART_GAP_MS = 10_000;
 
@@ -209,10 +223,13 @@ export function MapStage(props: { covered: Covered; found: Found | null; onClose
   const now = useNow(layers.light === "auto");
   const look = mapLook(layers.light, sunPosition(now, centre));
   const [starts, restart] = useRestart();
-  // The browser's bars round the page take the page's ground, which the look has just changed (web/styles.css).
-  useEffect(() => {
+  // The chrome wears the map's look; on a phone in Dark Mode, night also over a day map (web/styles.css). The browser's bars take the page's ground with it.
+  const darkPhone = useDarkPhone();
+  const chrome = darkPhone ? "night" : look.base;
+  useLayoutEffect(() => {
+    document.documentElement.dataset.chrome = chrome;
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", getComputedStyle(document.body).backgroundColor);
-  }, [look.base]);
+  }, [chrome]);
 
   return (
     <section className="map" aria-label="Map" data-picking={content?.onPick ? "true" : undefined} data-look={look.base} data-light={look.phase}>

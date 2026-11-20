@@ -221,14 +221,13 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     const map = frame?.querySelector(":scope > .map");
     const onViewport = () => {
       if (!viewport || !frame || viewport.scale > 1.01) return;
-      // How far the map runs on above the frame: where the page rests. While a field is typed in, iOS scrolls it as it likes.
+      // How far the map runs on above the frame: where the page rests, also after iOS has scrolled it under a focused field.
       const runway = map ? -parseFloat(getComputedStyle(map).top) : 0;
       setAbove(runway);
-      const typing = isTextField(document.activeElement);
-      if (!typing && Math.abs(window.scrollY - runway) > 0.5) window.scrollTo(0, runway);
+      if (Math.abs(window.scrollY - runway) > 0.5) window.scrollTo(0, runway);
       frame.style.setProperty("--frame-top", `${viewport.pageTop}px`);
       frame.style.setProperty("--frame-height", `${viewport.height}px`);
-      if (typing && body?.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
+      if (isTextField(document.activeElement) && body?.contains(document.activeElement)) document.activeElement.scrollIntoView({ block: "nearest" });
     };
     onViewport();
     el.addEventListener("pointerdown", onPointerDown);

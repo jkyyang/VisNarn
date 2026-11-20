@@ -1,4 +1,8 @@
-/* Shop Arrival Check: a quiet map, and glass chrome floating over it. Every colour, radius, shadow and timing below is a token; Day and Night swap the values only. */
+/*
+ * Shop Arrival Check: a quiet map, and glass chrome floating over it. Every colour, radius, shadow and timing below is a token; Day and Night swap the values only.
+ * The day values are also what the map's own marks are drawn in on a day map, whatever the chrome wears (.map-ink, read by web/theme.ts).
+ */
+.map[data-look="day"] .map-ink,
 :root {
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --text-sm: 12px;
@@ -79,11 +83,16 @@
   /* "only": a browser that darkens light pages for a dark phone leaves this one as it is. */
   color-scheme: only light;
 }
-/* The whole page takes the map's look (web/map/daylight.ts), so the panel and the cards match the map under them. */
+/*
+ * The whole page takes the map's look (web/map/daylight.ts), so the panel and the cards match the map under them. On a
+ * phone in Dark Mode the chrome is dark by day too (web/map/MapStage.tsx): Safari darkens a light page there by itself,
+ * into greys of its own. The marks drawn on the day map keep the day colours (the block after this one).
+ */
+html[data-chrome="night"],
 :root:has(.map[data-look="night"]) {
   --surface: rgba(16, 20, 28, 0.72);
   --surface-2: rgba(255, 255, 255, 0.07);
-  --surface-thick: rgba(22, 26, 34, 0.66);
+  --surface-thick: rgba(22, 26, 34, 0.74);
   --surface-solid: #191e27;
   --stroke: rgba(255, 255, 255, 0.1);
   --text: #f3f5f8;
@@ -2313,8 +2322,22 @@ input.saved-name {
     max-height: max(160px, calc(var(--frame-height, 100dvh) - 120px));
     padding: 0 calc(2 * var(--space));
     border-radius: 0;
+    background: none;
     box-shadow: none;
     touch-action: pan-y;
+  }
+  /* Searching: the sheet shows the search and what it finds, nothing behind them. */
+  .panel:has(.panel-search .suggestions) :is(.panel-head .segmented, .panel-body) {
+    visibility: hidden;
+  }
+  /* A place typed in: its card only, the places it finds under its row. */
+  .route-panel:has(.place-row .suggestions) > :not(.plan),
+  .route-panel:has(.place-row .suggestions) .plan > :not(.place-group) {
+    display: none;
+  }
+  .place-row .suggestions {
+    background: none;
+    box-shadow: none;
   }
   /* Every row can scroll into view, above the frame's foot; one brought into view stops there. */
   .panel-body {

@@ -164,8 +164,8 @@ function Controls(props: { canvas: MapCanvasProps; onPreview: (carrier: Railroad
 
 export default function MapCanvas(props: MapCanvasProps): ReactElement {
   const { network, content, layers, look } = props;
-  const root = useRef<HTMLDivElement>(null);
-  const colors = useThemeColors(root, look.base);
+  const ink = useRef<HTMLElement>(null);
+  const colors = useThemeColors(ink, look.base);
   const [zoom, setZoom] = useState(3);
   const { found } = props;
   const [preview, setPreview] = useState<Railroad | null>(null);
@@ -214,11 +214,12 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
   return (
     <div
       className="map-canvas"
-      ref={root}
       data-network={networkShown ? "shown" : "hidden"}
       data-network-classes={networkClasses.filter((c) => network?.[c].length).join(" ")}
       data-carrier={carrier ?? undefined}
     >
+      {/* Where the marks' colours are read: the map's own look, by day also under a dark chrome (styles.css). */}
+      <i className="map-ink" ref={ink} hidden />
       <MapGL
         initialViewState={networkView(props.covered)}
         maxBounds={PAN_BOUNDS}
