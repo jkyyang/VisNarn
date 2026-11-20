@@ -24,7 +24,7 @@ async function openMap(now: Date) {
   vi.setSystemTime(now);
   render(
     <MapStageProvider network={null}>
-      <MapStage covered={{ left: 0, bottom: 0 }} found={null} onCloseFound={() => {}} />
+      <MapStage covered={{ left: 0, bottom: 0, top: 0 }} found={null} onCloseFound={() => {}} />
     </MapStageProvider>,
   );
   const layersButton = await screen.findByRole("button", { name: /^Map layers/ });

@@ -95,7 +95,7 @@ export default function App(): ReactElement {
             </button>
           )}
           <WhyTip />
-          <MapStage covered={{ left: coveredLeft, bottom: sheet.covered }} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
+          <MapStage covered={{ left: coveredLeft, bottom: sheet.covered, top: sheet.above }} found={chosen && found?.ok && !asShop ? { suggestion: chosen, place: found.place, fly } : null} onCloseFound={() => setChosen(null)} />
         </div>
       </MapStageProvider>
     </ErrorBoundary>

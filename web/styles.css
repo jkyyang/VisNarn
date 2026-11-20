@@ -76,7 +76,8 @@
   --rr-regional: #4a5560;
   --rr-short-line: #849490;
   --rr-passenger: #d13aa8;
-  color-scheme: light;
+  /* "only": a browser that darkens light pages for a dark phone leaves this one as it is. */
+  color-scheme: only light;
 }
 /* The whole page takes the map's look (web/map/daylight.ts), so the panel and the cards match the map under them. */
 :root:has(.map[data-look="night"]) {
@@ -108,7 +109,7 @@
   --rr-regional: #e6e8ee;
   --rr-short-line: #8f99a6;
   --rr-passenger: #ff8ad0;
-  color-scheme: dark;
+  color-scheme: only dark;
 }
 /* A finger: 44 px targets, and type one step up (16, 14). Fields at 16 px: iOS zooms into one under 16. */
 @media (pointer: coarse) {
@@ -2208,17 +2209,28 @@ input.saved-name {
    * The frame is the screen the browser's bars and the keyboard leave free: sheet.ts keeps it on the visual viewport, which
    * iOS moves and shrinks without laying the page out again. Every rest of the sheet is measured from it. It is laid out
    * with the page, never fixed: Safari paints its own solid band over the bars' ground when a fixed thing borders them.
-   * The map and the sheet run on below it (--bleed), so they show through the glass of Safari's bottom bar.
+   * The map runs on above and below it, and the sheet below it (--bleed: as far as Safari's bars take of the screen), so
+   * they show through the bars' glass; sheet.ts rests the page scrolled by that much, for the part above.
    */
   .app {
     position: absolute;
     inset: var(--frame-top, 0px) 0 auto;
     height: var(--frame-height, 100dvh);
     overflow: visible;
-    --bleed: 128px;
+    --bleed: 0px;
+  }
+  /* iOS only. */
+  @supports (-webkit-touch-callout: none) {
+    .app {
+      --bleed: calc(100lvh - 100dvh);
+    }
   }
   .map {
+    top: calc(-1 * var(--bleed));
     bottom: calc(-1 * var(--bleed));
+  }
+  .map-controls {
+    top: calc(var(--edge-top) + var(--bleed));
   }
   /* Where it rests full: just under the status bar; sheet.ts moves it down to its other rests. */
   .panel {

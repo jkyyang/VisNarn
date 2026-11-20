@@ -15,7 +15,8 @@
  * It also keeps the frame on the visual viewport (--frame-top, --frame-height): the screen the browser's bars
  * and the keyboard leave free. iOS shrinks that for the keyboard and scrolls the page under a focused field
  * without laying the page out again; the frame follows, so the sheet's top stays on screen and its body ends
- * at the keyboard.
+ * at the keyboard. The map runs on above and below the frame (styles.css); Safari paints under its top bar
+ * only what has scrolled there, so the page rests scrolled by what lies above the frame.
  */
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { PHONE_QUERY } from "../map/config.ts";
@@ -59,10 +60,11 @@ function usePhone(): boolean {
 }
 
 /** The sheet's rest, and the px of the map it covers there; on a phone held upright (elsewhere 0). */
-export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; covered: number } {
+export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; covered: number; above: number } {
   const on = usePhone();
   const [rest, setRest] = useState<Rest>("half");
   const [covered, setCovered] = useState(0);
+  const [above, setAbove] = useState(0);
   const restRef = useRef(rest);
 
   useLayoutEffect(() => {
@@ -216,18 +218,19 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     // The frame on the visual viewport, wherever iOS has scrolled the page to; a field typed in stays in view over the keyboard.
     const viewport = window.visualViewport;
     const frame = el.parentElement;
+    const map = frame?.querySelector(":scope > .map");
     const onViewport = () => {
       if (!viewport || !frame || viewport.scale > 1.01) return;
+      // How far the map runs on above the frame: where the page rests. While a field is typed in, iOS scrolls it as it likes.
+      const runway = map ? -parseFloat(getComputedStyle(map).top) : 0;
+      setAbove(runway);
+      const typing = isTextField(document.activeElement);
+      if (!typing && Math.abs(window.scrollY - runway) > 0.5) window.scrollTo(0, runway);
       frame.style.setProperty("--frame-top", `${viewport.pageTop}px`);
       frame.style.setProperty("--frame-height", `${viewport.height}px`);
-      if (body?.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
+      if (typing && body?.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
     };
     onViewport();
-    // What runs on below the frame makes the page itself scrollable, by a row brought into view or by iOS under a focused field: it stays where it is, and only the body scrolls.
-    const onPageScroll = () => {
-      if (window.scrollY) window.scrollTo(0, 0);
-    };
-
     el.addEventListener("pointerdown", onPointerDown);
     body?.addEventListener("touchstart", onTouchStart, { passive: true });
     body?.addEventListener("touchmove", onTouchMove, { passive: false });
@@ -237,13 +240,15 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     window.addEventListener("keydown", onEnter);
     viewport?.addEventListener("resize", onViewport);
     viewport?.addEventListener("scroll", onViewport);
-    window.addEventListener("scroll", onPageScroll);
+    // A row brought into view can scroll the page too: it goes back to its rest.
+    window.addEventListener("scroll", onViewport);
     return () => {
       stop?.();
       current = null;
       el.style.transform = "";
       for (const name of ["--sheet-covered", "--frame-top", "--frame-height"]) frame?.style.removeProperty(name);
       setCovered(0);
+      setAbove(0);
       el.removeEventListener("pointerdown", onPointerDown);
       body?.removeEventListener("touchstart", onTouchStart);
       body?.removeEventListener("touchmove", onTouchMove);
@@ -254,9 +259,9 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       resized.disconnect();
       viewport?.removeEventListener("resize", onViewport);
       viewport?.removeEventListener("scroll", onViewport);
-      window.removeEventListener("scroll", onPageScroll);
+      window.removeEventListener("scroll", onViewport);
     };
   }, [panel, on]);
 
-  return { rest, covered };
+  return { rest, covered, above };
 }

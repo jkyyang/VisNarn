@@ -168,8 +168,10 @@ async function expectNetworkAboveSheet(page: Page): Promise<void> {
   await expect
     .poll(async () => {
       const top = (await sheetTop(page)) * size.height;
+      // The map may begin above the screen, under the browser's top bar.
+      const above = (await mapRegion(page).boundingBox())?.y ?? 0;
       const corners = await Promise.all(([[-124, 48], [-67, 45], [-81, 25], [-117, 32.5]] as [number, number][]).map((corner) => mapPoint(page, corner)));
-      return corners.every(({ x, y }) => x > 0 && x < size.width && y > 0 && y < top);
+      return corners.every(({ x, y }) => x > 0 && x < size.width && y + above > 0 && y + above < top);
     })
     .toBe(true);
 }
@@ -207,4 +209,24 @@ test("The sheet stays between full and its head: pulled past either, it still co
   await page.mouse.up();
   await expect(page.getByRole("button", { name: "Lower the panel" })).toBeVisible();
   expect((await edges()).gap).toBeLessThanOrEqual(0);
+});
+
+test("Under Safari's bars: the map runs on above and below the frame, the page rests scrolled by that much, and the frame, the map buttons and the network stay on screen", async ({ page }) => {
+  // What iOS Safari gives the page: 120 px of screen under its bars.
+  await page.addInitScript(() => {
+    const style = document.createElement("style");
+    style.textContent = ".app { --bleed: 120px !important; }";
+    document.addEventListener("DOMContentLoaded", () => document.head.append(style));
+  });
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  const size = page.viewportSize() ?? { width: 0, height: 0 };
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120);
+  await expect.poll(async () => (await page.locator(".app").boundingBox())?.y).toBe(0);
+  expect(await mapRegion(page).boundingBox()).toMatchObject({ y: -120, height: size.height + 240 });
+  await expect(page.getByRole("button", { name: /^Map layers/ })).toBeInViewport({ ratio: 1 });
+  await expectNetworkAboveSheet(page);
+  // A row brought into view scrolls the sheet's body only: the page goes back to its rest.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120);
 });

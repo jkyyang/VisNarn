@@ -75,7 +75,7 @@ const networkView = (covered: Covered) => ({
     [NETWORK_BOUNDS[2], NETWORK_BOUNDS[3]],
   ] as [[number, number], [number, number]],
   fitBoundsOptions: {
-    padding: { top: INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: covered.bottom + INITIAL_PADDING_PX, left: covered.left + CAMERA_MARGIN_PX },
+    padding: { top: covered.top + INITIAL_PADDING_PX, right: INITIAL_PADDING_PX, bottom: covered.bottom + INITIAL_PADDING_PX, left: covered.left + CAMERA_MARGIN_PX },
   },
 });
 
@@ -97,7 +97,7 @@ function FlyTo({ focus, covered }: { focus: MapFocus | undefined; covered: Cover
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
     // `essential`: the duration already follows reduced motion, and MapLibre's own fallback for it would drop the offset.
-    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [covered.left / 2, -covered.bottom / 2], duration: still() ? 0 : FLY_MS, essential: true });
+    map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [covered.left / 2, (covered.top - covered.bottom) / 2], duration: still() ? 0 : FLY_MS, essential: true });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
   }, [map, key]);
   return null;

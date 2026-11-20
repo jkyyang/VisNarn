@@ -9,7 +9,7 @@ function fitOptions(mapWidth: number, covered: Covered) {
   const { top, bottom, sideShare, sideMin, sideMax, buttons } = FIT_PADDING;
   const left = covered.left + CAMERA_MARGIN_PX;
   const side = Math.round(Math.min(sideMax, Math.max(sideMin, (mapWidth - left) * sideShare)));
-  return { padding: { top, bottom: covered.bottom + bottom, left, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
+  return { padding: { top: covered.top + top, bottom: covered.bottom + bottom, left, right: Math.max(side, buttons) }, maxZoom: FIT_MAX_ZOOM };
 }
 
 /** A fit puts the route's box on the edge of its room: this much past it still counts as inside. */

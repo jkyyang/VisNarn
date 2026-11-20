@@ -36,10 +36,11 @@ import type { MapLayerChoice } from "./MapCanvas.tsx";
 import type { MapHandle } from "./MapHandles.tsx";
 import type { MapScene, SceneTarget } from "./scene.ts";
 
-/** The px of the map under the panel: at its left beside a floating panel, at its foot under a phone's sheet. */
+/** The px of the map out of sight: at its left under a floating panel, at its foot under a phone's sheet, at its top under the browser's bar. */
 export interface Covered {
   left: number;
   bottom: number;
+  top: number;
 }
 
 /** Where the camera should be. "fit": the scene's bounds. "place": zoomed in on one place. */
