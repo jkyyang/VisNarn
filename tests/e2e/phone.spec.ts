@@ -25,7 +25,9 @@ test("The map fills the screen; the sheet rests at half and drags to full and to
   await expectMapCanvas(page);
   const map = await mapRegion(page).boundingBox();
   const size = page.viewportSize();
-  expect(map).toMatchObject({ x: 0, y: 0, width: size?.width, height: size?.height });
+  // From the screen's top, and on below its foot: under the glass of Safari's bottom bar.
+  expect(map).toMatchObject({ x: 0, y: 0, width: size?.width });
+  expect(map?.height).toBeGreaterThanOrEqual(size?.height ?? Infinity);
   await expect.poll(() => sheetTop(page)).toBeCloseTo(0.58, 1);
 
   await dragSheet(page, 0.1);

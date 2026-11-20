@@ -6,12 +6,16 @@
  * is on screen. On release it settles on a spring at the rest its momentum points to; only `transform`
  * changes while it moves.
  *
- * It writes on the panel its transform, --sheet-hidden (how much of it is below the screen, which the body
- * keeps clear so every row can scroll into view) and --keyboard (the on-screen keyboard's height); lowered, its
- * body starts at its first rows again; on the
+ * It writes on the panel its transform and --sheet-hidden (how much of it is below the frame, which the body
+ * keeps clear so every row can scroll into view); lowered, its body starts at its first rows again; on the
  * frame, --sheet-covered (how much of the map it covers) once it rests; the camera is told at once where it
- * goes to rest, so a flight started with it frames clear of it. A text field focused raises it full, above the
- * keyboard; lowered, it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
+ * goes to rest, so a flight started with it frames clear of it. A text field focused raises it full; lowered,
+ * it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
+ *
+ * It also keeps the frame on the visual viewport (--frame-top, --frame-height): the screen the browser's bars
+ * and the keyboard leave free. iOS shrinks that for the keyboard and scrolls the page under a focused field
+ * without laying the page out again; the frame follows, so the sheet's top stays on screen and its body ends
+ * at the keyboard.
  */
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from "react";
 import { PHONE_QUERY } from "../map/config.ts";
@@ -33,11 +37,11 @@ export const showSheet = (rest: Rest): void => current?.(rest);
 /** Where the sheet's top sits at each rest, in px below where it sits full. */
 function offsets(panel: HTMLElement): Record<Rest, number> {
   const head = panel.querySelector<HTMLElement>(".panel-head");
-  const height = panel.offsetHeight;
+  // Its foot, and what runs on below the frame, lie under the head at rest.
   const shown = (head ? head.offsetTop + head.offsetHeight : 0) + parseFloat(getComputedStyle(panel).paddingBottom);
-  const headRest = Math.max(0, height - shown);
+  const headRest = Math.max(0, panel.offsetHeight - shown);
   const screen = panel.parentElement?.clientHeight ?? window.innerHeight;
-  return { full: 0, half: Math.min(headRest, Math.round(height - screen * HALF_SHARE)), head: headRest };
+  return { full: 0, half: Math.max(0, Math.min(headRest, Math.round(screen * (1 - HALF_SHARE)) - panel.offsetTop)), head: headRest };
 }
 
 const isTextField = (target: EventTarget | null): target is HTMLInputElement => target instanceof HTMLInputElement && /^(text|search)$/.test(target.type);
@@ -74,7 +78,8 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       y = Math.min(lowest, Math.max(0, to));
       el.style.transform = `translate3d(0, ${y}px, 0)`;
     };
-    const coveredAt = (to: number) => (el.parentElement?.clientHeight ?? 0) - el.offsetTop - to;
+    // The sheet and the map end together, below the frame.
+    const coveredAt = (to: number) => el.offsetHeight - to;
     const rested = (to: number) => {
       el.style.setProperty("--sheet-hidden", `${to}px`);
       el.parentElement?.style.setProperty("--sheet-covered", `${coveredAt(to)}px`);
@@ -208,13 +213,19 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       if (event.key === "Enter" && isTextField(field) && el.contains(field)) setTimeout(() => field.blur());
     };
 
-    // The keyboard covers the screen's foot without resizing the page (iOS): the body keeps clear what it covers of the frame.
+    // The frame on the visual viewport, wherever iOS has scrolled the page to; a field typed in stays in view over the keyboard.
     const viewport = window.visualViewport;
+    const frame = el.parentElement;
     const onViewport = () => {
-      const frame = el.parentElement;
       if (!viewport || !frame || viewport.scale > 1.01) return;
-      el.style.setProperty("--keyboard", `${Math.max(0, Math.round(frame.getBoundingClientRect().bottom - viewport.offsetTop - viewport.height))}px`);
+      frame.style.setProperty("--frame-top", `${viewport.pageTop}px`);
+      frame.style.setProperty("--frame-height", `${viewport.height}px`);
       if (body?.contains(document.activeElement)) document.activeElement?.scrollIntoView({ block: "nearest" });
+    };
+    onViewport();
+    // What runs on below the frame makes the page itself scrollable, by a row brought into view or by iOS under a focused field: it stays where it is, and only the body scrolls.
+    const onPageScroll = () => {
+      if (window.scrollY) window.scrollTo(0, 0);
     };
 
     el.addEventListener("pointerdown", onPointerDown);
@@ -225,11 +236,13 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     el.addEventListener("focusin", onFocus);
     window.addEventListener("keydown", onEnter);
     viewport?.addEventListener("resize", onViewport);
+    viewport?.addEventListener("scroll", onViewport);
+    window.addEventListener("scroll", onPageScroll);
     return () => {
       stop?.();
       current = null;
       el.style.transform = "";
-      el.parentElement?.style.removeProperty("--sheet-covered");
+      for (const name of ["--sheet-covered", "--frame-top", "--frame-height"]) frame?.style.removeProperty(name);
       setCovered(0);
       el.removeEventListener("pointerdown", onPointerDown);
       body?.removeEventListener("touchstart", onTouchStart);
@@ -240,6 +253,8 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       window.removeEventListener("keydown", onEnter);
       resized.disconnect();
       viewport?.removeEventListener("resize", onViewport);
+      viewport?.removeEventListener("scroll", onViewport);
+      window.removeEventListener("scroll", onPageScroll);
     };
   }, [panel, on]);
 
