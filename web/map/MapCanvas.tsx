@@ -121,6 +121,16 @@ function FreeSpareTextures() {
   return null;
 }
 
+/** Two fingers and the keyboard zoom the map and never turn it, from the moment the map exists: a twist while it still loads included. Renders nothing; must be a child of the map. */
+function NorthUp() {
+  const map = useMap().current?.getMap();
+  useEffect(() => {
+    map?.touchZoomRotate.disableRotation();
+    map?.keyboard.disableRotation();
+  }, [map]);
+  return null;
+}
+
 /** Tells the stage when the map's WebGL context is lost, from the moment the map exists. Renders nothing; must be a child of the map. */
 function ContextLost({ onLost }: { onLost: () => void }) {
   const map = useMap().current?.getMap();
@@ -226,8 +236,6 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         onDragStart={() => (dragging.current = true)}
         onDragEnd={() => (dragging.current = false)}
         onLoad={(event) => {
-          event.target.touchZoomRotate.disableRotation();
-          event.target.keyboard.disableRotation();
           setZoom(halfZoom(event.target.getZoom()));
           watchCamera(event.target);
         }}
@@ -259,6 +267,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {/* `zoom` changes only when a move ends, so the style never changes in the middle of a zoom. */}
         <BasemapStyle style={style} />
         <FreeSpareTextures />
+        <NorthUp />
         <ContextLost onLost={props.onContextLost} />
         <NightLights mode={layers.light === "day" ? "off" : layers.light} now={props.now} satellite={layers.basemap === "satellite"} />
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
