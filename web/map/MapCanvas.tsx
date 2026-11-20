@@ -90,12 +90,17 @@ const halfZoom = (zoom: number) => Math.floor(zoom * 2) / 2;
 /** Web-mercator ground distance covered by one screen pixel (MapLibre zoom levels use 512 px tiles). */
 const kmPerPixel = (lat: number, zoom: number) => (40075 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
 
-/** Flies to one place when the screen asks for it, into the middle of the map the panel leaves free. Renders nothing; must be a child of the map. */
-function FlyTo({ focus, covered }: { focus: MapFocus | undefined; covered: Covered }) {
+/**
+ * Flies to one place when the screen asks for it, into the middle of the map the panel leaves free. `onAim` hears the zoom it
+ * flies to as it leaves, so the map wears that zoom's look for the whole flight: at night, no day streets on the way in.
+ * Renders nothing; must be a child of the map.
+ */
+function FlyTo({ focus, covered, onAim }: { focus: MapFocus | undefined; covered: Covered; onAim: (zoom: number) => void }) {
   const map = useMap().current;
   const key = focus?.kind === "place" ? `${focus.lon},${focus.lat},${focus.zoom}` : null;
   useEffect(() => {
     if (!map || focus?.kind !== "place") return;
+    onAim(focus.zoom);
     // `essential`: the duration already follows reduced motion, and MapLibre's own fallback for it would drop the offset.
     map.flyTo({ center: [focus.lon, focus.lat], zoom: focus.zoom, offset: [covered.left / 2, (covered.top - covered.bottom) / 2], duration: still() ? 0 : FLY_MS, essential: true });
     // Keyed on the numbers: a re-render with the same place must not pull the camera back.
@@ -202,6 +207,7 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
     const { lng, lat } = map.getCenter();
     props.onCentre([lng, lat]);
   };
+  const aim = (to: number) => setZoom(halfZoom(to));
   const onMoveEnd = (event: ViewStateChangeEvent) => {
     setZoom(halfZoom(event.viewState.zoom));
     watchCamera(event.target);
@@ -274,9 +280,9 @@ export default function MapCanvas(props: MapCanvasProps): ReactElement {
         {layers.tracks && <RealTracks dark={darkStreets || layers.basemap === "satellite"} onStreets={layers.basemap === "map"} />}
         <SceneLabels scene={scene} colors={colors} />
         {content?.focus.kind !== "place" && <FitBounds bounds={scene?.bounds ?? null} covered={props.covered} />}
-        <FlyTo focus={content?.focus} covered={props.covered} />
-        <FlyTo focus={content?.flyTo} covered={props.covered} />
-        <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} covered={props.covered} />
+        <FlyTo focus={content?.focus} covered={props.covered} onAim={aim} />
+        <FlyTo focus={content?.flyTo} covered={props.covered} onAim={aim} />
+        <FlyTo focus={found?.fly ? { kind: "place", lon: found.place.lon, lat: found.place.lat, zoom: FOUND_ZOOM } : undefined} covered={props.covered} onAim={aim} />
         <Controls canvas={props} onPreview={setPreview} />
         <Credits />
         {scene?.kind === "route" && <RouteMarks scene={scene} onSelect={(target) => latest.current?.onSelect?.(target)} />}

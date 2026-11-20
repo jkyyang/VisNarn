@@ -230,3 +230,24 @@ test("Under Safari's bars: the map runs on above and below the frame, the page r
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(120);
 });
+
+test("The map buttons ride on the sheet's top while it is dragged, not only once it rests", async ({ page }) => {
+  await page.goto("/route");
+  await expectMapCanvas(page);
+  const gap = async () => {
+    const stack = await page.locator(".map-controls").boundingBox();
+    const sheet = await page.locator(".panel").boundingBox();
+    return (sheet?.y ?? 0) - ((stack?.y ?? 0) + (stack?.height ?? 0));
+  };
+  const atRest = await gap();
+  const grabber = await page.locator(".sheet-grabber").boundingBox();
+  if (!grabber) throw new Error("The sheet has no grabber.");
+  const x = grabber.x + grabber.width / 2;
+  await page.mouse.move(x, grabber.y + grabber.height / 2);
+  await page.mouse.down();
+  for (const dy of [60, 140, 90]) {
+    await page.mouse.move(x, grabber.y + dy, { steps: 4 });
+    expect(await gap()).toBeCloseTo(atRest, 0);
+  }
+  await page.mouse.up();
+});

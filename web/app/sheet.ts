@@ -8,8 +8,8 @@
  *
  * It writes on the panel its transform and --sheet-hidden (how much of it is below the frame, which the body
  * keeps clear so every row can scroll into view); lowered, its body starts at its first rows again; on the
- * frame, --sheet-covered (how much of the map it covers) once it rests; the camera is told at once where it
- * goes to rest, so a flight started with it frames clear of it. A text field focused raises it full; lowered,
+ * map, on every frame it moves, --sheet-top (its top, in px below the frame's), which the map buttons ride on;
+ * the camera is told at once where it goes to rest, so a flight started with it frames clear of it. A text field focused raises it full; lowered,
  * it closes the keyboard; Enter in a field closes it too, as a phone's Go key does.
  *
  * It also keeps the frame on the visual viewport (--frame-top, --frame-height): the screen the browser's bars
@@ -71,21 +71,23 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
     const el = panel.current;
     if (!el || !on) return;
     const body = el.querySelector<HTMLElement>(".panel-body");
+    const frame = el.parentElement;
+    const map = frame?.querySelector<HTMLElement>(":scope > .map");
     let y = 0;
     /** The head's rest: as low as the sheet goes. */
     let lowest = 0;
+    /** Where its top is at full, in px below the frame's. */
+    let fullTop = 0;
     let stop: (() => void) | null = null;
 
     const place = (to: number) => {
       y = Math.min(lowest, Math.max(0, to));
       el.style.transform = `translate3d(0, ${y}px, 0)`;
+      map?.style.setProperty("--sheet-top", `${y + fullTop}`);
     };
     // The sheet and the map end together, below the frame.
     const coveredAt = (to: number) => el.offsetHeight - to;
-    const rested = (to: number) => {
-      el.style.setProperty("--sheet-hidden", `${to}px`);
-      el.parentElement?.style.setProperty("--sheet-covered", `${coveredAt(to)}px`);
-    };
+    const rested = (to: number) => el.style.setProperty("--sheet-hidden", `${to}px`);
     const settle = (next: Rest, velocity = 0) => {
       stop?.();
       restRef.current = next;
@@ -97,6 +99,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       const at = offsets(el);
       const to = at[next];
       lowest = at.head;
+      fullTop = el.offsetTop;
       // At once: a row brought into view while the sheet moves stops where it will show.
       el.style.setProperty("--sheet-hidden", `${to}px`);
       setCovered(coveredAt(to));
@@ -112,6 +115,7 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       const at = offsets(el);
       const to = at[restRef.current];
       lowest = at.head;
+      fullTop = el.offsetTop;
       place(to);
       rested(to);
       setCovered(coveredAt(to));
@@ -217,8 +221,6 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
 
     // The frame on the visual viewport, wherever iOS has scrolled the page to; a field typed in stays in view over the keyboard.
     const viewport = window.visualViewport;
-    const frame = el.parentElement;
-    const map = frame?.querySelector(":scope > .map");
     const onViewport = () => {
       if (!viewport || !frame || viewport.scale > 1.01) return;
       // How far the map runs on above the frame: where the page rests, also after iOS has scrolled it under a focused field.
@@ -245,7 +247,8 @@ export function useSheet(panel: RefObject<HTMLElement | null>): { rest: Rest; co
       stop?.();
       current = null;
       el.style.transform = "";
-      for (const name of ["--sheet-covered", "--frame-top", "--frame-height"]) frame?.style.removeProperty(name);
+      for (const name of ["--frame-top", "--frame-height"]) frame?.style.removeProperty(name);
+      map?.style.removeProperty("--sheet-top");
       setCovered(0);
       setAbove(0);
       el.removeEventListener("pointerdown", onPointerDown);

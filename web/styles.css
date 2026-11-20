@@ -2218,8 +2218,9 @@ input.saved-name {
    * The frame is the screen the browser's bars and the keyboard leave free: sheet.ts keeps it on the visual viewport, which
    * iOS moves and shrinks without laying the page out again. Every rest of the sheet is measured from it. It is laid out
    * with the page, never fixed: Safari paints its own solid band over the bars' ground when a fixed thing borders them.
-   * The map runs on above and below it, and the sheet below it (--bleed: as far as Safari's bars take of the screen), so
-   * they show through the bars' glass; sheet.ts rests the page scrolled by that much, for the part above.
+   * The map runs on above and below it, and the sheet below it (--bleed: as far as Safari's bars take of the screen when
+   * they are all out, whatever they are doing now: with the keyboard up Safari counts none), so they show through the
+   * bars' glass and the keyboard's; sheet.ts rests the page scrolled by that much, for the part above.
    */
   .app {
     position: absolute;
@@ -2231,16 +2232,14 @@ input.saved-name {
   /* iOS only. */
   @supports (-webkit-touch-callout: none) {
     .app {
-      --bleed: calc(100lvh - 100dvh);
+      --bleed: calc(100lvh - 100svh);
     }
   }
   .map {
     top: calc(-1 * var(--bleed));
     bottom: calc(-1 * var(--bleed));
   }
-  .map-controls {
-    top: calc(var(--edge-top) + var(--bleed));
-  }
+
   /* Where it rests full: just under the status bar; sheet.ts moves it down to its other rests. */
   .panel {
     --surface: var(--surface-thick);
@@ -2339,30 +2338,36 @@ input.saved-name {
     background: none;
     box-shadow: none;
   }
-  /* Every row can scroll into view, above the frame's foot; one brought into view stops there. */
+  /* The rows run on under the browser's bottom bar and the keyboard, to the sheet's foot; every row can scroll into view above the frame's foot, and one brought into view stops there. */
   .panel-body {
-    margin-bottom: calc(-1 * var(--foot));
-    padding-bottom: calc(var(--sheet-hidden, 0px) + var(--foot) + 4 * var(--space));
-    scroll-padding-bottom: calc(var(--sheet-hidden, 0px) + var(--foot));
+    --under: calc(var(--sheet-hidden, 0px) + var(--foot) + var(--bleed));
+    margin-bottom: calc(-1 * (var(--foot) + var(--bleed)));
+    padding-bottom: calc(var(--under) + 4 * var(--space));
+    scroll-padding-bottom: var(--under);
   }
-  /* Over the sheet's top, wherever it rests: the credits, and the Layers card that takes its limits from the controls' box. */
+  /*
+   * The map buttons and the credits ride just over the sheet's top, where no bar of the browser's ever lies (Safari says
+   * nothing of where its collapsed bar ends). sheet.ts writes --sheet-top on every frame the sheet moves, and only their
+   * transform and opacity follow it: they fade out as the sheet's top nears the frame's, and are gone under the full sheet.
+   */
   .map-controls,
   .credits-btn,
   .credits-card {
-    bottom: calc(var(--sheet-covered, 0px) + 2 * var(--space));
+    top: var(--bleed);
+    bottom: auto;
+    transform: translateY(calc(var(--sheet-top, 0) * 1px - 100% - 2 * var(--space)));
+    opacity: clamp(0, calc((var(--sheet-top, 0) - 140) / 60), 1);
   }
-  /*
-   * The map buttons: one glass stack, a hairline between them, at the map's foot just over the sheet, where no bar of the
-   * browser's ever lies (Safari says nothing of where its collapsed bar ends); the Layers card opens upward beside it.
-   * Gone with the map under the full sheet.
-   */
+  /* One glass stack, a hairline between the buttons; the Layers card opens upward beside it, in the map over the sheet. */
   .map-controls {
-    justify-content: flex-end;
+    left: auto;
     gap: 0;
   }
   .layers-card {
     top: auto;
     bottom: 0;
+    max-width: calc(var(--free-w) - var(--ctl) - 8px);
+    max-height: calc(var(--sheet-top, 0) * 1px - var(--edge-top) - 2 * var(--space));
     transform-origin: bottom right;
   }
   .panel[data-rest="full"] ~ .map :is(.map-controls, .credits-btn, .credits-card) {
